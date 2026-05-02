@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-export default function CodeDetailPage({ params }: { params: { code: string } }) {
-  const code = params.code;
+export default async function CodeDetailPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
 
   const [codeInfo, setCodeInfo] = useState<any>(null);
 
