@@ -12,12 +12,13 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-export default function CodeDetailPage({ params }) {
+export default function CodeDetailPage(
+  { params }: { params: { code: string } }
+) {
   const code = params.code;
 
-  const [codeInfo, setCodeInfo] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [usageList, setUsageList] = useState([]);
+  const [codeInfo, setCodeInfo] = useState<any>(null);
+  const [usageList, setUsageList] = useState<any[]>([]);
 
   // コード情報取得
   const fetchCodeInfo = async () => {
@@ -39,7 +40,7 @@ export default function CodeDetailPage({ params }) {
 
     const snap = await getDocs(q);
 
-    const list = [];
+    const list: any[] = [];
 
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
@@ -63,7 +64,7 @@ export default function CodeDetailPage({ params }) {
   useEffect(() => {
     fetchCodeInfo();
     fetchUsage();
-  }, []);
+  }, [code]);
 
   if (!codeInfo) return <p>読み込み中…</p>;
 
