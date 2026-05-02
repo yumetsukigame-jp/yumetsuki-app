@@ -4,8 +4,7 @@ export default function UserHeader() {
       <img
         src="/header.png"
         alt="ゆめつきの書斎 ヘッダー"
-        className="w-full object-cover"
-        style={{ height: "160px" }}  // ← ここで高さを調整
+        className="w-full h-auto object-contain"
       />
     </header>
   );
