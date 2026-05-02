@@ -77,6 +77,7 @@ export default function UserHistoryPage(
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>ユーザー履歴</h1>
 
+      {/* ユーザー情報 */}
       <div
         style={{
           padding: "12px",
@@ -84,3 +85,37 @@ export default function UserHistoryPage(
           borderRadius: "8px",
           marginBottom: "20px",
         }}
+      >
+        <p><strong>UID：</strong> {user.id}</p>
+        <p><strong>メール：</strong> {user.email || "不明"}</p>
+        <p><strong>合計ポイント：</strong> {totalPoints} pt</p>
+      </div>
+
+      <h2>ポイント履歴</h2>
+
+      {history.length === 0 && <p>履歴がありません。</p>}
+
+      {history.map((item) => (
+        <div
+          key={item.id}
+          style={{
+            padding: "12px",
+            marginTop: "12px",
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+          }}
+        >
+          <p><strong>付与ポイント：</strong> {item.added} pt</p>
+          <p><strong>コード：</strong> {item.code}</p>
+          <p><strong>タイプ：</strong> {item.type}</p>
+          <p>
+            <strong>日時：</strong>{" "}
+            {item.createdAt?.toDate
+              ? item.createdAt.toDate().toLocaleString()
+              : "不明"}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
