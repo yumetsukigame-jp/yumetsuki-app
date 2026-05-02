@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    turbo: false,   // ← これがないと Turbopack は無効化されない
+    turbo: false,   // Turbopack を完全に無効化
   },
   webpack: (config) => {
     return config;
