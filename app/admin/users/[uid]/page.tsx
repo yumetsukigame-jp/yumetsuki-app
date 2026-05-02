@@ -80,4 +80,7 @@ export default function UserHistoryPage(
       <div
         style={{
           padding: "12px",
-          border: "1px solid
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          marginBottom: "20px",
+        }}
