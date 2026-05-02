@@ -12,10 +12,12 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-export default function UserHistoryPage(
-  { params }: { params: { uid: string } }
-) {
-  const uid = params.uid;
+export default async function UserHistoryPage({
+  params,
+}: {
+  params: Promise<{ uid: string }>;
+}) {
+  const { uid } = await params;
 
   const [user, setUser] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
