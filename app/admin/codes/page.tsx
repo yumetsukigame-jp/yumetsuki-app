@@ -2,33 +2,36 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
-export default function UsedCodesPage() {
-  const [codes, setCodes] = useState([]);
+export default function CodeDetailPage({ params }: { params: { code: string } }) {
+  const code = params.code;
+
+  const [codeInfo, setCodeInfo] = useState<any>(null);
 
   useEffect(() => {
-    const fetchCodes = async () => {
-      const querySnapshot = await getDocs(collection(db, "usedCodes"));
-      const list = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setCodes(list);
+    const fetchCodeInfo = async () => {
+      const ref = doc(db, "usedCodes", code);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        setCodeInfo(snap.data());
+      } else {
+        setCodeInfo(null);
+      }
     };
 
-    fetchCodes();
-  }, []);
+    fetchCodeInfo();
+  }, [code]);
 
   return (
     <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
-      <h1>使用済みコード一覧</h1>
+      <h1>コード詳細</h1>
 
-      {codes.length === 0 && <p>まだ使用済みコードはありません。</p>}
+      {!codeInfo && <p>このコードの情報はありません。</p>}
 
-      {codes.map((item) => (
+      {codeInfo && (
         <div
-          key={item.id}
           style={{
             padding: "12px",
             marginTop: "12px",
@@ -36,16 +39,16 @@ export default function UsedCodesPage() {
             borderRadius: "8px",
           }}
         >
-          <p><strong>コード：</strong> {item.id}</p>
-          <p><strong>ユーザー：</strong> {item.user}</p>
+          <p><strong>コード：</strong> {code}</p>
+          <p><strong>ユーザー：</strong> {codeInfo.user}</p>
           <p>
             <strong>使用日時：</strong>{" "}
-            {item.usedAt?.toDate
-              ? item.usedAt.toDate().toLocaleString()
-              : String(item.usedAt)}
+            {codeInfo.usedAt?.toDate
+              ? codeInfo.usedAt.toDate().toLocaleString()
+              : String(codeInfo.usedAt)}
           </p>
         </div>
-      ))}
+      )}
     </div>
   );
 }
