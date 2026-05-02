@@ -3,9 +3,9 @@ import CodeDetail from "./CodeDetail";
 export default async function Page({
   params,
 }: {
-  params: Promise<{ code: string }>;
+  params: { code: string };
 }) {
-  const { code } = await params;
+  const { code } = params;
 
   return <CodeDetail code={code} />;
 }
