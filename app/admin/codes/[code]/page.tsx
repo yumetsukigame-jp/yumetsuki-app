@@ -12,10 +12,12 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-export default function CodeDetailPage(
-  { params }: { params: { code: string } }
-) {
-  const code = params.code;
+export default async function CodeDetailPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
 
   const [codeInfo, setCodeInfo] = useState<any>(null);
   const [usageList, setUsageList] = useState<any[]>([]);
