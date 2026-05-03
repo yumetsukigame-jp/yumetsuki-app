@@ -27,7 +27,7 @@ export default function AddRewardForm({ images }) {
       name,
       cost,
       stock,
-      image, // ← すでに `/rewards/xxx.png` が入っているのでそのまま保存
+      image, // ← フルパスをそのまま保存
     });
 
     alert("追加しました！");
@@ -99,7 +99,7 @@ export default function AddRewardForm({ images }) {
                 }}
               >
                 <img
-                  src={img}          // ← 修正ポイント（フルパスをそのまま使う）
+                  src={img} // ← 修正ポイント（フルパスをそのまま使う）
                   alt={img}
                   width={100}
                   style={{ borderRadius: "6px" }}
