@@ -7,14 +7,12 @@ import { fileURLToPath } from "url";
 
 export async function GET() {
   try {
-    // route.ts の絶対パスを取得
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
-    // public/rewards への絶対パスを構築
-    const rewardsDir = path.join(__dirname, "../../../../public/rewards");
+    // Next.js 16 の API 実行位置から public まで戻る
+    const rewardsDir = path.join(__dirname, "../../../../../public/rewards");
 
-    // デバッグ用（本番でパス確認）
     console.log("rewardsDir:", rewardsDir);
 
     const files = fs.readdirSync(rewardsDir);
