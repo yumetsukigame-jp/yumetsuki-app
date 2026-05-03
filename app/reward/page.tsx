@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db, auth } from "../../firebase";
+import { db, auth } from "@/firebase";
 import {
   collection,
   getDocs,
   doc,
   getDoc,
-  setDoc,
   updateDoc,
+  setDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -16,49 +16,47 @@ import { useRouter } from "next/navigation";
 export default function RewardPage() {
   const [rewards, setRewards] = useState<any[]>([]);
   const [points, setPoints] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // ★ ユーザーのポイント取得（onAuthStateChanged で確実に取得）
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
 
-      const uid = user.uid;
-
-      // ユーザーポイント取得
-      const userRef = doc(db, "users", uid);
+      const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
-      setPoints(userSnap.exists() ? userSnap.data().points : 0);
 
-      // 発送物一覧取得
-      const rewardRef = collection(db, "rewards");
-      const rewardSnap = await getDocs(rewardRef);
-
-      const list = rewardSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      setRewards(list);
-      setLoading(false);
+      if (userSnap.exists()) {
+        setPoints(userSnap.data().points);
+      }
     });
 
-    return () => unsub();
+    return () => unsubscribe();
   }, []);
 
+  // 商品一覧取得
+  useEffect(() => {
+    const fetchRewards = async () => {
+      const querySnapshot = await getDocs(collection(db, "rewards"));
+      const list: any[] = [];
+      querySnapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setRewards(list);
+    };
+
+    fetchRewards();
+  }, []);
+
+  // 発送物を選択
   const handleSelect = async (reward: any) => {
     if (points === null) return;
 
-    // ポイント不足
     if (points < reward.cost) {
       alert("ポイントが足りません！");
       return;
     }
 
-    // 在庫不足
     if (reward.stock <= 0) {
       alert("在庫がありません！");
       return;
@@ -69,81 +67,82 @@ export default function RewardPage() {
 
     const uid = user.uid;
 
-    // 発送物選択を保存
+    const newPoints = points - reward.cost;
+
+    // ① ユーザーポイントを減らす
+    await updateDoc(doc(db, "users", uid), {
+      points: newPoints,
+    });
+
+    // ② selectedRewards に保存（ユーザーが現在選んでいる商品）
     await setDoc(doc(db, "selectedRewards", uid), {
       rewardId: reward.id,
       name: reward.name,
       cost: reward.cost,
+      image: reward.image ?? null,
       timestamp: new Date(),
       shipped: false,
     });
 
-    // 在庫を 1 減らす
+    // ③ 在庫を減らす
     await updateDoc(doc(db, "rewards", reward.id), {
       stock: reward.stock - 1,
     });
 
-    alert(`${reward.name} を選択しました！`);
+    // ★ ④ shippingHistory に履歴として保存（履歴ページがこれを見る）
+    await setDoc(doc(collection(db, "shippingHistory")), {
+      uid: uid,
+      rewardId: reward.id,
+      name: reward.name,
+      cost: reward.cost,
+      image: reward.image ?? null,
+      requestedAt: new Date(),
+      shipped: false,
+    });
+
+    // ⑤ ポイントを画面に反映
+    setPoints(newPoints);
+
+    // 完了画面へ
+    router.push("/reward/complete");
   };
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
-
   return (
-    <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "24px", marginBottom: "20px" }}>発送物を選ぶ</h1>
+    <div style={{ padding: "20px" }}>
+      <h1>発送物を選ぶ</h1>
 
-      <p style={{ marginBottom: "20px" }}>
-        現在のポイント： <strong>{points} pt</strong>
-      </p>
+      <p>現在のポイント: {points ?? "読み込み中..."}</p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ marginTop: "20px" }}>
         {rewards.map((reward) => (
           <div
             key={reward.id}
             style={{
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "16px",
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
+              border: "1px solid #ccc",
+              padding: "10px",
+              marginBottom: "10px",
             }}
           >
-            <img
-              src={reward.image}
-              alt={reward.name}
-              style={{ width: "80px", height: "80px", objectFit: "contain" }}
-            />
+            {/* 画像表示 */}
+            {reward.image && (
+              <img
+                src={reward.image}
+                alt={reward.name}
+                style={{
+                  width: "150px",
+                  height: "150px",
+                  objectFit: "contain",
+                  marginBottom: "10px",
+                }}
+              />
+            )}
 
-            <div style={{ flex: 1 }}>
-              <h2 style={{ fontSize: "20px" }}>{reward.name}</h2>
-              <p>{reward.cost} pt</p>
-              <p>在庫：{reward.stock} 個</p>
-            </div>
+            <h3>{reward.name}</h3>
+            <p>必要ポイント: {reward.cost}</p>
+            <p>在庫: {reward.stock}</p>
 
-            <button
-              onClick={() => handleSelect(reward)}
-              disabled={reward.stock <= 0 || points < reward.cost}
-              style={{
-                padding: "10px 16px",
-                background:
-                  reward.stock <= 0 || points < reward.cost
-                    ? "#aaa"
-                    : "#4f46e5",
-                color: "white",
-                borderRadius: "8px",
-                border: "none",
-                cursor:
-                  reward.stock <= 0 || points < reward.cost
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {reward.stock <= 0
-                ? "在庫なし"
-                : points < reward.cost
-                ? "ポイント不足"
-                : "選択する"}
+            <button onClick={() => handleSelect(reward)}>
+              この商品を選ぶ
             </button>
           </div>
         ))}

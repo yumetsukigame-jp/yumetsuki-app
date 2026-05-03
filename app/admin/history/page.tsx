@@ -1,99 +1,139 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { db } from "../../../firebase";  // ← ★ これが正しい
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  updateDoc,
+  doc
+} from "firebase/firestore";
 
-export default function PointHistoryPage() {
+export default function ShippingHistoryPage() {
   const [history, setHistory] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState("all");
+  const [loading, setLoading] = useState(true);
+
+  const fetchHistory = async () => {
+    const q = query(
+      collection(db, "shippingHistory"),
+      orderBy("requestedAt", "desc")
+    );
+
+    const snap = await getDocs(q);
+
+    const list = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+
+    setHistory(list);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      const querySnapshot = await getDocs(collection(db, "pointHistory"));
-      const list = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      setHistory(list);
-
-      // uid の一覧を抽出（undefined/null を除外）
-      const userList = Array.from(
-        new Set(list.map((item) => item.userId).filter((uid) => uid))
-      );
-
-      setUsers(userList);
-
-      setFiltered(list); // 初期表示は全件
-    };
-
     fetchHistory();
   }, []);
 
-  const handleFilter = (userId) => {
-    setSelectedUser(userId);
+  const markAsShipped = async (id) => {
+    const ref = doc(db, "shippingHistory", id);
 
-    if (userId === "all") {
-      setFiltered(history);
-    } else {
-      setFiltered(history.filter((item) => item.userId === userId));
-    }
+    await updateDoc(ref, {
+      shipped: true,
+      shippedAt: new Date(),
+    });
+
+    setHistory((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, shipped: true, shippedAt: new Date() }
+          : item
+      )
+    );
   };
 
+  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+
   return (
-    <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
-      <h1>ポイント履歴一覧</h1>
+    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
+      <h1 style={{ fontSize: "24px", marginBottom: "20px" }}>
+        発送履歴（管理者）
+      </h1>
 
-      {/* ユーザーフィルタ */}
-      <div style={{ marginBottom: "20px" }}>
-        <label>ユーザーで絞り込み：</label>
-        <select
-          value={selectedUser}
-          onChange={(e) => handleFilter(e.target.value)}
-          style={{
-            marginLeft: "10px",
-            padding: "6px",
-            borderRadius: "6px",
-            border: "1px solid #ccc",
-          }}
-        >
-          <option value="all">全ユーザー</option>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {history.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              padding: "16px",
+              display: "flex",
+              gap: "16px",
+              alignItems: "center",
+            }}
+          >
+            {item.image && (
+              <img
+                src={item.image}
+                alt={item.name}
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  objectFit: "contain",
+                }}
+              />
+            )}
 
-          {/* ★ key エラー対策：index を key に使用 */}
-          {users.map((uid, index) => (
-            <option key={index} value={uid}>
-              {uid}
-            </option>
-          ))}
-        </select>
+            <div style={{ flex: 1 }}>
+              <p><strong>ユーザーID：</strong> {item.uid}</p>
+              <p><strong>発送物：</strong> {item.name}</p>
+              <p><strong>ポイント：</strong> {item.cost} pt</p>
+
+              <p>
+                <strong>依頼日時：</strong>{" "}
+                {item.requestedAt?.toDate
+                  ? item.requestedAt.toDate().toLocaleString()
+                  : "不明"}
+              </p>
+
+              <p>
+                <strong>発送状態：</strong>{" "}
+                <span style={{ color: item.shipped ? "green" : "orange" }}>
+                  {item.shipped ? "発送済み" : "準備中"}
+                </span>
+              </p>
+
+              {item.shippedAt && (
+                <p>
+                  <strong>発送日時：</strong>{" "}
+                  {item.shippedAt?.toDate
+                    ? item.shippedAt.toDate().toLocaleString()
+                    : "不明"}
+                </p>
+              )}
+            </div>
+
+            {!item.shipped && (
+              <button
+                onClick={() => markAsShipped(item.id)}
+                style={{
+                  padding: "10px 16px",
+                  background: "#4f46e5",
+                  color: "white",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  height: "40px",
+                }}
+              >
+                発送済みにする
+              </button>
+            )}
+          </div>
+        ))}
       </div>
-
-      {filtered.length === 0 && <p>履歴がありません。</p>}
-
-      {filtered.map((item) => (
-        <div
-          key={item.id}
-          style={{
-            padding: "12px",
-            marginTop: "12px",
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-          }}
-        >
-          <p><strong>ユーザーID：</strong> {item.userId}</p>
-          <p><strong>コード：</strong> {item.code}</p>
-          <p><strong>付与ポイント：</strong> {item.added} pt</p>
-          <p>
-            <strong>日時：</strong>{" "}
-            {item.createdAt?.toDate
-              ? item.createdAt.toDate().toLocaleString()
-              : String(item.createdAt)}
-          </p>
-        </div>
-      ))}
     </div>
   );
 }

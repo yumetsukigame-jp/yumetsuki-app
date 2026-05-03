@@ -14,7 +14,6 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // ★ auth.currentUser ではなく onAuthStateChanged を使う
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setLoggedIn(false);
@@ -84,6 +83,7 @@ export default function Home() {
         </span>
       </h1>
 
+      {/* メインメニュー */}
       <div
         style={{
           marginTop: "30px",
@@ -119,8 +119,24 @@ export default function Home() {
         >
           発送物を選ぶ
         </a>
+
+        {/* ★ 発送履歴ボタンを追加 */}
+        <a
+          href="/history"
+          style={{
+            padding: "12px",
+            background: "#e5e7eb",
+            color: "#111",
+            borderRadius: "8px",
+            textDecoration: "none",
+            fontSize: "18px",
+          }}
+        >
+          発送履歴を見る
+        </a>
       </div>
 
+      {/* 管理者リンク */}
       <div
         style={{
           marginTop: "50px",
