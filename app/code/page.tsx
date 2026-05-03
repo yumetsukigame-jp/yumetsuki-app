@@ -21,13 +21,31 @@ export default function CodePage() {
     try {
       const user = auth.currentUser;
 
-      // ログインしていない場合はログインページへ
       if (!user) {
         router.push("/login");
         return;
       }
 
       const uid = user.uid;
+
+      // ★ ユーザー情報取得（Xアカウントチェック）
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        setMessage("ユーザー情報が見つかりません");
+        return;
+      }
+
+      const userData = userSnap.data();
+
+      // ★ Xアカウント未登録なら警告
+      if (!userData.xAccount || userData.xAccount.trim() === "") {
+        setMessage(
+          "Xアカウントが未登録です。プロフィール画面から登録してください。"
+        );
+        return;
+      }
 
       // validCodes からポイントとタイプを取得
       const codeRef = doc(db, "validCodes", code);
@@ -40,21 +58,8 @@ export default function CodePage() {
 
       const { points, type } = codeSnap.data();
 
-      // -----------------------------
-      // ① 使用済みコードチェック
-      // -----------------------------
-      let usedKey = "";
-
-      if (type === "global") {
-        // 全員で1回だけ
-        usedKey = code;
-      } else if (type === "perUser") {
-        // 全員が1回ずつ
-        usedKey = `${uid}_${code}`;
-      } else {
-        setMessage("コードのタイプが不正です");
-        return;
-      }
+      // 使用済みコードチェック
+      let usedKey = type === "global" ? code : `${uid}_${code}`;
 
       const usedRef = doc(db, "usedCodes", usedKey);
       const usedSnap = await getDoc(usedRef);
@@ -64,12 +69,8 @@ export default function CodePage() {
         return;
       }
 
-      // -----------------------------
-      // ② ユーザーのポイントを更新
-      // -----------------------------
-      const userRef = doc(db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      const currentPoints = userSnap.exists() ? userSnap.data().points : 0;
+      // ポイント更新
+      const currentPoints = userData.points ?? 0;
 
       await setDoc(
         userRef,
@@ -79,18 +80,14 @@ export default function CodePage() {
         { merge: true }
       );
 
-      // -----------------------------
-      // ③ 使用済みコードとして登録
-      // -----------------------------
+      // 使用済み登録
       await setDoc(usedRef, {
         usedAt: new Date(),
         userId: uid,
         type: type,
       });
 
-      // -----------------------------
-      // ④ 履歴を保存
-      // -----------------------------
+      // 履歴保存
       await addDoc(collection(db, "pointHistory"), {
         userId: uid,
         code: code,
@@ -131,7 +128,29 @@ export default function CodePage() {
         送信
       </button>
 
-      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
+      {message && (
+        <p style={{ marginTop: "10px", color: "red", fontWeight: "bold" }}>
+          {message}
+        </p>
+      )}
+
+      {/* Xアカウント未登録時の誘導 */}
+      {message.includes("Xアカウントが未登録") && (
+        <button
+          onClick={() => router.push("/profile")}
+          style={{
+            marginTop: "10px",
+            width: "100%",
+            padding: "12px",
+            background: "#2563eb",
+            color: "white",
+            borderRadius: "8px",
+            fontSize: "16px",
+          }}
+        >
+          プロフィールを編集する
+        </button>
+      )}
     </div>
   );
 }
