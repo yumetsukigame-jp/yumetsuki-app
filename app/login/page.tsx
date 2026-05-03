@@ -106,20 +106,37 @@ export default function LoginPage() {
           ログイン
         </button>
 
-        {/* ★ パスワード再発行ボタン（メインカラーに統一） */}
+        {/* パスワード再発行 */}
         <button
           onClick={handleResetPassword}
           style={{
             width: "100%",
             padding: "10px",
-            background: "#4f46e5",   // ← メインカラーに統一
+            background: "#4f46e5",
+            color: "white",
+            borderRadius: "8px",
+            fontSize: "14px",
+            fontWeight: "bold",
+            marginBottom: "12px",
+          }}
+        >
+          パスワードを忘れた方はこちら
+        </button>
+
+        {/* ★ 新規登録ボタン（追加） */}
+        <button
+          onClick={() => router.push("/signup")}
+          style={{
+            width: "100%",
+            padding: "10px",
+            background: "#4f46e5",
             color: "white",
             borderRadius: "8px",
             fontSize: "14px",
             fontWeight: "bold",
           }}
         >
-          パスワードを忘れた方はこちら
+          新規登録はこちら
         </button>
 
         {message && (
