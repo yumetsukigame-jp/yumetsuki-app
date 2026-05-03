@@ -8,7 +8,7 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function Home() {
   const [points, setPoints] = useState<number | null>(null);
-  const [xAccount, setXAccount] = useState<string | null>(null); // ★ 追加
+  const [xAccount, setXAccount] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export default function Home() {
       if (snap.exists()) {
         const data = snap.data();
         setPoints(data.points || 0);
-        setXAccount(data.xAccount || null); // ★ 追加
+        setXAccount(data.xAccount || null);
       } else {
         setPoints(0);
         setXAccount(null);
@@ -72,15 +72,20 @@ export default function Home() {
         margin: "0 auto",
       }}
     >
+      {/* ★ 画像を完全中央寄せ */}
       <img
         src="/whiteMageGirl.png"
         alt="white mage girl"
-        style={{ width: "70%", marginBottom: "20px" }}
+        style={{
+          width: "70%",
+          margin: "0 auto 20px",
+          display: "block",   // ← これが中央寄せの決め手
+        }}
       />
 
-      <h2>こんにちは</h2>
+      <h2>ようこそゆめつきの書斎へ</h2>
 
-      {/* ★ X アカウント表示 */}
+      {/* X アカウント表示 */}
       {xAccount && (
         <p style={{ marginTop: "8px", fontSize: "18px", color: "#444" }}>
           X アカウント：{xAccount}
