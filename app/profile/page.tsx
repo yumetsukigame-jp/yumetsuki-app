@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function ProfilePage() {
   const [name, setName] = useState("");
@@ -10,9 +11,11 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       const snap = await getDoc(doc(db, "users", user.uid));
       if (snap.exists()) {
@@ -22,9 +25,9 @@ export default function ProfilePage() {
       }
 
       setLoading(false);
-    };
+    });
 
-    load();
+    return () => unsub();
   }, []);
 
   const save = async () => {
