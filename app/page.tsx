@@ -112,6 +112,7 @@ export default function Home() {
           gap: "16px",
         }}
       >
+        {/* すべてのボタンをメインカラーに統一 */}
         <a
           href="/code"
           style={{
@@ -131,11 +132,12 @@ export default function Home() {
           href="/reward"
           style={{
             padding: "12px",
-            background: "#e5e7eb",
-            color: "#111",
+            background: "#4f46e5",
+            color: "white",
             borderRadius: "8px",
             textDecoration: "none",
             fontSize: "18px",
+            fontWeight: "bold",
           }}
         >
           発送物を選ぶ
@@ -145,11 +147,12 @@ export default function Home() {
           href="/history"
           style={{
             padding: "12px",
-            background: "#e5e7eb",
-            color: "#111",
+            background: "#4f46e5",
+            color: "white",
             borderRadius: "8px",
             textDecoration: "none",
             fontSize: "18px",
+            fontWeight: "bold",
           }}
         >
           発送履歴を見る
@@ -159,11 +162,12 @@ export default function Home() {
           href="/profile"
           style={{
             padding: "12px",
-            background: "#e5e7eb",
-            color: "#111",
+            background: "#4f46e5",
+            color: "white",
             borderRadius: "8px",
             textDecoration: "none",
             fontSize: "18px",
+            fontWeight: "bold",
           }}
         >
           プロフィールを編集する
