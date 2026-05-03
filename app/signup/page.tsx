@@ -30,16 +30,20 @@ export default function SignupPage() {
       );
       const user = userCredential.user;
 
+      // ★ 一覧に確実に表示されるように必要なフィールドをすべて保存
       await setDoc(doc(db, "users", user.uid), {
         email,
         name,
         xAccount,
         points: 0,
+        createdAt: new Date(),      // ← 一覧に必須
+        lastLogin: new Date(),      // ← ログイン履歴用
+        xAccountConfirmed: false,   // ← Xアカウント確認フラグ
       });
 
       alert("登録が完了しました！");
       router.push("/");
-    } catch (error) {
+    } catch (error: any) {
       alert("登録に失敗しました：" + error.message);
     }
 

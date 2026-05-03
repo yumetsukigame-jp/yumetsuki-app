@@ -21,6 +21,19 @@ export default function UsersPage() {
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
   const fetchUsers = async () => {
+    // ★★★★★ ここが追加部分：createdAt が無いユーザーを自動修正 ★★★★★
+    const allSnap = await getDocs(collection(db, "users"));
+    for (const d of allSnap.docs) {
+      const data = d.data();
+      if (!data.createdAt) {
+        await updateDoc(doc(db, "users", d.id), {
+          createdAt: new Date(),
+        });
+      }
+    }
+    // ★★★★★ 追加ここまで ★★★★★
+
+    // createdAt で並び替え
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
 
@@ -130,7 +143,7 @@ export default function UsersPage() {
     fetchUsers();
   };
 
-  // ★ Xアカウント確定
+  // Xアカウント確定
   const confirmXAccount = async (uid) => {
     await updateDoc(doc(db, "users", uid), {
       xAccountConfirmed: true,
@@ -140,7 +153,7 @@ export default function UsersPage() {
     fetchUsers();
   };
 
-  // ★ Xアカウント編集
+  // Xアカウント編集
   const editXAccount = async (uid, currentX) => {
     const input = prompt("新しいXアカウントを入力してください", currentX);
 
@@ -148,7 +161,7 @@ export default function UsersPage() {
 
     await updateDoc(doc(db, "users", uid), {
       xAccount: input,
-      xAccountConfirmed: false, // 編集したら未確定に戻す
+      xAccountConfirmed: false,
     });
 
     alert("Xアカウントを更新しました");
@@ -210,7 +223,6 @@ export default function UsersPage() {
           <p><strong>名前：</strong> {user.name || "未登録"}</p>
           <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
 
-          {/* Xアカウント確定ボタン */}
           {!user.xAccountConfirmed ? (
             <button
               onClick={() => confirmXAccount(user.id)}
@@ -253,7 +265,6 @@ export default function UsersPage() {
               : "不明"}
           </p>
 
-          {/* ポイント編集 */}
           <button
             onClick={() => editPoints(user.id, user.points ?? 0)}
             style={{
@@ -269,7 +280,6 @@ export default function UsersPage() {
             ポイント編集
           </button>
 
-          {/* 履歴ページへ */}
           <Link href={`/admin/users/${user.id}`}>
             <button
               style={{
@@ -285,7 +295,6 @@ export default function UsersPage() {
             </button>
           </Link>
 
-          {/* ユーザー削除 */}
           <button
             onClick={() => deleteUser(user.id)}
             style={{
