@@ -16,7 +16,6 @@ export default function CodeDetail({ code }: { code: string }) {
   const [codeInfo, setCodeInfo] = useState<any>(null);
   const [usageList, setUsageList] = useState<any[]>([]);
 
-  // コード情報取得
   const fetchCodeInfo = async () => {
     const codeRef = doc(db, "validCodes", code);
     const snap = await getDoc(codeRef);
@@ -26,7 +25,6 @@ export default function CodeDetail({ code }: { code: string }) {
     }
   };
 
-  // 使用履歴取得
   const fetchUsage = async () => {
     const q = query(
       collection(db, "pointHistory"),
@@ -41,7 +39,6 @@ export default function CodeDetail({ code }: { code: string }) {
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
 
-      // ユーザー情報取得
       const userRef = doc(db, "users", data.userId);
       const userSnap = await getDoc(userRef);
 
@@ -68,7 +65,6 @@ export default function CodeDetail({ code }: { code: string }) {
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>コード詳細</h1>
 
-      {/* コード情報 */}
       <div
         style={{
           padding: "12px",
