@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { db } from "../../../../firebase";
+import { db } from "../../../../../firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
@@ -27,7 +27,7 @@ export default function AddRewardForm({ images }) {
       name,
       cost,
       stock,
-      image: `/rewards/${image}`,
+      image, // ← すでに `/rewards/xxx.png` が入っているのでそのまま保存
     });
 
     alert("追加しました！");
@@ -99,7 +99,7 @@ export default function AddRewardForm({ images }) {
                 }}
               >
                 <img
-                  src={`/rewards/${img}`}
+                  src={img}          // ← 修正ポイント（フルパスをそのまま使う）
                   alt={img}
                   width={100}
                   style={{ borderRadius: "6px" }}
