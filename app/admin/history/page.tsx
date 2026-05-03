@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "../../../firebase";  // ← ★ これが正しい
+import { db } from "../../../firebase";
 import {
   collection,
   getDocs,
@@ -87,6 +87,24 @@ export default function ShippingHistoryPage() {
             )}
 
             <div style={{ flex: 1 }}>
+              {/* ★ ユーザー名と X アカウントを表示 */}
+              <p><strong>ユーザー名：</strong> {item.userName || "未登録"}</p>
+
+              <p>
+                <strong>X：</strong>{" "}
+                {item.userX ? (
+                  <a
+                    href={`https://x.com/${item.userX.replace("@", "")}`}
+                    target="_blank"
+                    style={{ color: "blue" }}
+                  >
+                    {item.userX}
+                  </a>
+                ) : (
+                  "未登録"
+                )}
+              </p>
+
               <p><strong>ユーザーID：</strong> {item.uid}</p>
               <p><strong>発送物：</strong> {item.name}</p>
               <p><strong>ポイント：</strong> {item.cost} pt</p>

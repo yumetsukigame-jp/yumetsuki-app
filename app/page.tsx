@@ -8,6 +8,7 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function Home() {
   const [points, setPoints] = useState<number | null>(null);
+  const [xAccount, setXAccount] = useState<string | null>(null); // ★ 追加
   const [isAdmin, setIsAdmin] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,14 +31,17 @@ export default function Home() {
       const adminSnap = await getDoc(adminRef);
       setIsAdmin(adminSnap.exists());
 
-      // ユーザーポイント取得
+      // ユーザーデータ取得（ポイント・Xアカウント）
       const ref = doc(db, "users", uid);
       const snap = await getDoc(ref);
 
       if (snap.exists()) {
-        setPoints(snap.data().points || 0);
+        const data = snap.data();
+        setPoints(data.points || 0);
+        setXAccount(data.xAccount || null); // ★ 追加
       } else {
         setPoints(0);
+        setXAccount(null);
       }
 
       setLoading(false);
@@ -75,6 +79,13 @@ export default function Home() {
       />
 
       <h2>こんにちは</h2>
+
+      {/* ★ X アカウント表示 */}
+      {xAccount && (
+        <p style={{ marginTop: "8px", fontSize: "18px", color: "#444" }}>
+          X アカウント：{xAccount}
+        </p>
+      )}
 
       <h1 style={{ fontSize: "28px", marginTop: "10px" }}>
         現在のポイント：
@@ -120,7 +131,6 @@ export default function Home() {
           発送物を選ぶ
         </a>
 
-        {/* ★ 発送履歴ボタンを追加 */}
         <a
           href="/history"
           style={{
@@ -133,6 +143,20 @@ export default function Home() {
           }}
         >
           発送履歴を見る
+        </a>
+
+        <a
+          href="/profile"
+          style={{
+            padding: "12px",
+            background: "#e5e7eb",
+            color: "#111",
+            borderRadius: "8px",
+            textDecoration: "none",
+            fontSize: "18px",
+          }}
+        >
+          プロフィールを編集する
         </a>
       </div>
 

@@ -67,6 +67,13 @@ export default function RewardPage() {
 
     const uid = user.uid;
 
+    // ★ ユーザー情報を Firestore から取得（名前・Xアカウント）
+    const userRef = doc(db, "users", uid);
+    const userSnap = await getDoc(userRef);
+
+    const userName = userSnap.data()?.name ?? "";
+    const userX = userSnap.data()?.xAccount ?? "";
+
     const newPoints = points - reward.cost;
 
     // ① ユーザーポイントを減らす
@@ -89,7 +96,7 @@ export default function RewardPage() {
       stock: reward.stock - 1,
     });
 
-    // ★ ④ shippingHistory に履歴として保存（履歴ページがこれを見る）
+    // ★ ④ shippingHistory に履歴として保存（ユーザー名・Xアカウント付き）
     await setDoc(doc(collection(db, "shippingHistory")), {
       uid: uid,
       rewardId: reward.id,
@@ -98,6 +105,8 @@ export default function RewardPage() {
       image: reward.image ?? null,
       requestedAt: new Date(),
       shipped: false,
+      userName: userName,
+      userX: userX,
     });
 
     // ⑤ ポイントを画面に反映
