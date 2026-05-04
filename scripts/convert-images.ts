@@ -2,15 +2,13 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 
-// public 以下すべてを対象にする
-const TARGET_ROOT = path.join(process.cwd(), "public");
+const SRC_ROOT = path.join(process.cwd(), "source_images");
+const DEST_ROOT = path.join(process.cwd(), "public");
 
-// 対象拡張子
-const IMAGE_EXT = /\.(png|jpg|jpeg)$/i;
+const IMAGE_EXT = /\.(png|jpg|jpeg|webp)$/i;
 
-function getAllImageFiles(dir: string): string[] {
+function getAllFiles(dir: string): string[] {
   let results: string[] = [];
-
   const list = fs.readdirSync(dir);
 
   for (const file of list) {
@@ -18,7 +16,7 @@ function getAllImageFiles(dir: string): string[] {
     const stat = fs.statSync(fullPath);
 
     if (stat.isDirectory()) {
-      results = results.concat(getAllImageFiles(fullPath));
+      results = results.concat(getAllFiles(fullPath));
     } else if (IMAGE_EXT.test(file)) {
       results.push(fullPath);
     }
@@ -27,38 +25,35 @@ function getAllImageFiles(dir: string): string[] {
   return results;
 }
 
-async function convertImage(filePath: string) {
-  const dir = path.dirname(filePath);
-  const base = path.basename(filePath).replace(IMAGE_EXT, "");
-  const output = path.join(dir, `${base}.webp`);
+async function processImage(srcPath: string) {
+  const relative = path.relative(SRC_ROOT, srcPath);
+  const destPath = path.join(DEST_ROOT, relative.replace(IMAGE_EXT, ".webp"));
 
-  console.log(`▶ 変換中: ${filePath}`);
+  const destDir = path.dirname(destPath);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
 
-  await sharp(filePath)
+  console.log(`▶ 変換中: ${srcPath}`);
+
+  await sharp(srcPath)
+    .resize({ width: 800 })
     .webp({ quality: 80 })
-    .toFile(output);
+    .toFile(destPath);
 
-  console.log(`✔ 完了: ${output}`);
-
-  // 元ファイル削除
-  fs.unlinkSync(filePath);
+  console.log(`✔ 出力: ${destPath}`);
 }
 
 async function run() {
-  const files = getAllImageFiles(TARGET_ROOT);
+  const files = getAllFiles(SRC_ROOT);
 
-  if (files.length === 0) {
-    console.log("📁 public 以下に PNG/JPG が見つかりませんでした。");
-    return;
-  }
-
-  console.log(`📸 変換対象ファイル数: ${files.length}`);
+  console.log(`📸 処理対象ファイル数: ${files.length}`);
 
   for (const file of files) {
-    await convertImage(file);
+    await processImage(file);
   }
 
-  console.log("\n🎉 public 以下のすべての PNG/JPG を WebP に変換しました！");
+  console.log("\n🎉 すべての画像を public 以下に最適化して出力しました！");
 }
 
 run();
