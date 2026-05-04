@@ -89,7 +89,11 @@ export default function ShippingHistoryPage() {
             )}
 
             <div style={{ flex: 1 }}>
+              <p><strong>ユーザー名：</strong> {item.userName}</p>
+              <p><strong>メール：</strong> {item.userEmail}</p>
+              <p><strong>X：</strong> {item.userX ?? "不明"}</p> {/* ★ 追加 */}
               <p><strong>ユーザーID：</strong> {item.uid}</p>
+
               <p><strong>発送物：</strong> {item.name}</p>
               <p><strong>ポイント：</strong> {item.cost} pt</p>
 
