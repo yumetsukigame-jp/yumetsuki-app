@@ -27,21 +27,39 @@ function getAllFiles(dir: string): string[] {
 
 async function processImage(srcPath: string) {
   const relative = path.relative(SRC_ROOT, srcPath);
-  const destPath = path.join(DEST_ROOT, relative.replace(IMAGE_EXT, ".webp"));
 
-  const destDir = path.dirname(destPath);
-  if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
-  }
+  // 出力先（public）
+  const publicPath = path.join(DEST_ROOT, relative.replace(IMAGE_EXT, ".webp"));
+  const publicDir = path.dirname(publicPath);
+
+  // 出力先（source_images 内の WebP）
+  const srcWebpPath = path.join(SRC_ROOT, relative.replace(IMAGE_EXT, ".webp"));
+  const srcWebpDir = path.dirname(srcWebpPath);
+
+  if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+  if (!fs.existsSync(srcWebpDir)) fs.mkdirSync(srcWebpDir, { recursive: true });
 
   console.log(`▶ 変換中: ${srcPath}`);
 
-  await sharp(srcPath)
+  // WebP に変換（800px）
+  const buffer = await sharp(srcPath)
     .resize({ width: 800 })
     .webp({ quality: 80 })
-    .toFile(destPath);
+    .toBuffer();
 
-  console.log(`✔ 出力: ${destPath}`);
+  // public に保存
+  await sharp(buffer).toFile(publicPath);
+  console.log(`✔ public 出力: ${publicPath}`);
+
+  // source_images にも WebP を保存
+  await sharp(buffer).toFile(srcWebpPath);
+  console.log(`✔ source_images 出力: ${srcWebpPath}`);
+
+  // PNG/JPG の場合は削除
+  if (/\.(png|jpg|jpeg)$/i.test(srcPath)) {
+    fs.unlinkSync(srcPath);
+    console.log(`🗑 削除: ${srcPath}`);
+  }
 }
 
 async function run() {
@@ -53,7 +71,7 @@ async function run() {
     await processImage(file);
   }
 
-  console.log("\n🎉 すべての画像を public 以下に最適化して出力しました！");
+  console.log("\n🎉 変換完了！source_images と public に WebP が揃いました！");
 }
 
 run();
