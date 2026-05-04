@@ -30,13 +30,14 @@ export default function ShippingAdminPage() {
 
       const userData = userSnap.exists()
         ? userSnap.data()
-        : { name: "不明", email: "不明" };
+        : { name: "不明", email: "不明", xAccount: "不明" };
 
       data.push({
         uid,
         ...rewardData,
         userName: userData.name ?? "不明",
         userEmail: userData.email ?? "不明",
+        userX: userData.xAccount ?? "不明", // ★ Xアカウント追加
       });
     }
 
@@ -69,6 +70,7 @@ export default function ShippingAdminPage() {
         shippedAt,
         userName: item.userName,
         userEmail: item.userEmail,
+        userX: item.userX, // ★ Xアカウントも履歴に保存
       });
     } else {
       await updateDoc(ref, {
@@ -104,6 +106,7 @@ export default function ShippingAdminPage() {
             <div>
               <p><strong>ユーザー名：</strong> {item.userName}</p>
               <p><strong>メール：</strong> {item.userEmail}</p>
+              <p><strong>X：</strong> {item.userX}</p> {/* ★ 表示追加 */}
               <p><strong>ユーザーID：</strong> {item.uid}</p>
               <p><strong>発送物：</strong> {item.name}</p>
               <p><strong>ポイント：</strong> {item.cost} pt</p>
