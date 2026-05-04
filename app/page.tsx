@@ -74,7 +74,7 @@ export default function Home() {
     >
       {/* 画像 */}
       <img
-        src="/whiteMageGirl.png"
+        src="/whiteMageGirl.webp"
         alt="white mage girl"
         style={{
           width: "70%",
@@ -157,12 +157,25 @@ export default function Home() {
         >
           発送履歴を見る
         </a>
-
+<a
+  href="/archive"
+  style={{
+    padding: "12px",
+    background: "#8B5A2B", // ← 書庫だけ特別色
+    color: "white",
+    borderRadius: "8px",
+    textDecoration: "none",
+    fontSize: "18px",
+    fontWeight: "bold",
+  }}
+>
+  書庫を見る
+</a>
         <a
           href="/profile"
           style={{
             padding: "12px",
-            background: "#4f46e5",
+            background: "#3E5F8A",
             color: "white",
             borderRadius: "8px",
             textDecoration: "none",
