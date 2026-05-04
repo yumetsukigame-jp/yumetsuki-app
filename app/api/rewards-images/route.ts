@@ -1,15 +1,20 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import fs from "fs";
+import path from "path";
+
 export async function GET() {
   try {
-    // public/rewards の URL パスを直接返す
-    const images = [
-      "Fukuro.png",
-      "PSA10.png",
-      "Pay.png",
-      "nanikaPSA.png"
-    ].map((name) => `/rewards/${name}`);
+    const dir = path.join(process.cwd(), "public", "rewards");
+
+    // WebP のみ取得
+    const files = fs
+      .readdirSync(dir)
+      .filter((file) => file.toLowerCase().endsWith(".webp"));
+
+    // パスを返す
+    const images = files.map((file) => `/rewards/${file}`);
 
     return Response.json(images);
   } catch (error) {
