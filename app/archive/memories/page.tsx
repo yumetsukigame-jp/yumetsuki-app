@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import MemoryCard from "../../../components/MemoryCard";
-import OricaModal from "../../../components/OricaModal";
+import MemoryCard from "../../components/MemoryCard";
+import OricaModal from "../../components/OricaModal";
 
 export default function MemoriesPage() {
   const [images, setImages] = useState<string[]>([]);
