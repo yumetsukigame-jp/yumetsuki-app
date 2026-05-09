@@ -101,91 +101,108 @@ export default function Home() {
       </h1>
 
       {/* ★ メインメニュー（カード風） */}
-      <div
-        style={{
-          background: "white",
-          padding: "20px",
-          borderRadius: "12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
-      >
-        {/* すべてのボタンをメインカラーに統一 */}
-        <a
-          href="/code"
-          style={{
-            padding: "12px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: "8px",
-            textDecoration: "none",
-            fontSize: "18px",
-            fontWeight: "bold",
-          }}
-        >
-          コード入力でポイント獲得
-        </a>
-
-        <a
-          href="/reward"
-          style={{
-            padding: "12px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: "8px",
-            textDecoration: "none",
-            fontSize: "18px",
-            fontWeight: "bold",
-          }}
-        >
-          発送物を選ぶ
-        </a>
-
-        <a
-          href="/history"
-          style={{
-            padding: "12px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: "8px",
-            textDecoration: "none",
-            fontSize: "18px",
-            fontWeight: "bold",
-          }}
-        >
-          発送履歴を見る
-        </a>
-<a
-  href="/archive"
+<div
   style={{
-    padding: "12px",
-    background: "#8B5A2B", // ← 書庫だけ特別色
-    color: "white",
-    borderRadius: "8px",
-    textDecoration: "none",
-    fontSize: "18px",
-    fontWeight: "bold",
+    background: "white",
+    padding: "20px",
+    borderRadius: "12px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
   }}
 >
-  書庫を見る
-</a>
-        <a
-          href="/profile"
-          style={{
-            padding: "12px",
-            background: "#3E5F8A",
-            color: "white",
-            borderRadius: "8px",
-            textDecoration: "none",
-            fontSize: "18px",
-            fontWeight: "bold",
-          }}
-        >
-          プロフィールを編集する
-        </a>
-      </div>
+  <a
+    href="/code"
+    style={{
+      padding: "12px",
+      background: "#4f46e5",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    コード入力でポイント獲得
+  </a>
+
+  <a
+    href="/reward"
+    style={{
+      padding: "12px",
+      background: "#4f46e5",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    発送物を選ぶ
+  </a>
+
+  <a
+    href="/history"
+    style={{
+      padding: "12px",
+      background: "#4f46e5",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    発送履歴を見る
+  </a>
+
+  <a
+    href="/gacha"
+    style={{
+      padding: "12px",
+      background: "#4f46e5",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    ガチャを引く
+  </a>
+
+  <a
+    href="/archive"
+    style={{
+      padding: "12px",
+      background: "#8B5A2B",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    書庫を見る
+  </a>
+
+  <a
+    href="/profile"
+    style={{
+      padding: "12px",
+      background: "#3E5F8A",
+      color: "white",
+      borderRadius: "8px",
+      textDecoration: "none",
+      fontSize: "18px",
+      fontWeight: "bold",
+    }}
+  >
+    プロフィールを編集する
+  </a>
+</div>
+
 
       {/* 管理者リンク */}
       <div

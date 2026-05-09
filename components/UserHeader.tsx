@@ -1,3 +1,5 @@
+"use client";
+
 export default function UserHeader() {
   return (
     <header className="w-full">

@@ -8,7 +8,6 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function AdminTopPage() {
   const router = useRouter();
-  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,7 +26,6 @@ export default function AdminTopPage() {
         return;
       }
 
-      setIsAdmin(true);
       setLoading(false);
     });
 
@@ -40,36 +38,55 @@ export default function AdminTopPage() {
     <div
       style={{
         padding: "20px",
-        maxWidth: "600px",
+        maxWidth: "700px",
         margin: "0 auto",
-        textAlign: "center",
       }}
     >
-      <h1>管理者トップページ</h1>
+      <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
 
+      {/* ============================
+          ユーザー管理カテゴリ
+      ============================ */}
+      <Section title="👤 ユーザー管理">
+        <MenuLink href="/admin/users">ユーザー管理</MenuLink>
+        <MenuLink href="/admin/history">ポイント履歴</MenuLink>
+      </Section>
+
+      {/* ============================
+          コード管理カテゴリ
+      ============================ */}
+      <Section title="🔑 コード管理">
+        <MenuLink href="/admin/codes">コード一覧</MenuLink>
+        <MenuLink href="/admin/create-code">新しいコードを発行</MenuLink>
+      </Section>
+
+      {/* ============================
+          ガチャ管理カテゴリ
+      ============================ */}
+      <Section title="🎰 ガチャ管理">
+        <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
+        <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
+        <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
+      </Section>
+
+      {/* ============================
+          発送管理カテゴリ
+      ============================ */}
+      <Section title="📦 発送管理">
+        <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
+        <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
+        <MenuLink href="/admin/shipping">発送管理（発送物確認）</MenuLink>
+        <MenuLink href="/admin/shipping/history">発送履歴</MenuLink>
+        <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
+      </Section>
+
+      {/* ============================
+          戻る
+      ============================ */}
       <div
         style={{
-          marginTop: "30px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
-      >
-        <a href="/admin/users" style={linkStyle}>ユーザー管理</a>
-        <a href="/admin/codes" style={linkStyle}>コード一覧</a>
-        <a href="/admin/create-code" style={linkStyle}>新しいコードを発行</a>
-        <a href="/admin/history" style={linkStyle}>ポイント履歴</a>
-
-        <a href="/admin/rewards" style={linkStyle}>発送物一覧</a>
-        <a href="/admin/rewards/add" style={linkStyle}>発送物を作成</a>
-        <a href="/admin/shipping" style={linkStyle}>発送管理（発送物確認）</a>
-        <a href="/admin/shipping/history" style={linkStyle}>発送履歴</a>
-        <a href="/admin/shipping/stats" style={linkStyle}>発送数集計</a>
-      </div>
-
-      <div
-        style={{
-          marginTop: "50px",
+          marginTop: "40px",
+          textAlign: "center",
           paddingTop: "20px",
           borderTop: "1px solid #ddd",
         }}
@@ -82,11 +99,52 @@ export default function AdminTopPage() {
   );
 }
 
-const linkStyle = {
-  padding: "12px",
-  background: "#2563eb",
-  color: "white",
-  borderRadius: "8px",
-  textDecoration: "none",
-  fontSize: "18px",
-};
+/* ------------------------------
+   セクションコンポーネント
+------------------------------ */
+function Section({ title, children }) {
+  return (
+    <div style={{ marginTop: "32px" }}>
+      <h2
+        style={{
+          marginBottom: "12px",
+          borderLeft: "6px solid #2563eb",
+          paddingLeft: "10px",
+        }}
+      >
+        {title}
+      </h2>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------
+   メニューリンク
+------------------------------ */
+function MenuLink({ href, children }) {
+  return (
+    <a
+      href={href}
+      style={{
+        padding: "12px",
+        background: "#2563eb",
+        color: "white",
+        borderRadius: "8px",
+        textDecoration: "none",
+        fontSize: "18px",
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </a>
+  );
+}

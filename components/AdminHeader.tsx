@@ -1,7 +1,6 @@
-export default function AdminHeader() {
-  return (
-    <header className="w-full">
+"use client";
 
-    </header>
-  );
+export default function AdminHeader() {
+  return <header>…</header>;
+
 }

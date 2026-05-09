@@ -6,8 +6,9 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function ProfilePage() {
-  const [name, setName] = useState("");
-  const [xAccount, setXAccount] = useState("");
+  const [name, setName] = useState("");           // 本名（外部非表示）
+  const [displayName, setDisplayName] = useState(""); // ニックネーム（外部表示）
+  const [xAccount, setXAccount] = useState("");   // Xアカウント
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function ProfilePage() {
       if (snap.exists()) {
         const data = snap.data();
         setName(data.name ?? "");
+        setDisplayName(data.displayName ?? "");
         setXAccount(data.xAccount ?? "");
       }
 
@@ -36,6 +38,7 @@ export default function ProfilePage() {
 
     await updateDoc(doc(db, "users", user.uid), {
       name,
+      displayName,
       xAccount,
     });
 
@@ -57,6 +60,22 @@ export default function ProfilePage() {
     >
       <h1 style={{ marginBottom: "20px" }}>プロフィール編集</h1>
 
+      {/* ★ 説明文を追加 ★ */}
+      <p
+        style={{
+          background: "#f0f4ff",
+          padding: "12px",
+          borderRadius: "8px",
+          fontSize: "14px",
+          textAlign: "left",
+          marginBottom: "20px",
+        }}
+      >
+        ・「名前」は本名などを入力できますが、外部には表示されません。<br />
+        ・「ニックネーム」は外部に表示される名前です（基本はXアカウント名を推奨）。<br />
+        ・ニックネームが空の場合は X アカウント名が表示されます。
+      </p>
+
       <div
         style={{
           background: "white",
@@ -68,32 +87,31 @@ export default function ProfilePage() {
           gap: "16px",
         }}
       >
+        {/* 本名（外部非表示） */}
         <input
           type="text"
-          placeholder="名前"
+          placeholder="名前（外部非表示）"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{
-            padding: "12px",
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-            fontSize: "16px",
-            width: "100%",
-          }}
+          style={inputStyle}
         />
 
+        {/* ニックネーム（外部表示） */}
+        <input
+          type="text"
+          placeholder="ニックネーム（外部表示）"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          style={inputStyle}
+        />
+
+        {/* Xアカウント */}
         <input
           type="text"
           placeholder="Xアカウント（@から）"
           value={xAccount}
           onChange={(e) => setXAccount(e.target.value)}
-          style={{
-            padding: "12px",
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-            fontSize: "16px",
-            width: "100%",
-          }}
+          style={inputStyle}
         />
 
         <button
@@ -115,3 +133,11 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+const inputStyle = {
+  padding: "12px",
+  border: "1px solid #ccc",
+  borderRadius: "8px",
+  fontSize: "16px",
+  width: "100%",
+};
