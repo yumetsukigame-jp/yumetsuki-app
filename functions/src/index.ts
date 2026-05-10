@@ -32,7 +32,8 @@ export const createGachaCode = onCall(
         totalCount,
         frames,
         expiresAt,
-        publicFlag, // ★ 追加
+        publicFlag,
+        thumbnail,
       } = request.data;
 
       if (!title) throw new HttpsError("invalid-argument", "title が必要です");
@@ -42,13 +43,15 @@ export const createGachaCode = onCall(
         throw new HttpsError("invalid-argument", "frames が不正です");
       }
 
-      const code = generateCode();
+      // ★ YG- プレフィックス付きコード
+      const code = "YG-" + generateCode();
 
       const gachaData = {
         code,
         title,
         mode,
-        public: publicFlag ?? false, // ★ 追加（デフォルトは限定）
+        public: publicFlag ?? false,
+        thumbnail: thumbnail ?? "",
         point: {
           cost: point.cost,
           maxPerUser: point.maxPerUser,
@@ -77,7 +80,7 @@ export const createGachaCode = onCall(
 );
 
 /**
- * 公開ガチャ一覧（公開ガチャのみ）
+ * 公開ガチャ一覧
  */
 export const getPublicGachaList = onCall(
   { region: "us-central1" },
@@ -93,7 +96,7 @@ export const getPublicGachaList = onCall(
 );
 
 /**
- * ガチャ実行（変更なし）
+ * ガチャ実行（ポイント消費 + 報酬加算 修正版）
  */
 export const useGachaCode = onCall(
   { region: "us-central1" },
@@ -124,8 +127,10 @@ export const useGachaCode = onCall(
       const cost = gacha.point.cost;
       const maxPerUser = gacha.point.maxPerUser;
 
+      const currentPoints = Number(user.points ?? 0);
+
       // ポイントチェック
-      if ((user.points ?? 0) < cost) {
+      if (currentPoints < cost) {
         throw new HttpsError("failed-precondition", "ポイントが不足しています");
       }
 
@@ -178,7 +183,7 @@ export const useGachaCode = onCall(
         throw new HttpsError("internal", "抽選に失敗しました");
       }
 
-      // 報酬
+      // 報酬ポイント
       const reward =
         Math.floor(
           Math.random() *
@@ -193,17 +198,15 @@ export const useGachaCode = onCall(
           ? freshHistorySnap.data()!
           : { count: 0 };
 
-        if ((freshUser.points ?? 0) < cost) {
+        const freshPoints = Number(freshUser.points ?? 0);
+
+        if (freshPoints < cost) {
           throw new HttpsError("failed-precondition", "ポイントが不足しています");
         }
 
-        if (freshHistory.count >= maxPerUser) {
-          throw new HttpsError("failed-precondition", "これ以上引けません");
-        }
-
-        // ポイント減算
+        // ★ ポイント更新（消費 + 報酬加算）
         tx.update(userRef, {
-          points: (freshUser.points ?? 0) - cost,
+          points: freshPoints - cost + reward,
         });
 
         // 履歴更新
