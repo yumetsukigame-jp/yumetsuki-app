@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic"; // ← SSR を完全に無効化
+
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -72,7 +74,6 @@ export default function Home() {
         textAlign: "center",
       }}
     >
-      {/* 画像 */}
       <img
         src="/whiteMageGirl.webp"
         alt="white mage girl"
@@ -85,14 +86,12 @@ export default function Home() {
 
       <h2 style={{ marginBottom: "10px" }}>ようこそ ゆめつきの書斎へ</h2>
 
-      {/* X アカウント表示 */}
       {xAccount && (
         <p style={{ fontSize: "18px", color: "#444", marginBottom: "10px" }}>
           X アカウント：{xAccount}
         </p>
       )}
 
-      {/* ポイント表示 */}
       <h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
         現在のポイント：
         <span style={{ fontWeight: "bold" }}>
@@ -100,111 +99,26 @@ export default function Home() {
         </span>
       </h1>
 
-      {/* ★ メインメニュー（カード風） */}
-<div
-  style={{
-    background: "white",
-    padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  }}
->
-  <a
-    href="/code"
-    style={{
-      padding: "12px",
-      background: "#4f46e5",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    コード入力でポイント獲得
-  </a>
+      {/* メニュー */}
+      <div
+        style={{
+          background: "white",
+          padding: "20px",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+        }}
+      >
+        <a href="/code" style={menuStyle}>コード入力でポイント獲得</a>
+        <a href="/reward" style={menuStyle}>発送物を選ぶ</a>
+        <a href="/history" style={menuStyle}>発送履歴を見る</a>
+        <a href="/gacha" style={menuStyle}>ガチャを引く</a>
+        <a href="/archive" style={menuStyle}>書庫を見る</a>
+        <a href="/profile" style={menuStyle}>プロフィールを編集する</a>
+      </div>
 
-  <a
-    href="/reward"
-    style={{
-      padding: "12px",
-      background: "#4f46e5",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    発送物を選ぶ
-  </a>
-
-  <a
-    href="/history"
-    style={{
-      padding: "12px",
-      background: "#4f46e5",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    発送履歴を見る
-  </a>
-
-  <a
-    href="/gacha"
-    style={{
-      padding: "12px",
-      background: "#4f46e5",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    ガチャを引く
-  </a>
-
-  <a
-    href="/archive"
-    style={{
-      padding: "12px",
-      background: "#8B5A2B",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    書庫を見る
-  </a>
-
-  <a
-    href="/profile"
-    style={{
-      padding: "12px",
-      background: "#3E5F8A",
-      color: "white",
-      borderRadius: "8px",
-      textDecoration: "none",
-      fontSize: "18px",
-      fontWeight: "bold",
-    }}
-  >
-    プロフィールを編集する
-  </a>
-</div>
-
-
-      {/* 管理者リンク */}
       <div
         style={{
           marginTop: "40px",
@@ -213,17 +127,11 @@ export default function Home() {
         }}
       >
         {isAdmin ? (
-          <a
-            href="/admin"
-            style={{ color: "#2563eb", textDecoration: "none", fontSize: "18px" }}
-          >
+          <a href="/admin" style={{ color: "#2563eb", fontSize: "18px" }}>
             管理者トップへ
           </a>
         ) : (
-          <a
-            href="/admin/login"
-            style={{ color: "#2563eb", textDecoration: "none", fontSize: "18px" }}
-          >
+          <a href="/admin/login" style={{ color: "#2563eb", fontSize: "18px" }}>
             管理者ログイン
           </a>
         )}
@@ -231,3 +139,13 @@ export default function Home() {
     </div>
   );
 }
+
+const menuStyle = {
+  padding: "12px",
+  background: "#4f46e5",
+  color: "white",
+  borderRadius: "8px",
+  textDecoration: "none",
+  fontSize: "18px",
+  fontWeight: "bold",
+};
