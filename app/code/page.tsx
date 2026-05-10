@@ -106,11 +106,29 @@ export default function CodePage() {
     <div style={{ padding: "20px", maxWidth: "480px", margin: "0 auto" }}>
       <h1>コード入力でポイント獲得</h1>
 
+      {/* ★ 注意書き（ガチャコードとの混同防止） */}
+      <p
+        style={{
+          background: "#fff3cd",
+          padding: "10px",
+          borderRadius: "6px",
+          border: "1px solid #ffeeba",
+          color: "#856404",
+          marginBottom: "16px",
+          fontSize: "14px",
+          lineHeight: "1.5",
+        }}
+      >
+        ※「<strong>YG-●●●●</strong>」形式のコードは
+        <strong>ガチャ専用コード</strong>です。<br />
+        ここでは入力できませんのでご注意ください。
+      </p>
+
       <input
         type="text"
         value={code}
         onChange={(e) => setCode(e.target.value)}
-        placeholder="コードを入力"
+        placeholder="ポイント付与コードを入力"
         style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
       />
 

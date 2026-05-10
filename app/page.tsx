@@ -1,6 +1,6 @@
 "use client";
 
-export const dynamic = "force-dynamic"; // ← SSR を完全に無効化
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
@@ -99,26 +99,43 @@ export default function Home() {
         </span>
       </h1>
 
-      {/* メニュー */}
-      <div
-        style={{
-          background: "white",
-          padding: "20px",
-          borderRadius: "12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
-      >
-        <a href="/code" style={menuStyle}>コード入力でポイント獲得</a>
-        <a href="/reward" style={menuStyle}>発送物を選ぶ</a>
-        <a href="/history" style={menuStyle}>発送履歴を見る</a>
-        <a href="/gacha" style={menuStyle}>ガチャを引く</a>
-        <a href="/archive" style={menuStyle}>書庫を見る</a>
-        <a href="/profile" style={menuStyle}>プロフィールを編集する</a>
-      </div>
+      {/* 🔵 ポイント関連 */}
+      <Section title="ポイント関連" color="#2563eb">
+        <MenuButton href="/code" color="#2563eb">
+          コード入力でポイント獲得
+        </MenuButton>
+        <MenuButton href="/reward" color="#2563eb">
+          発送物を選ぶ
+        </MenuButton>
+        <MenuButton href="/history" color="#2563eb">
+          発送履歴を見る
+        </MenuButton>
+      </Section>
 
+      {/* 🟣 ガチャ関連 */}
+      <Section title="ガチャ" color="#a855f7">
+        <MenuButton href="/gacha/list" color="#a855f7">
+          ガチャ一覧を見る
+        </MenuButton>
+        <MenuButton href="/gacha" color="#a855f7">
+          ガチャを引く
+        </MenuButton>
+        <MenuButton href="/gacha/results" color="#a855f7">
+          ガチャ結果を見る
+        </MenuButton>
+      </Section>
+
+      {/* 🟢 アカウント関連 */}
+      <Section title="アカウント" color="#16a34a">
+        <MenuButton href="/archive" color="#16a34a">
+          書庫を見る
+        </MenuButton>
+        <MenuButton href="/profile" color="#16a34a">
+          プロフィールを編集する
+        </MenuButton>
+      </Section>
+
+      {/* 🔴 管理者 */}
       <div
         style={{
           marginTop: "40px",
@@ -127,11 +144,11 @@ export default function Home() {
         }}
       >
         {isAdmin ? (
-          <a href="/admin" style={{ color: "#2563eb", fontSize: "18px" }}>
+          <a href="/admin" style={{ color: "#dc2626", fontSize: "18px" }}>
             管理者トップへ
           </a>
         ) : (
-          <a href="/admin/login" style={{ color: "#2563eb", fontSize: "18px" }}>
+          <a href="/admin/login" style={{ color: "#dc2626", fontSize: "18px" }}>
             管理者ログイン
           </a>
         )}
@@ -140,12 +157,48 @@ export default function Home() {
   );
 }
 
-const menuStyle = {
-  padding: "12px",
-  background: "#4f46e5",
-  color: "white",
-  borderRadius: "8px",
-  textDecoration: "none",
-  fontSize: "18px",
-  fontWeight: "bold",
-};
+/* ------------------------------
+   セクションコンポーネント
+------------------------------ */
+function Section({ title, color, children }: any) {
+  return (
+    <div
+      style={{
+        background: "white",
+        padding: "16px",
+        borderRadius: "12px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+        marginBottom: "24px",
+        textAlign: "left",
+      }}
+    >
+      <h3 style={{ color, marginBottom: "12px" }}>{title}</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------
+   メニューボタン
+------------------------------ */
+function MenuButton({ href, color, children }: any) {
+  return (
+    <a
+      href={href}
+      style={{
+        padding: "12px",
+        background: color,
+        color: "white",
+        borderRadius: "8px",
+        textDecoration: "none",
+        fontSize: "18px",
+        fontWeight: "bold",
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </a>
+  );
+}

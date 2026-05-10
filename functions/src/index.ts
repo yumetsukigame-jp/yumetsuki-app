@@ -80,23 +80,37 @@ export const createGachaCode = onCall(
 );
 
 /**
- * 公開ガチャ一覧
+ * 公開ガチャ + 限定ガチャ一覧（createdAt を必ず返す）
  */
 export const getPublicGachaList = onCall(
   { region: "us-central1" },
   async () => {
     const snap = await db
       .collection("gachaCodes")
-      .where("public", "==", true)
       .orderBy("createdAt", "desc")
       .get();
 
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d) => {
+      const data = d.data();
+
+      return {
+        code: d.id,
+        title: data.title ?? "",
+        public: data.public ?? false,
+        thumbnail: data.thumbnail ?? "",
+        mode: data.mode,
+        point: data.point,
+        totalCount: data.totalCount ?? null,
+        frames: data.frames ?? [],
+        expiresAt: data.expiresAt ?? null,
+        createdAt: data.createdAt ?? null,
+      };
+    });
   }
 );
 
 /**
- * ガチャ実行（ポイント消費 + 報酬加算 修正版）
+ * ガチャ実行
  */
 export const useGachaCode = onCall(
   { region: "us-central1" },
@@ -129,7 +143,6 @@ export const useGachaCode = onCall(
 
       const currentPoints = Number(user.points ?? 0);
 
-      // ポイントチェック
       if (currentPoints < cost) {
         throw new HttpsError("failed-precondition", "ポイントが不足しています");
       }
@@ -183,14 +196,13 @@ export const useGachaCode = onCall(
         throw new HttpsError("internal", "抽選に失敗しました");
       }
 
-      // 報酬ポイント
       const reward =
         Math.floor(
           Math.random() *
             (selectedFrame.rewardMax - selectedFrame.rewardMin + 1)
         ) + selectedFrame.rewardMin;
 
-      // Firestore 更新（トランザクション）
+      // Firestore 更新
       await db.runTransaction(async (tx) => {
         const freshUser = (await tx.get(userRef)).data()!;
         const freshHistorySnap = await tx.get(historyRef);
@@ -204,17 +216,14 @@ export const useGachaCode = onCall(
           throw new HttpsError("failed-precondition", "ポイントが不足しています");
         }
 
-        // ★ ポイント更新（消費 + 報酬加算）
         tx.update(userRef, {
           points: freshPoints - cost + reward,
         });
 
-        // 履歴更新
         tx.set(historyRef, {
           count: freshHistory.count + 1,
         });
 
-        // 枠の使用数更新
         const updatedFrames = gacha.frames.map((f: any) =>
           f.label === selectedFrame.label
             ? { ...f, usedCount: (f.usedCount ?? 0) + 1 }
@@ -223,7 +232,6 @@ export const useGachaCode = onCall(
 
         tx.update(gachaRef, { frames: updatedFrames });
 
-        // 結果保存
         const resultRef = db.collection("gachaResults").doc();
         tx.set(resultRef, {
           id: resultRef.id,
@@ -248,7 +256,7 @@ export const useGachaCode = onCall(
 );
 
 /**
- * ガチャ結果一覧
+ * ガチャ結果一覧（削除ガチャ非表示）
  */
 export const getGachaResults = onCall(
   { region: "us-central1" },
@@ -268,15 +276,19 @@ export const getGachaResults = onCall(
         const codeSnap = await db.collection("gachaCodes").doc(data.code).get();
         const codeData = codeSnap.data();
 
-        const frameInfo = codeData?.frames?.find(
+        // ★ 削除ガチャ（タイトルなし）は除外
+        if (!codeData || !codeData.title) continue;
+
+        const frameInfo = codeData.frames?.find(
           (f: any) => f.label === data.frame
         );
 
         results.push({
           id: d.id,
           ...data,
-          title: codeData?.title ?? "（名前なし）",
+          title: codeData.title,
           frameName: frameInfo?.label ?? data.frame,
+          thumbnail: codeData.thumbnail ?? "",
         });
       }
 
@@ -285,6 +297,38 @@ export const getGachaResults = onCall(
       console.error("getGachaResults error:", err);
       throw new HttpsError("internal", err.message || "unknown error");
     }
+  }
+);
+
+/**
+ * ★ ガチャ使用回数リセット（全ユーザー）
+ * userGachaHistory の docId = uid_code 形式に対応
+ */
+export const resetGachaUsage = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const code = request.data.code;
+    if (!code) throw new HttpsError("invalid-argument", "code が必要です");
+
+    const snap = await db.collection("userGachaHistory").get();
+
+    const batch = db.batch();
+    let count = 0;
+
+    snap.docs.forEach((d) => {
+      const id = d.id; // uid_code
+      const parts = id.split("_");
+      const codePart = parts[1];
+
+      if (codePart === code) {
+        batch.update(d.ref, { count: 0 });
+        count++;
+      }
+    });
+
+    await batch.commit();
+
+    return { message: "リセット完了", count };
   }
 );
 

@@ -1,390 +1,410 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
-export default function GachaPage() {
-  const [code, setCode] = useState("");
-  const [gachaInfo, setGachaInfo] = useState<any>(null);
-  const [frames, setFrames] = useState<string[]>([]);
-  const [userHistory, setUserHistory] = useState<number | null>(null);
+/* --------------------------------------------------
+   内側コンポーネント（useSearchParams を使う部分）
+-------------------------------------------------- */
+function ResultsContent() {
+  const [grouped, setGrouped] = useState<any>({});
+  const [open, setOpen] = useState<{ [key: string]: boolean }>({});
+  const [titles, setTitles] = useState<{ [key: string]: string }>({});
+  const [meta, setMeta] = useState<{ [key: string]: any }>({});
 
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [spinning, setSpinning] = useState(false);
-  const [finalFrame, setFinalFrame] = useState("");
+  const [filterMine, setFilterMine] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState<"new" | "old">("new");
 
+  const [loading, setLoading] = useState(true); // ★ 読み込み中フラグ
+
+  const searchParams = useSearchParams();
   const router = useRouter();
 
-  // ★ コード反映（ガチャ情報取得）
-  const loadGachaInfo = async () => {
-    setError("");
-    setGachaInfo(null);
-    setFrames([]);
-    setUserHistory(null);
+  const filterCode = searchParams.get("code") ?? null;
+  const currentUid = auth.currentUser?.uid ?? null;
 
-    if (!code.trim()) {
-      setError("コードを入力してください");
-      return;
+  useEffect(() => {
+    loadResults();
+  }, []);
+
+  const loadResults = async () => {
+    const fn = httpsCallable(functions, "getGachaResults");
+    const res: any = await fn();
+
+    const list = res.data || [];
+
+    // ★ ガチャコードで絞り込み
+    let filtered = filterCode
+      ? list.filter((r: any) => r.code === filterCode)
+      : list;
+
+    // ★ ガチャコードごとにグループ化
+    const groupedData: any = {};
+    for (const r of filtered) {
+      if (!groupedData[r.code]) groupedData[r.code] = [];
+      groupedData[r.code].push(r);
     }
 
-    const snap = await getDoc(doc(db, "gachaCodes", code.trim()));
-    if (!snap.exists()) {
-      setError("ガチャコードが存在しません");
-      return;
+    // ★ Firestore からタイトル・公開設定・枠情報・サムネを取得
+    const titleMap: any = {};
+    const metaMap: any = {};
+
+    for (const code of Object.keys(groupedData)) {
+      const snap = await getDoc(doc(db, "gachaCodes", code));
+
+      if (!snap.exists()) {
+        delete groupedData[code];
+        continue;
+      }
+
+      const d = snap.data();
+
+      // ★ タイトルなし（削除扱い）は除外
+      if (!d.title || d.title.trim() === "") {
+        delete groupedData[code];
+        continue;
+      }
+
+      titleMap[code] = d.title;
+      metaMap[code] = {
+        public: d.public ?? false,
+        frames: d.frames ?? [],
+        mode: d.mode,
+        thumbnail: d.thumbnail ?? "", // ★ サムネ画像
+      };
     }
 
-    const data = snap.data();
+    // ★ 限定ガチャは「自分が引いたものだけ」残す
+    if (!filterCode && currentUid) {
+      for (const code of Object.keys(groupedData)) {
+        const info = metaMap[code];
 
-    setGachaInfo({
-      title: data.title,
-      mode: data.mode,
-      point: data.point,
-      createdAt: data.createdAt?.toDate().toLocaleString(),
-      expiresAt: data.expiresAt?.toDate().toLocaleString(),
-      framesInfo: data.frames,
-      totalCount: data.totalCount,
-
-      // ★ サムネ画像
-      thumbnail: data.thumbnail ?? "",
-    });
-
-    // ルーレット演出用の枠名
-    setFrames(data.frames.map((f: any) => f.label));
-
-    // ★ ユーザーの履歴取得
-    const uid = auth.currentUser?.uid;
-    if (uid) {
-      const h = await getDoc(doc(db, "userGachaHistory", `${uid}_${code}`));
-      setUserHistory(h.exists() ? h.data().count : 0);
+        if (!info.public) {
+          const hasMine = groupedData[code].some(
+            (r: any) => r.uid === currentUid
+          );
+          if (!hasMine) {
+            delete groupedData[code];
+          }
+        }
+      }
     }
+
+    setGrouped(groupedData);
+    setTitles(titleMap);
+    setMeta(metaMap);
+    setLoading(false); // ★ 読み込み完了
   };
 
-  // ★ ガチャ実行
-  const playGacha = async () => {
-    if (!gachaInfo) {
-      setError("先にコードを反映してください");
-      return;
-    }
+  /* --------------------------------------------------
+     ★ ニックネーム + Xアカウント 表示
+  -------------------------------------------------- */
+  const getUserInfo = async (uid: string) => {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (!snap.exists()) return "名無し";
 
-    setLoading(true);
-    setError("");
-    setResult(null);
-    setFinalFrame("");
+    const u = snap.data();
 
-    // プロフィール確認
-    const user = auth.currentUser;
-    if (!user) {
-      setError("ログインしてください");
-      setLoading(false);
-      return;
-    }
+    const name = u.displayName?.trim() || "";
+    const x = u.xAccount?.trim() || "";
 
-    const snap = await getDoc(doc(db, "users", user.uid));
-    const data = snap.data();
-    const displayName = data.displayName ?? "";
-    const xAccount = data.xAccount ?? "";
+    if (name && x) return `${name}（${x}）`;
+    if (name) return name;
+    if (x) return x;
 
-    if (!displayName && !xAccount) {
-      alert("ガチャを引くには、ニックネームまたはXアカウントを登録してください。");
-      router.push("/profile");
-      setLoading(false);
-      return;
-    }
-
-    // ルーレット開始
-    setSpinning(true);
-
-    try {
-      const fn = httpsCallable(functions, "useGachaCode");
-      const res: any = await fn({ code });
-
-      setTimeout(() => {
-        setSpinning(false);
-        setFinalFrame(res.data.frame);
-        setResult(res.data);
-        setLoading(false);
-
-        // 履歴更新
-        setUserHistory((prev) => (prev !== null ? prev + 1 : 1));
-      }, 2000);
-    } catch (e: any) {
-      setSpinning(false);
-      setError(e.message);
-      setLoading(false);
-    }
+    return "名無し";
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      <h1 style={{ textAlign: "center", marginBottom: 20 }}>🎲 ガチャを引く</h1>
+    <div style={{ padding: 24, maxWidth: 700, margin: "0 auto" }}>
+      <h1 style={{ textAlign: "center", marginBottom: 20 }}>📜 ガチャ結果一覧</h1>
 
-      {/* コード入力 */}
-      <div
-        style={{
-          background: "white",
-          padding: 20,
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          marginBottom: 20,
-        }}
-      >
-        <label style={{ fontWeight: "bold" }}>ガチャコード：</label>
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="例：ABCD1234"
-          style={{
-            padding: 10,
-            border: "1px solid #ccc",
-            borderRadius: 6,
-            width: "100%",
-            marginTop: 8,
-            marginBottom: 16,
-            fontSize: 16,
-          }}
-        />
-
-        <button
-          onClick={loadGachaInfo}
-          style={{
-            width: "100%",
-            padding: "12px 0",
-            background: "#2563eb",
-            color: "white",
-            borderRadius: 8,
-            border: "none",
-            fontSize: 18,
-            fontWeight: "bold",
-            cursor: "pointer",
-            marginBottom: 10,
-          }}
-        >
-          コードを反映
-        </button>
-
-        {error && (
-          <div style={{ marginTop: 16, color: "red", fontWeight: "bold" }}>
-            ⚠ エラー：{error}
-          </div>
-        )}
-      </div>
-
-      {/* ★ ガチャ詳細表示 */}
-      {gachaInfo && (
-        <div
-          style={{
-            background: "white",
-            padding: 20,
-            borderRadius: 12,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            marginBottom: 20,
-          }}
-        >
-          {/* ★ サムネ画像 */}
-          {gachaInfo.thumbnail && (
-            <div style={{ textAlign: "center", marginBottom: 16 }}>
-              <img
-                src={`/gacha/${gachaInfo.thumbnail}`}
-                style={{
-                  width: "100%",
-                  maxWidth: 240,
-                  borderRadius: 12,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                }}
-              />
-            </div>
-          )}
-
-          <h2>{gachaInfo.title}</h2>
-          <p>作成日：{gachaInfo.createdAt}</p>
-          <p>締切日：{gachaInfo.expiresAt}</p>
-
-          <p>
-            方式：{gachaInfo.mode === "count" ? "枠数方式" : "確率方式"}
-          </p>
-
-          <p>
-            1回 {gachaInfo.point.cost} pt（上限 {gachaInfo.point.maxPerUser} 回）
-          </p>
-
-          {userHistory !== null && (
-            <p>
-              あなたの残り回数：
-              {gachaInfo.point.maxPerUser - userHistory} 回
-            </p>
-          )}
-
-          <h3 style={{ marginTop: 16 }}>🎁 当選枠の状況</h3>
-
-          {gachaInfo.mode === "count" ? (
-            <>
-              {gachaInfo.framesInfo.map((f: any, i: number) => (
-                <p key={i}>
-                  {f.label}：{f.usedCount}/{f.maxCount}（残り{" "}
-                  {f.maxCount - f.usedCount}）
-                </p>
-              ))}
-            </>
-          ) : (
-            <>
-              {gachaInfo.framesInfo.map((f: any, i: number) => (
-                <p key={i}>
-                  {f.label}：{Math.round(f.probability * 100)}%
-                </p>
-              ))}
-            </>
-          )}
-
+      {/* ★ filterCode がある時だけ表示 */}
+      {filterCode && (
+        <div style={{ marginBottom: 20 }}>
           <button
-            onClick={playGacha}
-            disabled={loading}
+            onClick={() => router.push(`/gacha/results`)}
             style={{
-              width: "100%",
-              padding: "12px 0",
-              background: "#4f46e5",
+              padding: "10px 16px",
+              background: "#6b7280",
               color: "white",
-              borderRadius: 8,
+              borderRadius: 6,
               border: "none",
-              fontSize: 18,
-              fontWeight: "bold",
               cursor: "pointer",
-              marginTop: 20,
+              width: "100%",
+              marginBottom: 10,
             }}
           >
-            {loading ? "抽選中…" : "ガチャを回す"}
+            他のガチャの結果一覧へ
           </button>
-        </div>
-      )}
 
-      {/* 🎡 ルーレット演出 */}
-      <div
-        style={{
-          marginTop: 30,
-          height: 120,
-          overflow: "hidden",
-          borderRadius: 12,
-          border: "2px solid #4f46e5",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: 0,
-            width: "100%",
-            height: 2,
-            background: "#4f46e5",
-            transform: "translateY(-50%)",
-            zIndex: 10,
-          }}
-        />
-
-        <div
-          style={{
-            animation: spinning ? "spin 0.2s linear infinite" : "none",
-            fontSize: 28,
-            padding: 10,
-          }}
-        >
-          {(frames.length > 0 ? frames : ["A", "B", "C"]).map((f) => (
-            <div key={f} style={{ padding: 8, textAlign: "center" }}>
-              {spinning ? f : finalFrame || ""}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes spin {
-          0% { transform: translateY(0); }
-          100% { transform: translateY(-40px); }
-        }
-      `}</style>
-
-      {/* 結果カード */}
-      {result && (
-        <div
-          style={{
-            background: "white",
-            padding: 20,
-            borderRadius: 12,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            marginTop: 20,
-            textAlign: "center",
-          }}
-        >
-          <h2>🎉 結果</h2>
-          <p style={{ fontSize: 20, margin: "10px 0" }}>
-            <strong>枠：</strong> {result.frame}
-          </p>
-          <p style={{ fontSize: 20 }}>
-            <strong>報酬：</strong> {result.reward}
-          </p>
-
-          {/* ★ このガチャの結果一覧 */}
           <button
-            onClick={() => router.push(`/gacha/results?code=${code}`)}
+            onClick={() => router.push(`/gacha/${filterCode}`)}
             style={{
-              marginTop: 16,
               padding: "10px 16px",
               background: "#2563eb",
               color: "white",
               borderRadius: 6,
               border: "none",
               cursor: "pointer",
-              fontSize: 16,
               width: "100%",
             }}
           >
-            このガチャの結果一覧を見る
+            このガチャのページへ戻る
+          </button>
+        </div>
+      )}
+
+      {/* 🔍 検索・フィルタ・並び替え */}
+      <div
+        style={{
+          background: "white",
+          padding: 16,
+          borderRadius: 12,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          marginBottom: 20,
+        }}
+      >
+        <input
+          type="text"
+          placeholder="ユーザー名 / 枠名で検索"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #ccc",
+            borderRadius: 6,
+            marginBottom: 12,
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 12 }}>
+          <button
+            onClick={() => setFilterMine((v) => !v)}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              background: filterMine ? "#2563eb" : "#6b7280",
+              color: "white",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {filterMine ? "全員の結果を表示" : "自分の結果だけ表示"}
           </button>
 
-          {/* ★ 全ガチャの結果一覧 */}
           <button
-            onClick={() => router.push(`/gacha/results`)}
+            onClick={() =>
+              setSortOrder((v) => (v === "new" ? "old" : "new"))
+            }
             style={{
-              marginTop: 12,
-              padding: "10px 16px",
+              flex: 1,
+              padding: "10px 0",
               background: "#4f46e5",
               color: "white",
               borderRadius: 6,
               border: "none",
               cursor: "pointer",
-              fontSize: 16,
-              width: "100%",
             }}
           >
-            すべてのガチャ結果一覧を見る
+            並び替え：{sortOrder === "new" ? "新着順" : "古い順"}
           </button>
         </div>
-      )}
-
-      {/* ★ 常に表示する「全ガチャ結果一覧」ボタン */}
-      <div style={{ marginTop: 40, textAlign: "center" }}>
-        <button
-          onClick={() => router.push(`/gacha/results`)}
-          style={{
-            padding: "12px 20px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 18,
-            width: "100%",
-            maxWidth: 300,
-          }}
-        >
-          すべてのガチャ結果一覧を見る
-        </button>
       </div>
+
+      {/* ★ 読み込み中表示 */}
+      {loading ? (
+        <p>結果読み込み中…</p>
+      ) : Object.keys(grouped).length === 0 ? (
+        <p>結果がありません。</p>
+      ) : null}
+
+      {/* ★ 結果一覧 */}
+      {!loading &&
+        Object.entries(grouped).map(([code, items]: any) => {
+          const title = titles[code];
+          const info = meta[code];
+
+          return (
+            <div
+              key={code}
+              style={{
+                background: "white",
+                padding: 16,
+                borderRadius: 12,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                marginBottom: 20,
+              }}
+            >
+              {/* アコーディオンヘッダー */}
+              <div
+                onClick={() =>
+                  setOpen((prev) => ({ ...prev, [code]: !prev[code] }))
+                }
+                style={{
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ margin: 0 }}>{title}</h2>
+                  <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
+                    {info.public ? "🌐 公開" : "🔒 限定"}
+                  </p>
+                </div>
+                <span style={{ fontSize: 24 }}>
+                  {open[code] ? "▲" : "▼"}
+                </span>
+              </div>
+
+              {/* ★ サムネ画像 */}
+              {info.thumbnail && (
+                <div style={{ marginTop: 12, textAlign: "center" }}>
+                  <img
+                    src={`/gacha/${info.thumbnail}`}
+                    style={{
+                      width: "100%",
+                      maxWidth: 240,
+                      borderRadius: 12,
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* 折りたたみ内容 */}
+              {open[code] && (
+                <div style={{ marginTop: 16 }}>
+                  <FrameList
+                    items={items}
+                    framesMeta={info.frames}
+                    mode={info.mode}
+                    getUserInfo={getUserInfo}
+                    currentUid={currentUid}
+                    filterMine={filterMine}
+                    search={search}
+                    sortOrder={sortOrder}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
     </div>
+  );
+}
+
+/* --------------------------------------------------
+   枠ごとの表示
+-------------------------------------------------- */
+function FrameList({
+  items,
+  framesMeta,
+  mode,
+  getUserInfo,
+  currentUid,
+  filterMine,
+  search,
+  sortOrder,
+}: any) {
+  return (
+    <div>
+      {framesMeta.map((f: any) => {
+        const frameName = f.label;
+
+        let list = items.filter((r: any) => r.frameName === frameName);
+
+        if (filterMine && currentUid) {
+          list = list.filter((r: any) => r.uid === currentUid);
+        }
+
+        if (search.trim()) {
+          const s = search.trim().toLowerCase();
+          list = list.filter(
+            (r: any) =>
+              r.frameName.toLowerCase().includes(s) ||
+              r.userName?.toLowerCase().includes(s)
+          );
+        }
+
+        list = list.sort((a: any, b: any) =>
+          sortOrder === "new"
+            ? b.createdAt._seconds - a.createdAt._seconds
+            : a.createdAt._seconds - b.createdAt._seconds
+        );
+
+        return (
+          <div key={frameName} style={{ marginBottom: 20 }}>
+            <h3>
+              {frameName}{" "}
+              {mode === "count"
+                ? `（${f.usedCount}/${f.maxCount}）`
+                : `（${Math.round(f.probability * 100)}%）`}
+            </h3>
+
+            {list.length === 0 ? (
+              <p style={{ marginLeft: 20 }}>当選者なし</p>
+            ) : (
+              <ul style={{ paddingLeft: 20 }}>
+                {list.map((r: any) => (
+                  <UserResultItem
+                    key={r.id}
+                    result={r}
+                    getUserInfo={getUserInfo}
+                    highlight={currentUid === r.uid}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* --------------------------------------------------
+   ユーザー表示（ニックネーム＋Xアカウント）
+-------------------------------------------------- */
+function UserResultItem({ result, getUserInfo, highlight }: any) {
+  const [name, setName] = useState("読み込み中…");
+
+  useEffect(() => {
+    (async () => {
+      const n = await getUserInfo(result.uid);
+      setName(n);
+    })();
+  }, []);
+
+  return (
+    <li
+      style={{
+        marginBottom: 4,
+        fontWeight: highlight ? "bold" : "normal",
+        color: highlight ? "#2563eb" : "black",
+      }}
+    >
+      {name}：{result.reward} pt
+      {highlight && " ← あなた"}
+    </li>
+  );
+}
+
+/* --------------------------------------------------
+   外側：Suspense で包む
+-------------------------------------------------- */
+export default function GachaResultsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>読み込み中…</div>}>
+      <ResultsContent />
+    </Suspense>
   );
 }

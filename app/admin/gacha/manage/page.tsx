@@ -183,6 +183,18 @@ function GachaItem({
         codeData.frames.reduce((a: number, f: any) => a + f.usedCount, 0)
       : "∞";
 
+  /* ------------------------------
+     ★ 使用回数リセット関数
+  ------------------------------ */
+  const resetUsage = async () => {
+    if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
+
+    const fn = httpsCallable(functions, "resetGachaUsage");
+    const res: any = await fn({ code: codeData.code });
+
+    alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
+  };
+
   return (
     <div
       style={{
@@ -192,7 +204,6 @@ function GachaItem({
         marginBottom: 24,
       }}
     >
-
       {/* タイトル + 削除ボタン */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2
@@ -231,6 +242,22 @@ function GachaItem({
         style={btnToggle}
       >
         {codeData.public ? "限定にする" : "公開にする"}
+      </button>
+
+      {/* ★ 使用回数リセットボタン */}
+      <button
+        onClick={resetUsage}
+        style={{
+          padding: "6px 12px",
+          background: "#dc2626",
+          color: "white",
+          borderRadius: 6,
+          border: "none",
+          marginBottom: 12,
+          cursor: "pointer",
+        }}
+      >
+        使用回数をリセット
       </button>
 
       {open && (
