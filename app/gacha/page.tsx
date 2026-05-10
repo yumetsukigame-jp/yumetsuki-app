@@ -48,6 +48,9 @@ export default function GachaPage() {
       expiresAt: data.expiresAt?.toDate().toLocaleString(),
       framesInfo: data.frames,
       totalCount: data.totalCount,
+
+      // ★ サムネ画像
+      thumbnail: data.thumbnail ?? "",
     });
 
     // ルーレット演出用の枠名
@@ -183,6 +186,21 @@ export default function GachaPage() {
             marginBottom: 20,
           }}
         >
+          {/* ★ サムネ画像 */}
+          {gachaInfo.thumbnail && (
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
+              <img
+                src={`/gacha/${gachaInfo.thumbnail}`}
+                style={{
+                  width: "100%",
+                  maxWidth: 240,
+                  borderRadius: 12,
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              />
+            </div>
+          )}
+
           <h2>{gachaInfo.title}</h2>
           <p>作成日：{gachaInfo.createdAt}</p>
           <p>締切日：{gachaInfo.expiresAt}</p>

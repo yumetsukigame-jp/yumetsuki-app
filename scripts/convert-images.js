@@ -1,14 +1,16 @@
-import fs from "fs";
-import path from "path";
-import sharp from "sharp";
+// scripts/convert-images.js
+
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
 
 const SRC_ROOT = path.join(process.cwd(), "source_images");
 const DEST_ROOT = path.join(process.cwd(), "public");
 
 const IMAGE_EXT = /\.(png|jpg|jpeg|webp)$/i;
 
-function getAllFiles(dir: string): string[] {
-  let results: string[] = [];
+function getAllFiles(dir) {
+  let results = [];
   const list = fs.readdirSync(dir);
 
   for (const file of list) {
@@ -25,14 +27,12 @@ function getAllFiles(dir: string): string[] {
   return results;
 }
 
-async function processImage(srcPath: string) {
+async function processImage(srcPath) {
   const relative = path.relative(SRC_ROOT, srcPath);
 
-  // 出力先（public）
   const publicPath = path.join(DEST_ROOT, relative.replace(IMAGE_EXT, ".webp"));
   const publicDir = path.dirname(publicPath);
 
-  // 出力先（source_images 内の WebP）
   const srcWebpPath = path.join(SRC_ROOT, relative.replace(IMAGE_EXT, ".webp"));
   const srcWebpDir = path.dirname(srcWebpPath);
 
@@ -41,25 +41,29 @@ async function processImage(srcPath: string) {
 
   console.log(`▶ 変換中: ${srcPath}`);
 
-  // WebP に変換（800px）
+  const isWebp = /\.webp$/i.test(srcPath);
+
+  if (isWebp) {
+    // ★ WebP は source_images 側に書き込まない（上書き禁止）
+    await sharp(srcPath).toFile(publicPath);
+    console.log(`✔ public 出力: ${publicPath}`);
+    return;
+  }
+
+  // PNG/JPG → WebP 変換
   const buffer = await sharp(srcPath)
     .resize({ width: 800 })
     .webp({ quality: 80 })
     .toBuffer();
 
-  // public に保存
   await sharp(buffer).toFile(publicPath);
   console.log(`✔ public 出力: ${publicPath}`);
 
-  // source_images にも WebP を保存
   await sharp(buffer).toFile(srcWebpPath);
   console.log(`✔ source_images 出力: ${srcWebpPath}`);
 
-  // PNG/JPG の場合は削除
-  if (/\.(png|jpg|jpeg)$/i.test(srcPath)) {
-    fs.unlinkSync(srcPath);
-    console.log(`🗑 削除: ${srcPath}`);
-  }
+  fs.unlinkSync(srcPath);
+  console.log(`🗑 削除: ${srcPath}`);
 }
 
 async function run() {
@@ -74,4 +78,20 @@ async function run() {
   console.log("\n🎉 変換完了！source_images と public に WebP が揃いました！");
 }
 
+// ★ public/gacha の画像一覧 JSON を生成
+function generateImageList() {
+  const gachaDir = path.join(DEST_ROOT, "gacha");
+  if (!fs.existsSync(gachaDir)) return;
+
+  const files = fs
+    .readdirSync(gachaDir)
+    .filter((f) => /\.(webp|png|jpg|jpeg)$/i.test(f));
+
+  const jsonPath = path.join(gachaDir, "images.json");
+  fs.writeFileSync(jsonPath, JSON.stringify(files, null, 2));
+
+  console.log(`📄 画像一覧 JSON を生成: ${jsonPath}`);
+}
+
 run();
+generateImageList(); // ★ 必須

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
 
@@ -25,9 +25,23 @@ export default function GachaCreatePage() {
   const [cost, setCost] = useState<number | "">(0);
   const [maxPerUser, setMaxPerUser] = useState<number | "">(1);
   const [expiresAt, setExpiresAt] = useState<string>("");
-  const [publicFlag, setPublicFlag] = useState(false); // ★ 公開/限定
+  const [publicFlag, setPublicFlag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
+
+  // ★ サムネ画像
+  const [thumbnail, setThumbnail] = useState<string>("");
+
+  // ★ public/gacha の画像一覧
+  const [gachaImages, setGachaImages] = useState<string[]>([]);
+
+  // ★ images.json を読み込む
+  useEffect(() => {
+    fetch("/gacha/images.json")
+      .then((res) => res.json())
+      .then((data) => setGachaImages(data))
+      .catch(() => setGachaImages([]));
+  }, []);
 
   const addFrame = () => {
     setFrames((prev) => [
@@ -84,7 +98,7 @@ export default function GachaCreatePage() {
       return;
     }
 
-    // ★ 枠の自動計算（旧コードの仕様を完全維持）
+    // ★ 枠の自動計算
     if (mode === "count") {
       const sum = frames.reduce(
         (acc, f, idx) =>
@@ -127,6 +141,7 @@ export default function GachaCreatePage() {
       const res: any = await fn({
         title,
         mode,
+        thumbnail, // ★ サムネ画像を送信
         point: {
           cost: typeof cost === "number" ? cost : 0,
           maxPerUser: typeof maxPerUser === "number" ? maxPerUser : 1,
@@ -146,7 +161,7 @@ export default function GachaCreatePage() {
           rewardMax: typeof f.rewardMax === "number" ? f.rewardMax : 0,
         })),
         expiresAt,
-        publicFlag, // ★ 公開/限定
+        publicFlag,
       });
 
       setCreatedCode(res.data.code);
@@ -163,6 +178,7 @@ export default function GachaCreatePage() {
       setMaxPerUser(1);
       setExpiresAt("");
       setPublicFlag(false);
+      setThumbnail("");
     } catch (e: any) {
       alert("作成に失敗しました：" + e.message);
     }
@@ -192,6 +208,54 @@ export default function GachaCreatePage() {
           onChange={(e) => setTitle(e.target.value)}
           style={inputStyle}
         />
+
+        {/* ★ サムネ画像選択 */}
+        <div>
+          <div style={{ fontWeight: "bold", marginBottom: 8 }}>サムネ画像</div>
+
+          {/* 画像なし */}
+          <div
+            onClick={() => setThumbnail("")}
+            style={{
+              border: thumbnail === "" ? "3px solid #2563eb" : "1px solid #ccc",
+              padding: 8,
+              borderRadius: 8,
+              cursor: "pointer",
+              marginBottom: 12,
+              textAlign: "center",
+            }}
+          >
+            画像なし
+          </div>
+
+          {/* 画像一覧 */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {gachaImages.map((img) => (
+              <div
+                key={img}
+                onClick={() => setThumbnail(img)}
+                style={{
+                  border:
+                    thumbnail === img ? "3px solid #2563eb" : "1px solid #ccc",
+                  padding: 4,
+                  borderRadius: 8,
+                  cursor: "pointer",
+                }}
+              >
+                <img
+                  src={`/gacha/${img}`}
+                  style={{ width: "100%", borderRadius: 6 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* 公開設定 */}
         <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
