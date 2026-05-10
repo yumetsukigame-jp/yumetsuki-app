@@ -310,7 +310,7 @@ export default function GachaPage() {
             <strong>報酬：</strong> {result.reward}
           </p>
 
-          {/* ★ 結果一覧ページへのリンク */}
+          {/* ★ このガチャの結果一覧 */}
           <button
             onClick={() => router.push(`/gacha/results?code=${code}`)}
             style={{
@@ -322,9 +322,28 @@ export default function GachaPage() {
               border: "none",
               cursor: "pointer",
               fontSize: 16,
+              width: "100%",
             }}
           >
             このガチャの結果一覧を見る
+          </button>
+
+          {/* ★ 全ガチャの結果一覧 */}
+          <button
+            onClick={() => router.push(`/gacha/results`)}
+            style={{
+              marginTop: 12,
+              padding: "10px 16px",
+              background: "#4f46e5",
+              color: "white",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 16,
+              width: "100%",
+            }}
+          >
+            すべてのガチャ結果一覧を見る
           </button>
         </div>
       )}
