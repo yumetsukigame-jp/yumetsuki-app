@@ -347,6 +347,26 @@ export default function GachaPage() {
           </button>
         </div>
       )}
+
+      {/* ★ 常に表示する「全ガチャ結果一覧」ボタン */}
+      <div style={{ marginTop: 40, textAlign: "center" }}>
+        <button
+          onClick={() => router.push(`/gacha/results`)}
+          style={{
+            padding: "12px 20px",
+            background: "#4f46e5",
+            color: "white",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            fontSize: 18,
+            width: "100%",
+            maxWidth: 300,
+          }}
+        >
+          すべてのガチャ結果一覧を見る
+        </button>
+      </div>
     </div>
   );
 }
