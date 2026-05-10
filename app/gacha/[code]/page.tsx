@@ -44,10 +44,25 @@ export default function GachaDetailPage() {
 
     const data = snap.data();
 
+    /* --------------------------------------------------
+       ★ 限定ガチャのアクセス判定（B仕様）
+       public === false の場合は履歴を確認
+    -------------------------------------------------- */
     if (!data.public) {
-      setError("このガチャは限定公開です");
-      setLoading(false);
-      return;
+      if (!currentUid) {
+        setError("このガチャは限定公開です");
+        setLoading(false);
+        return;
+      }
+
+      const historyRef = doc(db, "userGachaHistory", `${currentUid}_${code}`);
+      const historySnap = await getDoc(historyRef);
+
+      if (!historySnap.exists()) {
+        setError("このガチャは限定公開です");
+        setLoading(false);
+        return;
+      }
     }
 
     setGacha(data);
