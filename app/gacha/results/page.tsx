@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export default function GachaResultsPage() {
+/* --------------------------------------------------
+   内側コンポーネント（useSearchParams を使う部分）
+-------------------------------------------------- */
+function ResultsContent() {
   const [grouped, setGrouped] = useState<any>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const [titles, setTitles] = useState<{ [key: string]: string }>({});
@@ -16,7 +19,7 @@ export default function GachaResultsPage() {
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState<"new" | "old">("new");
 
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); // ← Suspense 必須
   const router = useRouter();
 
   const filterCode = searchParams.get("code") ?? null;
@@ -255,8 +258,19 @@ export default function GachaResultsPage() {
   );
 }
 
+/* --------------------------------------------------
+   外側：Suspense で包む（Next.js 15 必須）
+-------------------------------------------------- */
+export default function GachaResultsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>読み込み中…</div>}>
+      <ResultsContent />
+    </Suspense>
+  );
+}
+
 /* ------------------------------------------
-   枠ごとの表示（全枠表示 + reward昇順 + 検索 + フィルタ）
+   枠ごとの表示
 ------------------------------------------ */
 function FrameList({
   items,
@@ -273,15 +287,12 @@ function FrameList({
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
-        // ★ 該当枠の結果
         let list = items.filter((r: any) => r.frameName === frameName);
 
-        // ★ 自分の結果だけ表示
         if (filterMine && currentUid) {
           list = list.filter((r: any) => r.uid === currentUid);
         }
 
-        // ★ 検索（ユーザー名 / 枠名）
         if (search.trim()) {
           const s = search.trim().toLowerCase();
           list = list.filter(
@@ -291,7 +302,6 @@ function FrameList({
           );
         }
 
-        // ★ 並び替え（createdAt）
         list = list.sort((a: any, b: any) =>
           sortOrder === "new"
             ? b.createdAt._seconds - a.createdAt._seconds
@@ -329,7 +339,7 @@ function FrameList({
 }
 
 /* ------------------------------------------
-   ユーザー表示（displayName / xAccount）
+   ユーザー表示
 ------------------------------------------ */
 function UserResultItem({ result, getUserInfo, highlight }: any) {
   const [name, setName] = useState("読み込み中…");
