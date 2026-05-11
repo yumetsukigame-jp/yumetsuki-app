@@ -1,18 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function GachaPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
 
-  // ★ URL の ?code=XXXX を初期値にセット
-  const initialCode = searchParams.get("code") ?? "";
-  const [code, setCode] = useState(initialCode);
+  // ★ useSearchParams を使わず安全に取得
+  const [code, setCode] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const c = params.get("code") ?? "";
+      setCode(c);
+    }
+  }, []);
 
   const [gacha, setGacha] = useState<any>(null);
   const [error, setError] = useState("");
@@ -73,7 +79,6 @@ export default function GachaPage() {
       const fn = httpsCallable(functions, "useGachaCode");
       const res: any = await fn({ code });
 
-      // ★ 結果ページへ遷移（演出後）
       router.push(`/gacha/results?code=${code}`);
     } catch (e: any) {
       setError(e.message);
