@@ -9,7 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 export default function GachaPage() {
   const router = useRouter();
 
-  // ★ useSearchParams を使わず安全に取得
+  // ★ URL の ?code=XXXX を安全に取得
   const [code, setCode] = useState("");
 
   useEffect(() => {
@@ -24,7 +24,6 @@ export default function GachaPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [historyCount, setHistoryCount] = useState<number | null>(null);
   const uid = auth.currentUser?.uid ?? null;
 
   const checkCode = async () => {
@@ -48,26 +47,7 @@ export default function GachaPage() {
 
     const data = snap.data();
 
-    // ★ 限定ガチャは履歴がある人だけアクセス可能
-    if (!data.public) {
-      if (!uid) {
-        setError("このガチャは限定公開です");
-        setLoading(false);
-        return;
-      }
-
-      const historyRef = doc(db, "userGachaHistory", `${uid}_${code}`);
-      const historySnap = await getDoc(historyRef);
-
-      if (!historySnap.exists()) {
-        setError("このガチャは限定公開です");
-        setLoading(false);
-        return;
-      }
-
-      setHistoryCount(historySnap.data().count ?? 0);
-    }
-
+    // ★ 限定ガチャでも誰でも引ける（履歴チェックなし）
     setGacha(data);
     setLoading(false);
   };
@@ -137,10 +117,6 @@ export default function GachaPage() {
           <p>
             1回 {gacha.point.cost} pt（上限 {gacha.point.maxPerUser} 回）
           </p>
-
-          {historyCount !== null && (
-            <p>あなたのプレイ回数：{historyCount} 回</p>
-          )}
 
           <button
             onClick={play}
