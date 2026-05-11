@@ -12,7 +12,6 @@ export default function GachaDetailPage() {
 
   const [gacha, setGacha] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
 
   const [allResults, setAllResults] = useState<any[]>([]);
@@ -76,23 +75,12 @@ export default function GachaDetailPage() {
     setLoading(false);
   };
 
-  const play = async () => {
-    setError("");
-    setResult(null);
-
-    try {
-      const fn = httpsCallable(functions, "useGachaCode");
-      const res: any = await fn({ code });
-
-      setResult(res.data);
-
-      // ★ 最新の結果を再取得
-      const fn2 = httpsCallable(functions, "getGachaResults");
-      const res2: any = await fn2();
-      setAllResults(res2.data.filter((r: any) => r.code === code));
-    } catch (e: any) {
-      setError(e.message);
-    }
+  /* --------------------------------------------------
+     ★ ガチャ実行せず、統一ガチャ画面へ遷移
+     （演出を統一するため）
+  -------------------------------------------------- */
+  const play = () => {
+    router.push(`/gacha?code=${code}`);
   };
 
   if (loading) return <p style={{ padding: 24 }}>読み込み中…</p>;
@@ -135,36 +123,8 @@ export default function GachaDetailPage() {
           cursor: "pointer",
         }}
       >
-        ガチャを引く
+        ガチャを引く（演出あり）
       </button>
-
-      {error && (
-        <p style={{ marginTop: 16, color: "red", fontWeight: "bold" }}>
-          ⚠ {error}
-        </p>
-      )}
-
-      {/* ★ 1回分の結果 */}
-      {result && (
-        <div
-          style={{
-            marginTop: 24,
-            padding: 16,
-            background: "white",
-            borderRadius: 8,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            textAlign: "center",
-          }}
-        >
-          <h2>🎉 結果</h2>
-          <p style={{ fontSize: 20 }}>
-            <strong>枠：</strong> {result.frame}
-          </p>
-          <p style={{ fontSize: 20 }}>
-            <strong>報酬：</strong> {result.reward} pt
-          </p>
-        </div>
-      )}
 
       {/* ★ このガチャの全結果（簡易版） */}
       <h2 style={{ marginTop: 32 }}>📜 このガチャの当選状況</h2>
