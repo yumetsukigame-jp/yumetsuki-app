@@ -9,7 +9,6 @@ import { doc, getDoc } from "firebase/firestore";
 export default function GachaPage() {
   const router = useRouter();
 
-  // URL の ?code=XXXX を取得
   const [code, setCode] = useState("");
 
   useEffect(() => {
@@ -26,13 +25,12 @@ export default function GachaPage() {
 
   const [result, setResult] = useState<any>(null);
 
-  // スロット演出用
+  // スロット用
   const [position, setPosition] = useState(0);
-  const [spinning, setSpinning] = useState(false);
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
-  const spinTimer = useRef<any>(null);
+  const intervalRef = useRef<any>(null);
 
   const checkCode = async () => {
     setError("");
@@ -58,42 +56,52 @@ export default function GachaPage() {
     setLoading(false);
   };
 
-  // ★ 加速 → 等速 → 減速 → 停止 の自然なスロット回転
-  const spinReel = (frames: any[], finalLabel: string, onStop: () => void) => {
-    let speed = 120; // 最初は遅い
-    let phase: "accel" | "steady" | "decel" = "accel";
+  // ★ interval を張り替えて加速 → 等速 → 減速 → 停止
+  const startSpin = (frames: any[], finalLabel: string, onStop: () => void) => {
     let idx = 0;
+    let speed = 120; // ms
+    let phase: "accel" | "steady" | "decel" = "accel";
 
-    const loop = () => {
-      // ★ 前のタイマーを必ずクリア（止まらない原因の解消）
-      if (spinTimer.current) clearTimeout(spinTimer.current);
+    const updateInterval = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
 
-      idx = (idx + 1) % frames.length;
-      setPosition(idx);
+      intervalRef.current = setInterval(() => {
+        idx = (idx + 1) % frames.length;
+        setPosition(idx);
 
-      // フェーズごとの速度調整
-      if (phase === "accel") {
-        speed -= 12;
-        if (speed <= 40) phase = "steady";
-      } else if (phase === "steady") {
-        // 一定時間後に減速へ
-        if (idx === 10) phase = "decel";
-      } else if (phase === "decel") {
-        speed += 18;
-
-        // ★ 停止条件：中央段が当選枠になったら止める
-        if (speed >= 160 && frames[idx].label === finalLabel) {
-          clearTimeout(spinTimer.current);
-          onStop();
-          return;
+        // 加速
+        if (phase === "accel") {
+          speed -= 12;
+          if (speed <= 40) {
+            phase = "steady";
+            updateInterval();
+          }
         }
-      }
 
-      // ★ 次のループをセット
-      spinTimer.current = setTimeout(loop, speed);
+        // 等速 → 減速へ移行
+        if (phase === "steady") {
+          if (idx === 10) {
+            phase = "decel";
+            updateInterval();
+          }
+        }
+
+        // 減速
+        if (phase === "decel") {
+          speed += 18;
+
+          // 停止条件：中央段が当選枠
+          if (speed >= 160 && frames[idx].label === finalLabel) {
+            clearInterval(intervalRef.current);
+            onStop();
+          } else {
+            updateInterval();
+          }
+        }
+      }, speed);
     };
 
-    loop();
+    updateInterval();
   };
 
   const play = async () => {
@@ -108,17 +116,13 @@ export default function GachaPage() {
       const frame = res.data.frame;
       setFinalFrame(frame);
 
-      // 回転開始
-      setSpinning(true);
-
-      spinReel(gacha.frames, frame, () => {
-        setSpinning(false);
+      startSpin(gacha.frames, frame, () => {
         setStop(true);
         setResult(res.data);
       });
 
     } catch (e: any) {
-      setSpinning(false);
+      if (intervalRef.current) clearInterval(intervalRef.current);
       setError(e.message);
     }
   };
