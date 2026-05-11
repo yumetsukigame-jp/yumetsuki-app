@@ -9,7 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 export default function GachaPage() {
   const router = useRouter();
 
-  // ★ URL の ?code=XXXX を安全に取得
+  // URL の ?code=XXXX を取得
   const [code, setCode] = useState("");
 
   useEffect(() => {
@@ -26,9 +26,15 @@ export default function GachaPage() {
 
   const [result, setResult] = useState<any>(null);
 
-  // ★ スロット演出用
-  const [spinning, setSpinning] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "accel" | "steady" | "decel" | "stop">("idle");
+  // スロット演出用
+  const [spinLeft, setSpinLeft] = useState(false);
+  const [spinCenter, setSpinCenter] = useState(false);
+  const [spinRight, setSpinRight] = useState(false);
+
+  const [stopLeft, setStopLeft] = useState(false);
+  const [stopCenter, setStopCenter] = useState(false);
+  const [stopRight, setStopRight] = useState(false);
+
   const [finalFrame, setFinalFrame] = useState("");
 
   const checkCode = async () => {
@@ -51,17 +57,13 @@ export default function GachaPage() {
       return;
     }
 
-    const data = snap.data();
-
-    // ★ 限定ガチャでも誰でも引ける（履歴チェックなし）
-    setGacha(data);
+    setGacha(snap.data());
     setLoading(false);
   };
 
   const play = async () => {
     setError("");
     setResult(null);
-    setFinalFrame("");
 
     try {
       const fn = httpsCallable(functions, "useGachaCode");
@@ -70,40 +72,145 @@ export default function GachaPage() {
       const frame = res.data.frame;
       setFinalFrame(frame);
 
-      // ★ 演出開始
-      setSpinning(true);
-      setPhase("accel");
+      // 3 リール回転開始
+      setSpinLeft(true);
+      setSpinCenter(true);
+      setSpinRight(true);
 
-      // 加速 → 等速 → 減速 → 停止
-      setTimeout(() => setPhase("steady"), 200);     // 加速 0.2s
-      setTimeout(() => setPhase("decel"), 1400);     // 等速 1.2s
+      // 左リール停止（ランダム）
       setTimeout(() => {
-        setPhase("stop");
-        setSpinning(false);
+        setSpinLeft(false);
+        setStopLeft(true);
+      }, 1500);
+
+      // 中央リール停止（当選枠）
+      setTimeout(() => {
+        setSpinCenter(false);
+        setStopCenter(true);
+      }, 2000);
+
+      // 右リール停止（ランダム）
+      setTimeout(() => {
+        setSpinRight(false);
+        setStopRight(true);
         setResult(res.data);
-      }, 2200); // 減速 0.8s
+      }, 2500);
 
     } catch (e: any) {
-      setSpinning(false);
+      setSpinLeft(false);
+      setSpinCenter(false);
+      setSpinRight(false);
       setError(e.message);
     }
   };
 
-  // ★ リールの速度設定
-  const getSpeed = () => {
-    switch (phase) {
-      case "accel": return "spin-fast 0.1s linear infinite";
-      case "steady": return "spin-mid 0.15s linear infinite";
-      case "decel": return "spin-slow 0.25s linear infinite";
-      case "stop": return "none";
-      default: return "none";
-    }
+  // リールコンポーネント（上下だけ回転）
+  const Reel = ({ spinning, stop, frames, isCenter }: any) => {
+    const displayList = spinning
+      ? [...frames, ...frames, ...frames]
+      : frames;
+
+    return (
+      <div
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          borderRadius: 12,
+          border: "3px solid #4f46e5",
+          background: "#f8fafc",
+          position: "relative",
+          height: 180,
+        }}
+      >
+        {/* 上フェード */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: 50,
+            background:
+              "linear-gradient(to bottom, rgba(248,250,252,1), rgba(248,250,252,0))",
+            zIndex: 10,
+          }}
+        />
+
+        {/* 下フェード */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            width: "100%",
+            height: 50,
+            background:
+              "linear-gradient(to top, rgba(248,250,252,1), rgba(248,250,252,0))",
+            zIndex: 10,
+          }}
+        />
+
+        {/* 中央帯（固定） */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 0,
+            width: "100%",
+            height: 40,
+            background: "#fde047",
+            transform: "translateY(-50%)",
+            zIndex: 20,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            fontWeight: "bold",
+            fontSize: 18,
+            borderTop: "2px solid #facc15",
+            borderBottom: "2px solid #facc15",
+          }}
+        >
+          当選内容！
+        </div>
+
+        {/* リール内容（上下だけ回転） */}
+        <div
+          style={{
+            animation: spinning ? "spin 0.15s linear infinite" : "none",
+            fontSize: 24,
+            padding: 10,
+          }}
+        >
+          {displayList.map((f: any, idx: number) => (
+            <div
+              key={idx}
+              style={{
+                padding: "12px 0",
+                textAlign: "center",
+                background:
+                  stop && isCenter && f.label === finalFrame
+                    ? "#d1fae5"
+                    : "#ffffff",
+                borderBottom: "1px solid #e5e7eb",
+                fontWeight:
+                  stop && isCenter && f.label === finalFrame
+                    ? "bold"
+                    : "normal",
+              }}
+            >
+              {f.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
       <h1 style={{ textAlign: "center", marginBottom: 20 }}>🎰 ガチャを引く</h1>
 
+      {/* コード入力 */}
       <div
         style={{
           background: "white",
@@ -155,7 +262,7 @@ export default function GachaPage() {
         )}
       </div>
 
-      {/* ★ ガチャ情報があるときだけ表示 */}
+      {/* ガチャ情報 */}
       {gacha && (
         <>
           <h2 style={{ textAlign: "center", marginBottom: 10 }}>
@@ -183,137 +290,41 @@ export default function GachaPage() {
           <div
             style={{
               marginTop: 30,
-              height: 140,
+              height: 180,
               display: "flex",
               justifyContent: "space-between",
               gap: 8,
             }}
           >
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  overflow: "hidden",
-                  borderRadius: 12,
-                  border: "3px solid #4f46e5",
-                  background: "#f8fafc",
-                  position: "relative",
-                }}
-              >
-                {/* 上フェード */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: 40,
-                    background:
-                      "linear-gradient(to bottom, rgba(248,250,252,1), rgba(248,250,252,0))",
-                    zIndex: 10,
-                  }}
-                />
-
-                {/* 下フェード */}
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: 0,
-                    left: 0,
-                    width: "100%",
-                    height: 40,
-                    background:
-                      "linear-gradient(to top, rgba(248,250,252,1), rgba(248,250,252,0))",
-                    zIndex: 10,
-                  }}
-                />
-
-                {/* 中央ライン（当たり位置） */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: 0,
-                    width: "100%",
-                    height: 4,
-                    background: "#ef4444",
-                    transform: "translateY(-50%)",
-                    zIndex: 20,
-                  }}
-                />
-
-                {/* 回転リスト */}
-                <div
-                  style={{
-                    animation: spinning ? getSpeed() : "none",
-                    fontSize: 24,
-                    padding: 10,
-                  }}
-                >
-                  {(gacha.frames || []).map((f: any) => (
-                    <div
-                      key={f.label}
-                      style={{
-                        padding: "12px 0",
-                        textAlign: "center",
-                        background:
-                          !spinning && finalFrame === f.label && i === 1
-                            ? "#d1fae5"
-                            : "#ffffff",
-                        borderBottom: "1px solid #e5e7eb",
-                        fontWeight:
-                          !spinning && finalFrame === f.label && i === 1
-                            ? "bold"
-                            : "normal",
-                      }}
-                    >
-                      {spinning ? f.label : finalFrame || ""}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <Reel
+              spinning={spinLeft}
+              stop={stopLeft}
+              frames={gacha.frames}
+              isCenter={false}
+            />
+            <Reel
+              spinning={spinCenter}
+              stop={stopCenter}
+              frames={gacha.frames}
+              isCenter={true}
+            />
+            <Reel
+              spinning={spinRight}
+              stop={stopRight}
+              frames={gacha.frames}
+              isCenter={false}
+            />
           </div>
 
           {/* CSS アニメーション */}
           <style>{`
-            @keyframes spin-fast {
+            @keyframes spin {
               0% { transform: translateY(0); }
               100% { transform: translateY(-60px); }
             }
-            @keyframes spin-mid {
-              0% { transform: translateY(0); }
-              100% { transform: translateY(-40px); }
-            }
-            @keyframes spin-slow {
-              0% { transform: translateY(0); }
-              100% { transform: translateY(-20px); }
-            }
           `}</style>
 
-          {/* 回転中のラベル */}
-          {spinning && (
-            <p style={{ textAlign: "center", marginTop: 10, color: "#4f46e5" }}>
-              🎡 回転中…
-            </p>
-          )}
-
-          {/* 当たりラベル */}
-          {!spinning && finalFrame && (
-            <p
-              style={{
-                textAlign: "center",
-                marginTop: 10,
-                color: "#10b981",
-                fontWeight: "bold",
-              }}
-            >
-              🎉 当たり！
-            </p>
-          )}
-
-          {/* ★ 結果カード */}
+          {/* 結果 */}
           {result && (
             <div
               style={{
