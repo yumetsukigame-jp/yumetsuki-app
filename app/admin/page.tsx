@@ -81,6 +81,16 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
+          ニブイチ管理カテゴリ（追加）
+      ============================ */}
+      <Section title="🎯 ニブイチ管理">
+        <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
+        <MenuLink href="/admin/nibuichi/result">今日の結果入力</MenuLink>
+        <MenuLink href="/admin/nibuichi/users">ユーザー予想一覧</MenuLink>
+        <MenuLink href="/admin/nibuichi/history">日別履歴</MenuLink>
+      </Section>
+
+      {/* ============================
           戻る
       ============================ */}
       <div
