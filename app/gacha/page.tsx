@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db } from "@/firebase";
@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 export default function GachaPage() {
   const router = useRouter();
 
+  // URL の ?code=XXXX を取得
   const [code, setCode] = useState("");
 
   useEffect(() => {
@@ -26,9 +27,12 @@ export default function GachaPage() {
   const [result, setResult] = useState<any>(null);
 
   // スロット演出用
+  const [position, setPosition] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
+
+  const spinTimer = useRef<any>(null);
 
   const checkCode = async () => {
     setError("");
@@ -54,6 +58,43 @@ export default function GachaPage() {
     setLoading(false);
   };
 
+  // ★ 加速 → 等速 → 減速 → 停止 の自然なスロット回転
+  const spinReel = (frames: any[], finalLabel: string, onStop: () => void) => {
+    let speed = 120; // 最初は遅い
+    let phase: "accel" | "steady" | "decel" = "accel";
+    let idx = 0;
+
+    const loop = () => {
+      idx = (idx + 1) % frames.length;
+      setPosition(idx);
+
+      // フェーズごとの速度調整
+      if (phase === "accel") {
+        speed -= 12;
+        if (speed <= 40) {
+          phase = "steady";
+        }
+      } else if (phase === "steady") {
+        // 一定時間後に減速へ
+        if (idx === 10) {
+          phase = "decel";
+        }
+      } else if (phase === "decel") {
+        speed += 18;
+
+        // 停止条件：中央段が当選枠になったら止める
+        if (speed >= 160 && frames[idx].label === finalLabel) {
+          onStop();
+          return;
+        }
+      }
+
+      spinTimer.current = setTimeout(loop, speed);
+    };
+
+    loop();
+  };
+
   const play = async () => {
     setError("");
     setResult(null);
@@ -69,12 +110,11 @@ export default function GachaPage() {
       // 回転開始
       setSpinning(true);
 
-      // 2秒後に停止
-      setTimeout(() => {
+      spinReel(gacha.frames, frame, () => {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
-      }, 2000);
+      });
 
     } catch (e: any) {
       setSpinning(false);
@@ -82,11 +122,13 @@ export default function GachaPage() {
     }
   };
 
-  // 1リール（縦3段）
+  // ★ 1リール（縦3段）
   const Reel = ({ frames }: any) => {
-    const displayList = spinning
-      ? [...frames, ...frames, ...frames]
-      : frames;
+    const visible = [
+      frames[(position - 1 + frames.length) % frames.length],
+      frames[position],
+      frames[(position + 1) % frames.length],
+    ];
 
     return (
       <div
@@ -97,43 +139,31 @@ export default function GachaPage() {
           borderRadius: 12,
           border: "3px solid #4f46e5",
           background: "#f8fafc",
-          position: "relative",
         }}
       >
-        {/* リール内容 */}
-        <div
-          style={{
-            animation: spinning ? "spin 0.15s linear infinite" : "none",
-            fontSize: 24,
-          }}
-        >
-          {displayList.map((f: any, idx: number) => (
-            <div
-              key={idx}
-              style={{
-                height: 60,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                background:
-                  stop && f.label === finalFrame ? "#d1fae5" : "#ffffff",
-                borderBottom: "1px solid #e5e7eb",
-                fontWeight:
-                  stop && f.label === finalFrame ? "bold" : "normal",
-              }}
-            >
-              {f.label}
-            </div>
-          ))}
-        </div>
-
-        {/* CSS アニメーション */}
-        <style>{`
-          @keyframes spin {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-60px); }
-          }
-        `}</style>
+        {visible.map((f, i) => (
+          <div
+            key={i}
+            style={{
+              height: 60,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              background:
+                stop && i === 1 && f.label === finalFrame
+                  ? "#d1fae5"
+                  : "#ffffff",
+              borderBottom: "1px solid #e5e7eb",
+              fontWeight:
+                stop && i === 1 && f.label === finalFrame
+                  ? "bold"
+                  : "normal",
+              fontSize: 24,
+            }}
+          >
+            {f.label}
+          </div>
+        ))}
       </div>
     );
   };
