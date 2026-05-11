@@ -24,11 +24,13 @@ export default function GachaPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [result, setResult] = useState<any>(null); // ★ 結果を保持
   const uid = auth.currentUser?.uid ?? null;
 
   const checkCode = async () => {
     setError("");
     setGacha(null);
+    setResult(null);
 
     if (!code.trim()) {
       setError("コードを入力してください");
@@ -54,12 +56,15 @@ export default function GachaPage() {
 
   const play = async () => {
     setError("");
+    setResult(null);
 
     try {
       const fn = httpsCallable(functions, "useGachaCode");
       const res: any = await fn({ code });
 
-      router.push(`/gacha/results?code=${code}`);
+      // ★ 結果を state に保存（画面内で演出 → 結果表示）
+      setResult(res.data);
+
     } catch (e: any) {
       setError(e.message);
     }
@@ -133,6 +138,63 @@ export default function GachaPage() {
             }}
           >
             ガチャを引く（演出あり）
+          </button>
+        </div>
+      )}
+
+      {/* ★ 結果表示（元の仕様） */}
+      {result && (
+        <div
+          style={{
+            marginTop: 24,
+            padding: 16,
+            background: "white",
+            borderRadius: 8,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            textAlign: "center",
+          }}
+        >
+          <h2>🎉 結果</h2>
+          <p style={{ fontSize: 20 }}>
+            <strong>枠：</strong> {result.frame}
+          </p>
+          <p style={{ fontSize: 20 }}>
+            <strong>報酬：</strong> {result.reward} pt
+          </p>
+
+          {/* ★ 結果ページへのリンク（元の仕様） */}
+          <button
+            onClick={() => router.push(`/gacha/results?code=${code}`)}
+            style={{
+              marginTop: 20,
+              padding: "12px 20px",
+              background: "#4f46e5",
+              color: "white",
+              borderRadius: 8,
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+              fontSize: 16,
+            }}
+          >
+            このガチャの結果一覧ページへ
+          </button>
+
+          <button
+            onClick={() => router.push(`/gacha/results`)}
+            style={{
+              marginTop: 12,
+              padding: "12px 20px",
+              background: "#6b7280",
+              color: "white",
+              borderRadius: 8,
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+              fontSize: 16,
+            }}
+          >
+            他のガチャの結果一覧へ
           </button>
         </div>
       )}
