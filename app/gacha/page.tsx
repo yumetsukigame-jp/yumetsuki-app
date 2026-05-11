@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db } from "@/firebase";
@@ -10,6 +10,17 @@ export default function GachaPage() {
   const router = useRouter();
 
   const [code, setCode] = useState("");
+  const [gacha, setGacha] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [result, setResult] = useState<any>(null);
+
+  // ルーレット用
+  const [spinning, setSpinning] = useState(false);
+  const [stop, setStop] = useState(false);
+  const [finalFrame, setFinalFrame] = useState("");
+  const [position, setPosition] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -18,19 +29,6 @@ export default function GachaPage() {
       setCode(c);
     }
   }, []);
-
-  const [gacha, setGacha] = useState<any>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const [result, setResult] = useState<any>(null);
-
-  // スロット用
-  const [position, setPosition] = useState(0);
-  const [stop, setStop] = useState(false);
-  const [finalFrame, setFinalFrame] = useState("");
-
-  const intervalRef = useRef<any>(null);
 
   const checkCode = async () => {
     setError("");
@@ -56,54 +54,6 @@ export default function GachaPage() {
     setLoading(false);
   };
 
-  // ★ interval を張り替えて加速 → 等速 → 減速 → 停止
-  const startSpin = (frames: any[], finalLabel: string, onStop: () => void) => {
-    let idx = 0;
-    let speed = 120; // ms
-    let phase: "accel" | "steady" | "decel" = "accel";
-
-    const updateInterval = () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-
-      intervalRef.current = setInterval(() => {
-        idx = (idx + 1) % frames.length;
-        setPosition(idx);
-
-        // 加速
-        if (phase === "accel") {
-          speed -= 12;
-          if (speed <= 40) {
-            phase = "steady";
-            updateInterval();
-          }
-        }
-
-        // 等速 → 減速へ移行
-        if (phase === "steady") {
-          if (idx === 10) {
-            phase = "decel";
-            updateInterval();
-          }
-        }
-
-        // 減速
-        if (phase === "decel") {
-          speed += 18;
-
-          // 停止条件：中央段が当選枠
-          if (speed >= 160 && frames[idx].label === finalLabel) {
-            clearInterval(intervalRef.current);
-            onStop();
-          } else {
-            updateInterval();
-          }
-        }
-      }, speed);
-    };
-
-    updateInterval();
-  };
-
   const play = async () => {
     setError("");
     setResult(null);
@@ -116,18 +66,23 @@ export default function GachaPage() {
       const frame = res.data.frame;
       setFinalFrame(frame);
 
-      startSpin(gacha.frames, frame, () => {
+      // 回転開始
+      setSpinning(true);
+
+      // 2秒後に停止
+      setTimeout(() => {
+        setSpinning(false);
         setStop(true);
         setResult(res.data);
-      });
+      }, 2000);
 
     } catch (e: any) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      setSpinning(false);
       setError(e.message);
     }
   };
 
-  // ★ 1リール（縦3段）
+  // 1リール（縦3段）
   const Reel = ({ frames }: any) => {
     const visible = [
       frames[(position - 1 + frames.length) % frames.length],
@@ -144,31 +99,47 @@ export default function GachaPage() {
           borderRadius: 12,
           border: "3px solid #4f46e5",
           background: "#f8fafc",
+          position: "relative",
         }}
       >
-        {visible.map((f, i) => (
-          <div
-            key={i}
-            style={{
-              height: 60,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              background:
-                stop && i === 1 && f.label === finalFrame
-                  ? "#d1fae5"
-                  : "#ffffff",
-              borderBottom: "1px solid #e5e7eb",
-              fontWeight:
-                stop && i === 1 && f.label === finalFrame
-                  ? "bold"
-                  : "normal",
-              fontSize: 24,
-            }}
-          >
-            {f.label}
-          </div>
-        ))}
+        {/* 回転アニメーション */}
+        <div
+          style={{
+            animation: spinning ? "spin 0.15s linear infinite" : "none",
+          }}
+        >
+          {visible.map((f, i) => (
+            <div
+              key={i}
+              style={{
+                height: 60,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background:
+                  stop && i === 1 && f.label === finalFrame
+                    ? "#d1fae5"
+                    : "#ffffff",
+                borderBottom: "1px solid #e5e7eb",
+                fontWeight:
+                  stop && i === 1 && f.label === finalFrame
+                    ? "bold"
+                    : "normal",
+                fontSize: 24,
+              }}
+            >
+              {f.label}
+            </div>
+          ))}
+        </div>
+
+        {/* CSS アニメーション */}
+        <style>{`
+          @keyframes spin {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-60px); }
+          }
+        `}</style>
       </div>
     );
   };
