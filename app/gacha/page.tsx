@@ -20,7 +20,6 @@ export default function GachaPage() {
   const [spinning, setSpinning] = useState(false);
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
-  const [position, setPosition] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -44,7 +43,7 @@ export default function GachaPage() {
 
     const snap = await getDoc(doc(db, "gachaCodes", code.trim()));
 
-    if (!snap.exists()) {
+    if (!snap.exists) {
       setError("ガチャが存在しません");
       setLoading(false);
       return;
@@ -84,12 +83,6 @@ export default function GachaPage() {
 
   // 1リール（縦3段）
   const Reel = ({ frames }: any) => {
-    const visible = [
-      frames[(position - 1 + frames.length) % frames.length],
-      frames[position],
-      frames[(position + 1) % frames.length],
-    ];
-
     return (
       <div
         style={{
@@ -102,13 +95,13 @@ export default function GachaPage() {
           position: "relative",
         }}
       >
-        {/* 回転アニメーション */}
+        {/* 回転中は frames を縦にスクロール */}
         <div
           style={{
             animation: spinning ? "spin 0.15s linear infinite" : "none",
           }}
         >
-          {visible.map((f, i) => (
+          {frames.map((f: any, i: number) => (
             <div
               key={i}
               style={{
@@ -116,15 +109,8 @@ export default function GachaPage() {
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                background:
-                  stop && i === 1 && f.label === finalFrame
-                    ? "#d1fae5"
-                    : "#ffffff",
+                background: "#ffffff",
                 borderBottom: "1px solid #e5e7eb",
-                fontWeight:
-                  stop && i === 1 && f.label === finalFrame
-                    ? "bold"
-                    : "normal",
                 fontSize: 24,
               }}
             >
@@ -132,6 +118,28 @@ export default function GachaPage() {
             </div>
           ))}
         </div>
+
+        {/* 停止後：中央段だけ当選枠に差し替える */}
+        {stop && (
+          <div
+            style={{
+              position: "absolute",
+              top: 60,
+              left: 0,
+              width: "100%",
+              height: 60,
+              background: "#d1fae5",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              fontWeight: "bold",
+              fontSize: 24,
+              borderBottom: "1px solid #e5e7eb",
+            }}
+          >
+            {finalFrame}
+          </div>
+        )}
 
         {/* CSS アニメーション */}
         <style>{`
