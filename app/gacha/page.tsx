@@ -6,7 +6,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions, db } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-export default function GachaPage() {
+export default function GachaInner() {
   const router = useRouter();
 
   const [code, setCode] = useState("");
@@ -21,6 +21,7 @@ export default function GachaPage() {
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
+  // URL から code を取得（useSearchParams を使わない）
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -43,7 +44,7 @@ export default function GachaPage() {
 
     const snap = await getDoc(doc(db, "gachaCodes", code.trim()));
 
-    if (!snap.exists) {
+    if (!snap.exists()) {
       setError("ガチャが存在しません");
       setLoading(false);
       return;
