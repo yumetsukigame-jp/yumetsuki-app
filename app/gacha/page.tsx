@@ -9,7 +9,6 @@ import { doc, getDoc } from "firebase/firestore";
 export default function GachaPage() {
   const router = useRouter();
 
-  // URL の ?code=XXXX を取得
   const [code, setCode] = useState("");
 
   useEffect(() => {
@@ -27,14 +26,8 @@ export default function GachaPage() {
   const [result, setResult] = useState<any>(null);
 
   // スロット演出用
-  const [spinLeft, setSpinLeft] = useState(false);
-  const [spinCenter, setSpinCenter] = useState(false);
-  const [spinRight, setSpinRight] = useState(false);
-
-  const [stopLeft, setStopLeft] = useState(false);
-  const [stopCenter, setStopCenter] = useState(false);
-  const [stopRight, setStopRight] = useState(false);
-
+  const [spinning, setSpinning] = useState(false);
+  const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
   const checkCode = async () => {
@@ -64,6 +57,7 @@ export default function GachaPage() {
   const play = async () => {
     setError("");
     setResult(null);
+    setStop(false);
 
     try {
       const fn = httpsCallable(functions, "useGachaCode");
@@ -72,40 +66,24 @@ export default function GachaPage() {
       const frame = res.data.frame;
       setFinalFrame(frame);
 
-      // 3 リール回転開始
-      setSpinLeft(true);
-      setSpinCenter(true);
-      setSpinRight(true);
+      // 回転開始
+      setSpinning(true);
 
-      // 左リール停止（ランダム）
+      // 2秒後に停止
       setTimeout(() => {
-        setSpinLeft(false);
-        setStopLeft(true);
-      }, 1500);
-
-      // 中央リール停止（当選枠）
-      setTimeout(() => {
-        setSpinCenter(false);
-        setStopCenter(true);
+        setSpinning(false);
+        setStop(true);
+        setResult(res.data);
       }, 2000);
 
-      // 右リール停止（ランダム）
-      setTimeout(() => {
-        setSpinRight(false);
-        setStopRight(true);
-        setResult(res.data);
-      }, 2500);
-
     } catch (e: any) {
-      setSpinLeft(false);
-      setSpinCenter(false);
-      setSpinRight(false);
+      setSpinning(false);
       setError(e.message);
     }
   };
 
-  // リールコンポーネント（上下だけ回転）
-  const Reel = ({ spinning, stop, frames, isCenter }: any) => {
+  // 1リール（縦3段）
+  const Reel = ({ frames }: any) => {
     const displayList = spinning
       ? [...frames, ...frames, ...frames]
       : frames;
@@ -113,95 +91,49 @@ export default function GachaPage() {
     return (
       <div
         style={{
-          flex: 1,
+          width: "100%",
+          height: 180,
           overflow: "hidden",
           borderRadius: 12,
           border: "3px solid #4f46e5",
           background: "#f8fafc",
           position: "relative",
-          height: 180,
         }}
       >
-        {/* 上フェード */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: 50,
-            background:
-              "linear-gradient(to bottom, rgba(248,250,252,1), rgba(248,250,252,0))",
-            zIndex: 10,
-          }}
-        />
-
-        {/* 下フェード */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: "100%",
-            height: 50,
-            background:
-              "linear-gradient(to top, rgba(248,250,252,1), rgba(248,250,252,0))",
-            zIndex: 10,
-          }}
-        />
-
-        {/* 中央帯（固定） */}
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: 0,
-            width: "100%",
-            height: 40,
-            background: "#fde047",
-            transform: "translateY(-50%)",
-            zIndex: 20,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            fontWeight: "bold",
-            fontSize: 18,
-            borderTop: "2px solid #facc15",
-            borderBottom: "2px solid #facc15",
-          }}
-        >
-          当選内容！
-        </div>
-
-        {/* リール内容（上下だけ回転） */}
+        {/* リール内容 */}
         <div
           style={{
             animation: spinning ? "spin 0.15s linear infinite" : "none",
             fontSize: 24,
-            padding: 10,
           }}
         >
           {displayList.map((f: any, idx: number) => (
             <div
               key={idx}
               style={{
-                padding: "12px 0",
-                textAlign: "center",
+                height: 60,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
                 background:
-                  stop && isCenter && f.label === finalFrame
-                    ? "#d1fae5"
-                    : "#ffffff",
+                  stop && f.label === finalFrame ? "#d1fae5" : "#ffffff",
                 borderBottom: "1px solid #e5e7eb",
                 fontWeight:
-                  stop && isCenter && f.label === finalFrame
-                    ? "bold"
-                    : "normal",
+                  stop && f.label === finalFrame ? "bold" : "normal",
               }}
             >
               {f.label}
             </div>
           ))}
         </div>
+
+        {/* CSS アニメーション */}
+        <style>{`
+          @keyframes spin {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-60px); }
+          }
+        `}</style>
       </div>
     );
   };
@@ -286,43 +218,10 @@ export default function GachaPage() {
             ガチャを引く（演出あり）
           </button>
 
-          {/* 🎰 3リールスロット */}
-          <div
-            style={{
-              marginTop: 30,
-              height: 180,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 8,
-            }}
-          >
-            <Reel
-              spinning={spinLeft}
-              stop={stopLeft}
-              frames={gacha.frames}
-              isCenter={false}
-            />
-            <Reel
-              spinning={spinCenter}
-              stop={stopCenter}
-              frames={gacha.frames}
-              isCenter={true}
-            />
-            <Reel
-              spinning={spinRight}
-              stop={stopRight}
-              frames={gacha.frames}
-              isCenter={false}
-            />
+          {/* 🎰 1リール × 縦3段スロット */}
+          <div style={{ marginTop: 30 }}>
+            <Reel frames={gacha.frames} />
           </div>
-
-          {/* CSS アニメーション */}
-          <style>{`
-            @keyframes spin {
-              0% { transform: translateY(0); }
-              100% { transform: translateY(-60px); }
-            }
-          `}</style>
 
           {/* 結果 */}
           {result && (
