@@ -65,30 +65,31 @@ export default function GachaPage() {
     let idx = 0;
 
     const loop = () => {
+      // ★ 前のタイマーを必ずクリア（止まらない原因の解消）
+      if (spinTimer.current) clearTimeout(spinTimer.current);
+
       idx = (idx + 1) % frames.length;
       setPosition(idx);
 
       // フェーズごとの速度調整
       if (phase === "accel") {
         speed -= 12;
-        if (speed <= 40) {
-          phase = "steady";
-        }
+        if (speed <= 40) phase = "steady";
       } else if (phase === "steady") {
         // 一定時間後に減速へ
-        if (idx === 10) {
-          phase = "decel";
-        }
+        if (idx === 10) phase = "decel";
       } else if (phase === "decel") {
         speed += 18;
 
-        // 停止条件：中央段が当選枠になったら止める
+        // ★ 停止条件：中央段が当選枠になったら止める
         if (speed >= 160 && frames[idx].label === finalLabel) {
+          clearTimeout(spinTimer.current);
           onStop();
           return;
         }
       }
 
+      // ★ 次のループをセット
       spinTimer.current = setTimeout(loop, speed);
     };
 
