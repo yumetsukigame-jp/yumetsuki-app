@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db, functions } from "@/firebase"; // ★ functions を追加
+import { auth, db, functions } from "@/firebase";
 import {
   doc,
   getDoc,
@@ -44,7 +44,6 @@ export default function AdminTopPage() {
       snap.forEach((d) => {
         const data = d.data();
 
-        // executedAt が Timestamp でない可能性に対応
         const ts =
           data.executedAt?.toDate?.() instanceof Date
             ? data.executedAt.toDate()
@@ -158,25 +157,33 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
-          以下は既存メニュー
+          ユーザー管理カテゴリ
       ============================ */}
-
       <Section title="👤 ユーザー管理">
         <MenuLink href="/admin/users">ユーザー管理</MenuLink>
         <MenuLink href="/admin/history">ポイント履歴</MenuLink>
       </Section>
 
+      {/* ============================
+          コード管理カテゴリ
+      ============================ */}
       <Section title="🔑 コード管理">
         <MenuLink href="/admin/codes">コード一覧</MenuLink>
         <MenuLink href="/admin/create-code">新しいコードを発行</MenuLink>
       </Section>
 
+      {/* ============================
+          ガチャ管理カテゴリ
+      ============================ */}
       <Section title="🎰 ガチャ管理">
         <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
         <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
         <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
       </Section>
 
+      {/* ============================
+          発送管理カテゴリ
+      ============================ */}
       <Section title="📦 発送管理">
         <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
         <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
@@ -185,12 +192,18 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
+      {/* ============================
+          ニブイチ管理カテゴリ
+      ============================ */}
       <Section title="🎯 ニブイチ管理">
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
         <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
         <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
+      {/* ============================
+          戻る
+      ============================ */}
       <div
         style={{
           marginTop: "40px",
@@ -216,7 +229,7 @@ function Section({ title, children }) {
       <h2
         style={{
           marginBottom: "12px",
-          borderLeft: "6px solid "#2563eb",
+          borderLeft: "6px solid #2563eb",
           paddingLeft: "10px",
         }}
       >
