@@ -14,6 +14,11 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // ★ ニブイチ関連
+  const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
+  const [todayResult, setTodayResult] = useState<string | null>(null);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -46,6 +51,23 @@ export default function Home() {
         setXAccount(null);
       }
 
+      // ★ 今日のニブイチ予想取得
+      const today = new Date().toISOString().slice(0, 10);
+      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
+      const predSnap = await getDoc(predRef);
+
+      if (predSnap.exists()) {
+        setTodayPrediction(predSnap.data().prediction);
+      }
+
+      // ★ 今日の結果取得
+      const resultRef = doc(db, "nibuichi_global", "today");
+      const resultSnap = await getDoc(resultRef);
+
+      if (resultSnap.exists()) {
+        setTodayResult(resultSnap.data().result);
+      }
+
       setLoading(false);
     });
 
@@ -63,6 +85,18 @@ export default function Home() {
         <a href="/login" style={{ color: "#2563eb" }}>ログインページへ</a>
       </div>
     );
+  }
+
+  // ★ ニブイチ表示文言
+  let nibuichiStatus = "未参加";
+
+  if (todayPrediction && !todayResult) {
+    nibuichiStatus = `${todayPrediction}（確定済み）`;
+  }
+
+  if (todayPrediction && todayResult) {
+    const hit = todayPrediction === todayResult;
+    nibuichiStatus = `${todayPrediction} → 結果：${todayResult}（${hit ? "的中" : "ハズレ"}）`;
   }
 
   return (
@@ -98,6 +132,32 @@ export default function Home() {
           {points === null ? "読み込み中…" : `${points} pt`}
         </span>
       </h1>
+
+      {/* 🟡 今日のニブイチ参加状況 */}
+      <Section title="今日のニブイチ" color="#eab308">
+        <div
+          style={{
+            padding: "12px",
+            background: "#fef9c3",
+            borderRadius: "8px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            textAlign: "center",
+          }}
+        >
+          {nibuichiStatus}
+        </div>
+
+        <MenuButton href="/nibuichi" color="#eab308">
+          今日のニブイチに参加する
+        </MenuButton>
+        <MenuButton href="/nibuichi/ranking" color="#eab308">
+          ランキングを見る
+        </MenuButton>
+        <MenuButton href="/nibuichi/history" color="#eab308">
+          自分の結果履歴を見る
+        </MenuButton>
+      </Section>
 
       {/* 🔵 ポイント関連 */}
       <Section title="ポイント関連" color="#2563eb">

@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-
-// Firebase 初期化済み
 import { auth, functions, db } from "../../../firebase";
-
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -18,14 +15,14 @@ export default function AdminNibuichiPage() {
   const [loading, setLoading] = useState(true);
 
   const [globalStats, setGlobalStats] = useState<any>(null);
-  const [todayResult, setTodayResult] = useState<any>(null);
+  const [todayResult, setTodayResult] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const [rewardPoints, setRewardPoints] = useState<number>(500); // ★ 初期値 500
+  const [rewardPoints, setRewardPoints] = useState<number>(500);
   const [sending, setSending] = useState(false);
 
   // -----------------------------
-  // Firestore admins コレクションで管理者判定
+  // 管理者判定
   // -----------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -65,6 +62,8 @@ export default function AdminNibuichiPage() {
       if (res.data.global?.todayResult) {
         setTodayResult(res.data.global.todayResult);
         setSelected(res.data.global.todayResult);
+      } else {
+        setTodayResult(null);
       }
     } catch (err) {
       console.error(err);
@@ -82,6 +81,7 @@ export default function AdminNibuichiPage() {
     try {
       const fn = httpsCallable(functions, "submitNibuichiResult");
       await fn({ result: selected, rewardPoints });
+
       await fetchStats();
     } catch (err) {
       console.error(err);
@@ -98,7 +98,12 @@ export default function AdminNibuichiPage() {
   }
 
   // -----------------------------
-  // 画像ボタン
+  // 確定済み判定
+  // -----------------------------
+  const isFixed = todayResult != null;
+
+  // -----------------------------
+  // 選択肢
   // -----------------------------
   const options = [
     { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
@@ -127,21 +132,21 @@ export default function AdminNibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
 
-        {/* ★ 選択中の表示 */}
-        {!todayResult && selected && (
+        {/* 選択中の表示 */}
+        {!isFixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
             選択中：{selected}
           </div>
         )}
 
-        {/* ★ 確定済みの表示 */}
-        {todayResult && (
+        {/* 確定済みの表示 */}
+        {isFixed && (
           <div className="text-center text-green-600 font-bold mb-3">
             本日は確定済み：{todayResult}
           </div>
         )}
 
-        {/* ★ 配布ポイント入力欄 */}
+        {/* 配布ポイント */}
         <div className="mt-4">
           <label className="font-bold">今日の配布ポイント：</label>
           <input
@@ -152,14 +157,16 @@ export default function AdminNibuichiPage() {
           />
         </div>
 
+        {/* 選択肢 */}
         <div className="grid grid-cols-2 gap-4 mt-4">
           {options.map((opt) => (
             <button
               key={opt.key}
+              disabled={isFixed}
               onClick={() => setSelected(opt.key)}
               className={`border rounded-lg overflow-hidden shadow ${
                 selected === opt.key ? "ring-4 ring-red-400" : ""
-              }`}
+              } ${isFixed ? "opacity-60 cursor-not-allowed" : ""}`}
             >
               <Image
                 src={opt.img}
@@ -175,7 +182,7 @@ export default function AdminNibuichiPage() {
           ))}
         </div>
 
-        {/* ★ 確定 or 修正ボタン */}
+        {/* 確定 or 修正ボタン */}
         <div className="mt-4 text-center">
           <button
             disabled={!selected || sending}
@@ -186,12 +193,12 @@ export default function AdminNibuichiPage() {
                 : "bg-gray-400 cursor-not-allowed"
             }`}
           >
-            {todayResult ? "結果を修正する" : "この結果で確定する"}
+            {isFixed ? "結果を修正する" : "この結果で確定する"}
           </button>
         </div>
       </div>
 
-      {/* ★ 総合戦績の訂正ページへのリンク */}
+      {/* 総合戦績修正 */}
       <div className="bg-gray-100 p-4 rounded-lg text-center">
         <h3 className="font-bold mb-2">総合戦績の修正</h3>
         <button

@@ -410,7 +410,7 @@ export const submitNibuichiResult = onCall(
   { region: "us-central1" },
   async (request) => {
     const result = request.data.result;
-    const rewardPoints = request.data.rewardPoints ?? 500; // 初期値 500
+    const rewardPoints = request.data.rewardPoints ?? 500;
 
     if (!result) {
       throw new HttpsError("invalid-argument", "result が必要です");
@@ -418,6 +418,21 @@ export const submitNibuichiResult = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
+    // ★ UI が読む保存先（管理画面の todayResult 用）
+    await db
+      .collection("nibuichi_global")
+      .doc("today")
+      .set(
+        {
+          result,
+          rewardPoints,
+          date: today,
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+    // ★ 集計バッチ用（既存処理）
     await db
       .collection("nibuichi_daily")
       .doc(today)
@@ -426,7 +441,7 @@ export const submitNibuichiResult = onCall(
           result,
           rewardPoints,
           createdAt: Timestamp.now(),
-          processed: false, // 集計済みかどうかのフラグ
+          processed: false,
         },
         { merge: true }
       );
@@ -434,6 +449,7 @@ export const submitNibuichiResult = onCall(
     return { message: "今日の結果を保存しました" };
   }
 );
+
 
 /**
  * ③ ユーザー画面用データ取得
