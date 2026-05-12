@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
 
-type Mode = "count" | "prob" | "daily";
+type Mode = "count" | "prob";
+type ResetType = "none" | "daily";
 
 type FrameInput = {
   label: string;
@@ -17,25 +18,25 @@ type FrameInput = {
 export default function GachaCreatePage() {
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<Mode>("count");
+  const [resetType, setResetType] = useState<ResetType>("none");
+
   const [totalCount, setTotalCount] = useState<number | "">("");
   const [frames, setFrames] = useState<FrameInput[]>([
     { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
     { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
   ]);
+
   const [cost, setCost] = useState<number | "">(0);
   const [maxPerUser, setMaxPerUser] = useState<number | "">(1);
   const [expiresAt, setExpiresAt] = useState<string>("");
+
   const [publicFlag, setPublicFlag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
 
-  // ★ サムネ画像
   const [thumbnail, setThumbnail] = useState<string>("");
-
-  // ★ public/gacha の画像一覧
   const [gachaImages, setGachaImages] = useState<string[]>([]);
 
-  // ★ images.json を読み込む
   useEffect(() => {
     fetch("/gacha/images.json")
       .then((res) => res.json())
@@ -116,7 +117,6 @@ export default function GachaCreatePage() {
 
       frames[frames.length - 1].maxCount = lastMax;
     } else {
-      // prob / daily 共通
       const sumProb = frames.reduce(
         (acc, f, idx) =>
           idx === frames.length - 1
@@ -141,7 +141,8 @@ export default function GachaCreatePage() {
 
       const res: any = await fn({
         title,
-        mode: mode === "prob" ? "probability" : mode, // ★ daily はそのまま
+        mode: mode === "prob" ? "probability" : "count",
+        resetType, // ★ 追加
         thumbnail,
         point: {
           cost: typeof cost === "number" ? cost : 0,
@@ -155,8 +156,7 @@ export default function GachaCreatePage() {
               ? f.maxCount
               : null,
           probability:
-            (mode === "prob" || mode === "daily") &&
-            typeof f.probability === "number"
+            mode === "prob" && typeof f.probability === "number"
               ? f.probability / 100
               : null,
           rewardMin: typeof f.rewardMin === "number" ? f.rewardMin : 0,
@@ -169,7 +169,6 @@ export default function GachaCreatePage() {
       setCreatedCode(res.data.code);
       alert(`ガチャを作成しました！ コード：${res.data.code}`);
 
-      // 初期化
       setTitle("");
       setTotalCount("");
       setFrames([
@@ -181,6 +180,7 @@ export default function GachaCreatePage() {
       setExpiresAt("");
       setPublicFlag(false);
       setThumbnail("");
+      setResetType("none");
     } catch (e: any) {
       alert("作成に失敗しました：" + e.message);
     }
@@ -211,89 +211,9 @@ export default function GachaCreatePage() {
           style={inputStyle}
         />
 
-        {/* ★ モード選択（セレクト版） */}
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value as Mode)}
-          style={inputStyle}
-        >
-          <option value="count">枠数方式（count）</option>
-          <option value="prob">確率方式（probability）</option>
-          <option value="daily">デイリー（毎日リセット）</option>
-        </select>
-
-        {/* ★ サムネ画像選択 */}
-        <div>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>サムネ画像</div>
-
-          {/* 画像なし */}
-          <div
-            onClick={() => setThumbnail("")}
-            style={{
-              border: thumbnail === "" ? "3px solid #2563eb" : "1px solid #ccc",
-              padding: 8,
-              borderRadius: 8,
-              cursor: "pointer",
-              marginBottom: 12,
-              textAlign: "center",
-            }}
-          >
-            画像なし
-          </div>
-
-          {/* 画像一覧 */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
-              gap: 12,
-            }}
-          >
-            {gachaImages.map((img) => (
-              <div
-                key={img}
-                onClick={() => setThumbnail(img)}
-                style={{
-                  border:
-                    thumbnail === img ? "3px solid #2563eb" : "1px solid #ccc",
-                  padding: 4,
-                  borderRadius: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <img
-                  src={`/gacha/${img}`}
-                  style={{ width: "100%", borderRadius: 6 }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 公開設定 */}
+        {/* ★ 抽選方式 */}
         <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>公開設定</div>
-          <label style={{ marginRight: 16 }}>
-            <input
-              type="radio"
-              checked={publicFlag === true}
-              onChange={() => setPublicFlag(true)}
-            />{" "}
-            公開（一覧に表示）
-          </label>
-          <label>
-            <input
-              type="radio"
-              checked={publicFlag === false}
-              onChange={() => setPublicFlag(false)}
-            />{" "}
-            限定（コード入力のみ）
-          </label>
-        </div>
-
-        {/* ガチャ方式（ラジオ版） */}
-        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>ガチャ方式</div>
+          <div style={{ fontWeight: "bold", marginBottom: 8 }}>抽選方式</div>
 
           <label style={{ marginRight: 16 }}>
             <input
@@ -305,7 +225,7 @@ export default function GachaCreatePage() {
             枠数方式
           </label>
 
-          <label style={{ marginRight: 16 }}>
+          <label>
             <input
               type="radio"
               value="prob"
@@ -314,16 +234,30 @@ export default function GachaCreatePage() {
             />{" "}
             確率方式
           </label>
+        </div>
 
-          {/* ★ デイリー方式 */}
+        {/* ★ リセット方式 */}
+        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+          <div style={{ fontWeight: "bold", marginBottom: 8 }}>リセット方式</div>
+
+          <label style={{ marginRight: 16 }}>
+            <input
+              type="radio"
+              value="none"
+              checked={resetType === "none"}
+              onChange={() => setResetType("none")}
+            />{" "}
+            通常（リセットなし）
+          </label>
+
           <label>
             <input
               type="radio"
               value="daily"
-              checked={mode === "daily"}
-              onChange={() => setMode("daily")}
+              checked={resetType === "daily"}
+              onChange={() => setResetType("daily")}
             />{" "}
-            デイリー（毎日リセット）
+            デイリー（毎日6時リセット）
           </label>
         </div>
 
@@ -426,7 +360,6 @@ export default function GachaCreatePage() {
                 />
               )}
 
-              {/* 報酬 */}
               <input
                 type="number"
                 placeholder="最小Pt"
@@ -479,7 +412,6 @@ export default function GachaCreatePage() {
           {loading ? "作成中…" : "ガチャを作成する"}
         </button>
 
-        {/* 生成されたコード表示 */}
         {createdCode && (
           <div
             style={{

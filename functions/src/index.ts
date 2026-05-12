@@ -19,14 +19,7 @@ async function commitBatches(batches: FirebaseFirestore.WriteBatch[]) {
    既存：ガチャ機能
 ============================================================ */
 
-function generateCode(length = 8) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+
 
 export const createGachaCode = onCall(
   { region: "us-central1" },
@@ -34,7 +27,8 @@ export const createGachaCode = onCall(
     try {
       const {
         title,
-        mode,
+        mode,          // "count" or "probability"
+        resetType,     // "none" or "daily"
         point,
         totalCount,
         frames,
@@ -43,29 +37,53 @@ export const createGachaCode = onCall(
         thumbnail,
       } = request.data;
 
-      // ★ daily を許可
-      if (!["count", "probability", "daily"].includes(mode)) {
+      // -----------------------------
+      // バリデーション
+      // -----------------------------
+      if (!title) throw new HttpsError("invalid-argument", "title が必要です");
+
+      if (!["count", "probability"].includes(mode)) {
         throw new HttpsError("invalid-argument", "mode が不正です");
       }
 
-      if (!title) throw new HttpsError("invalid-argument", "title が必要です");
-      if (!mode) throw new HttpsError("invalid-argument", "mode が必要です");
-      if (!point) throw new HttpsError("invalid-argument", "point が必要です");
+      if (!["none", "daily"].includes(resetType)) {
+        throw new HttpsError("invalid-argument", "resetType が不正です");
+      }
+
+      if (!point || typeof point.cost !== "number") {
+        throw new HttpsError("invalid-argument", "point.cost が必要です");
+      }
+
+      if (typeof point.maxPerUser !== "number") {
+        throw new HttpsError("invalid-argument", "point.maxPerUser が必要です");
+      }
+
       if (!frames || !Array.isArray(frames)) {
         throw new HttpsError("invalid-argument", "frames が不正です");
       }
 
-      const code = "YG-" + generateCode();
+      if (mode === "count" && (!totalCount || totalCount <= 0)) {
+        throw new HttpsError("invalid-argument", "totalCount が不正です");
+      }
 
+      // -----------------------------
+      // ガチャコード生成
+      // -----------------------------
+      const code = "YG-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      // -----------------------------
+      // Firestore に保存するデータ
+      // -----------------------------
       const gachaData = {
         code,
         title,
-        mode,
+        mode,          // count / probability
+        resetType,     // none / daily
         public: publicFlag ?? false,
         thumbnail: thumbnail ?? "",
         point: {
           cost: point.cost,
-          maxPerUser: point.maxPerUser, // daily でも使用
+          maxPerUser: point.maxPerUser,
         },
         totalCount: mode === "count" ? totalCount : null,
         frames: frames.map((f: any) => ({
@@ -89,6 +107,7 @@ export const createGachaCode = onCall(
     }
   }
 );
+
 
 
 export const getPublicGachaList = onCall(
@@ -130,39 +149,41 @@ export const useGachaCode = onCall(
 
       const gachaRef = db.collection("gachaCodes").doc(code);
       const gachaSnap = await gachaRef.get();
-      if (!gachaSnap.exists)
+      if (!gachaSnap.exists) {
         throw new HttpsError("not-found", "ガチャが存在しません");
+      }
 
       const gacha: any = gachaSnap.data();
 
+      // 期限チェック
       if (gacha.expiresAt && gacha.expiresAt.toDate() < new Date()) {
         throw new HttpsError("failed-precondition", "期限切れのガチャです");
       }
 
+      // ユーザー情報
       const userRef = db.collection("users").doc(uid);
       const userSnap = await userRef.get();
       const user = userSnap.data()!;
+      const currentPoints = Number(user.points ?? 0);
 
       const cost = gacha.point.cost;
       const maxPerUser = gacha.point.maxPerUser;
 
-      const currentPoints = Number(user.points ?? 0);
-
       if (currentPoints < cost) {
-        throw new HttpsError(
-          "failed-precondition",
-          "ポイントが不足しています"
-        );
+        throw new HttpsError("failed-precondition", "ポイントが不足しています");
       }
 
+      // 利用履歴
       const historyRef = db
         .collection("userGachaHistory")
         .doc(`${uid}_${code}`);
       const historySnap = await historyRef.get();
       const history = historySnap.exists ? historySnap.data()! : { count: 0 };
 
-      // ★ daily ガチャの制限
-      if (gacha.mode === "daily") {
+      // -----------------------------
+      // ★ resetType による制限
+      // -----------------------------
+      if (gacha.resetType === "daily") {
         if (history.count >= maxPerUser) {
           throw new HttpsError(
             "failed-precondition",
@@ -171,21 +192,25 @@ export const useGachaCode = onCall(
         }
       }
 
-      // ★ count モードの制限
-      if (gacha.mode === "count") {
+      // 通常（リセットなし）
+      if (gacha.resetType === "none") {
         if (history.count >= maxPerUser) {
           throw new HttpsError(
             "failed-precondition",
-            "これ以上引けません"
+            "上限回数に達しています"
           );
         }
       }
 
-      // ★ 抽選ロジック（daily は probability と同じ）
+      // -----------------------------
+      // ★ 抽選ロジック
+      // mode = count / probability
+      // -----------------------------
       const frames = gacha.frames;
       let selectedFrame: any = null;
 
       if (gacha.mode === "count") {
+        // 残り数を重みとして抽選
         const weights = frames.map(
           (f: any) => Math.max(0, (f.maxCount ?? 0) - (f.usedCount ?? 0))
         );
@@ -207,7 +232,7 @@ export const useGachaCode = onCall(
           r -= weights[i];
         }
       } else {
-        // probability / daily 共通
+        // probability
         const probs = frames.map((f: any) => f.probability ?? 0);
         const totalProb = probs.reduce((a: number, b: number) => a + b, 0);
 
@@ -225,12 +250,16 @@ export const useGachaCode = onCall(
         throw new HttpsError("internal", "抽選に失敗しました");
       }
 
+      // 報酬計算
       const reward =
         Math.floor(
           Math.random() *
             (selectedFrame.rewardMax - selectedFrame.rewardMin + 1)
         ) + selectedFrame.rewardMin;
 
+      // -----------------------------
+      // ★ トランザクション
+      // -----------------------------
       await db.runTransaction(async (tx) => {
         const freshUser = (await tx.get(userRef)).data()!;
         const freshHistorySnap = await tx.get(historyRef);
@@ -252,7 +281,7 @@ export const useGachaCode = onCall(
           points: freshPoints - cost + reward,
         });
 
-        // ★ daily でも count でも共通
+        // 利用回数更新（resetType に関係なく +1）
         tx.set(historyRef, {
           count: freshHistory.count + 1,
         });
@@ -267,6 +296,7 @@ export const useGachaCode = onCall(
           tx.update(gachaRef, { frames: updatedFrames });
         }
 
+        // 結果保存
         const resultRef = db.collection("gachaResults").doc();
         tx.set(resultRef, {
           id: resultRef.id,
@@ -289,6 +319,7 @@ export const useGachaCode = onCall(
     }
   }
 );
+
 
 
 export const getGachaResults = onCall(
@@ -389,25 +420,26 @@ export const resetDailyGacha = onSchedule(
     region: "us-central1",
   },
   async () => {
+    console.log("Running resetDailyGacha...");
+
     const snap = await db.collection("userGachaHistory").get();
 
     const batch = db.batch();
     let count = 0;
 
     for (const d of snap.docs) {
-      const code = d.id.split("_")[1];
+      const code = d.id.split("_")[1]; // uid は不要
 
       const gachaRef = db.collection("gachaCodes").doc(code);
       const gachaSnap = await gachaRef.get();
 
-      // ★ exists() ではなく exists を使う
       if (!gachaSnap.exists) continue;
 
       const gacha = gachaSnap.data();
       if (!gacha) continue;
 
-      // ★ daily のみリセット
-      if (gacha.mode === "daily") {
+      // ★ resetType === "daily" のガチャだけリセット
+      if (gacha.resetType === "daily") {
         batch.update(d.ref, { count: 0 });
         count++;
       }
@@ -415,7 +447,7 @@ export const resetDailyGacha = onSchedule(
 
     await batch.commit();
 
-    console.log(`Daily gacha reset: ${count} entries reset`);
+    console.log(`Daily reset completed: ${count} entries reset`);
   }
 );
 

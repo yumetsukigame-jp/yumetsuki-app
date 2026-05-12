@@ -37,6 +37,7 @@ export default function PublicGachaListPage() {
     const uid = auth.currentUser?.uid ?? null;
     const now = new Date();
 
+    // 公開ガチャ
     let filtered = list.filter((g: any) => {
       if (!g.title || g.title.trim() === "") return false;
 
@@ -46,6 +47,7 @@ export default function PublicGachaListPage() {
       return g.public === true;
     });
 
+    // 限定ガチャ（履歴があるものだけ）
     if (uid) {
       const limited = list.filter((g: any) => !g.public);
 
@@ -68,6 +70,7 @@ export default function PublicGachaListPage() {
 
     filtered = filtered.filter((g) => g.createdAt);
 
+    // ソート
     let sorted = [...filtered];
 
     if (sort === "new") {
@@ -98,7 +101,7 @@ export default function PublicGachaListPage() {
     <div style={{ padding: 24, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 20 }}>🌟 ガチャ一覧</h1>
 
-      {/* ソートボタン */}
+      {/* ソート */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
         <button
           onClick={() => setSort("new")}
@@ -130,10 +133,7 @@ export default function PublicGachaListPage() {
       </div>
 
       {loading && <p>読み込み中…</p>}
-
-      {!loading && gachas.length === 0 && (
-        <p>表示できるガチャがありません。</p>
-      )}
+      {!loading && gachas.length === 0 && <p>表示できるガチャがありません。</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
@@ -166,7 +166,7 @@ export default function PublicGachaListPage() {
                 boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
               }}
             >
-              {/* サムネ画像 */}
+              {/* サムネ */}
               {g.thumbnail && (
                 <div style={{ textAlign: "center", marginBottom: 12 }}>
                   <img
@@ -190,7 +190,7 @@ export default function PublicGachaListPage() {
               </h2>
 
               {/* ★ デイリーバッジ */}
-              {g.mode === "daily" && (
+              {g.resetType === "daily" && (
                 <span
                   style={{
                     display: "inline-block",
@@ -210,20 +210,27 @@ export default function PublicGachaListPage() {
                 種類：{g.public ? "🌐 公開" : "🔒 限定"}
               </p>
 
+              {/* 抽選方式 */}
               <p style={{ margin: "6px 0" }}>
-                方式：
-                {g.mode === "daily"
-                  ? "デイリー（毎日リセット）"
-                  : g.mode === "count"
+                抽選方式：
+                {g.mode === "count"
                   ? "枠数方式"
                   : "確率方式"}
+              </p>
+
+              {/* リセット方式 */}
+              <p style={{ margin: "6px 0" }}>
+                リセット：
+                {g.resetType === "daily"
+                  ? "デイリー（毎日6時）"
+                  : "なし"}
               </p>
 
               <p style={{ margin: "6px 0" }}>
                 1回 {g.point.cost} pt（上限 {g.point.maxPerUser} 回）
               </p>
 
-              {/* ▼ 折りたたみボタン */}
+              {/* ▼ 詳細 */}
               <button
                 onClick={() =>
                   setOpen((prev) => ({ ...prev, [g.code]: !isOpen }))
@@ -242,7 +249,6 @@ export default function PublicGachaListPage() {
                 {isOpen ? "▲ 詳細を閉じる" : "▼ 詳細を見る"}
               </button>
 
-              {/* 折りたたみ内容 */}
               {isOpen && (
                 <div style={{ marginTop: 16 }}>
                   {g.myCount !== undefined && (
@@ -301,10 +307,3 @@ export default function PublicGachaListPage() {
                   </button>
                 </div>
               )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
