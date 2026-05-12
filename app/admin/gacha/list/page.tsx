@@ -131,14 +131,12 @@ export default function GachaListPage() {
             >
               <strong>{f.label}</strong>
 
-              {/* ★ count の場合は枠数 */}
               {c.mode === "count" && (
                 <div>
                   使用数：{f.usedCount} / {f.maxCount ?? "∞"}
                 </div>
               )}
 
-              {/* ★ probability の場合は確率 */}
               {c.mode === "probability" && (
                 <div>確率：{(f.probability * 100).toFixed(1)}%</div>
               )}
