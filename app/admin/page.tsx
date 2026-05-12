@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db, functions } from "@/firebase";
-import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { auth, db, functions } from "@/firebase"; // ★ functions を追加
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+} from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -12,41 +20,54 @@ export default function AdminTopPage() {
   const [loading, setLoading] = useState(true);
 
   const [dailyGachaTime, setDailyGachaTime] = useState<string | null>(null);
-  const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(null);
+  const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(
+    null
+  );
 
   const [running, setRunning] = useState(false);
 
-  // -----------------------------
-  // 最新ログ取得
-  // -----------------------------
+  /* -----------------------------
+     最新ログ取得
+  ----------------------------- */
   const loadLogs = async () => {
-    const q = query(
-      collection(db, "systemLogs"),
-      orderBy("executedAt", "desc"),
-      limit(20)
-    );
-    const snap = await getDocs(q);
+    try {
+      const q = query(
+        collection(db, "systemLogs"),
+        orderBy("executedAt", "desc"),
+        limit(20)
+      );
+      const snap = await getDocs(q);
 
-    let gacha = null;
-    let nibuichi = null;
+      let gacha = null;
+      let nibuichi = null;
 
-    snap.forEach((d) => {
-      const data = d.data();
-      if (!gacha && data.type === "dailyReset") {
-        gacha = data.executedAt?.toDate().toLocaleString();
-      }
-      if (!nibuichi && data.type === "nibuichiDailyReset") {
-        nibuichi = data.executedAt?.toDate().toLocaleString();
-      }
-    });
+      snap.forEach((d) => {
+        const data = d.data();
 
-    setDailyGachaTime(gacha);
-    setDailyNibuichiTime(nibuichi);
+        // executedAt が Timestamp でない可能性に対応
+        const ts =
+          data.executedAt?.toDate?.() instanceof Date
+            ? data.executedAt.toDate()
+            : null;
+
+        if (!gacha && data.type === "dailyReset" && ts) {
+          gacha = ts.toLocaleString();
+        }
+        if (!nibuichi && data.type === "nibuichiDailyReset" && ts) {
+          nibuichi = ts.toLocaleString();
+        }
+      });
+
+      setDailyGachaTime(gacha);
+      setDailyNibuichiTime(nibuichi);
+    } catch (e) {
+      console.error("loadLogs error:", e);
+    }
   };
 
-  // -----------------------------
-  // 手動実行
-  // -----------------------------
+  /* -----------------------------
+     手動実行
+  ----------------------------- */
   const runManual = async (type: "gacha" | "nibuichi") => {
     if (running) return;
     setRunning(true);
@@ -64,15 +85,16 @@ export default function AdminTopPage() {
 
       await loadLogs();
     } catch (e: any) {
+      console.error("manual reset error:", e);
       alert("エラー: " + e.message);
     }
 
     setRunning(false);
   };
 
-  // -----------------------------
-  // 認証チェック
-  // -----------------------------
+  /* -----------------------------
+     認証チェック
+  ----------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -136,33 +158,25 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
-          ユーザー管理カテゴリ
+          以下は既存メニュー
       ============================ */}
+
       <Section title="👤 ユーザー管理">
         <MenuLink href="/admin/users">ユーザー管理</MenuLink>
         <MenuLink href="/admin/history">ポイント履歴</MenuLink>
       </Section>
 
-      {/* ============================
-          コード管理カテゴリ
-      ============================ */}
       <Section title="🔑 コード管理">
         <MenuLink href="/admin/codes">コード一覧</MenuLink>
         <MenuLink href="/admin/create-code">新しいコードを発行</MenuLink>
       </Section>
 
-      {/* ============================
-          ガチャ管理カテゴリ
-      ============================ */}
       <Section title="🎰 ガチャ管理">
         <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
         <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
         <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
       </Section>
 
-      {/* ============================
-          発送管理カテゴリ
-      ============================ */}
       <Section title="📦 発送管理">
         <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
         <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
@@ -171,18 +185,12 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
-      {/* ============================
-          ニブイチ管理カテゴリ
-      ============================ */}
       <Section title="🎯 ニブイチ管理">
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
         <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
         <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
-      {/* ============================
-          戻る
-      ============================ */}
       <div
         style={{
           marginTop: "40px",
@@ -208,7 +216,7 @@ function Section({ title, children }) {
       <h2
         style={{
           marginBottom: "12px",
-          borderLeft: "6px solid #2563eb",
+          borderLeft: "6px solid "#2563eb",
           paddingLeft: "10px",
         }}
       >
