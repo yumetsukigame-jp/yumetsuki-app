@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
 
-type Mode = "count" | "prob";
+type Mode = "count" | "prob" | "daily";
 
 type FrameInput = {
   label: string;
@@ -116,6 +116,7 @@ export default function GachaCreatePage() {
 
       frames[frames.length - 1].maxCount = lastMax;
     } else {
+      // prob / daily 共通
       const sumProb = frames.reduce(
         (acc, f, idx) =>
           idx === frames.length - 1
@@ -140,8 +141,8 @@ export default function GachaCreatePage() {
 
       const res: any = await fn({
         title,
-        mode,
-        thumbnail, // ★ サムネ画像を送信
+        mode: mode === "prob" ? "probability" : mode, // ★ daily はそのまま
+        thumbnail,
         point: {
           cost: typeof cost === "number" ? cost : 0,
           maxPerUser: typeof maxPerUser === "number" ? maxPerUser : 1,
@@ -154,7 +155,8 @@ export default function GachaCreatePage() {
               ? f.maxCount
               : null,
           probability:
-            mode === "prob" && typeof f.probability === "number"
+            (mode === "prob" || mode === "daily") &&
+            typeof f.probability === "number"
               ? f.probability / 100
               : null,
           rewardMin: typeof f.rewardMin === "number" ? f.rewardMin : 0,
@@ -208,6 +210,17 @@ export default function GachaCreatePage() {
           onChange={(e) => setTitle(e.target.value)}
           style={inputStyle}
         />
+
+        {/* ★ モード選択（セレクト版） */}
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as Mode)}
+          style={inputStyle}
+        >
+          <option value="count">枠数方式（count）</option>
+          <option value="prob">確率方式（probability）</option>
+          <option value="daily">デイリー（毎日リセット）</option>
+        </select>
 
         {/* ★ サムネ画像選択 */}
         <div>
@@ -278,9 +291,10 @@ export default function GachaCreatePage() {
           </label>
         </div>
 
-        {/* ガチャ方式 */}
+        {/* ガチャ方式（ラジオ版） */}
         <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
           <div style={{ fontWeight: "bold", marginBottom: 8 }}>ガチャ方式</div>
+
           <label style={{ marginRight: 16 }}>
             <input
               type="radio"
@@ -290,7 +304,8 @@ export default function GachaCreatePage() {
             />{" "}
             枠数方式
           </label>
-          <label>
+
+          <label style={{ marginRight: 16 }}>
             <input
               type="radio"
               value="prob"
@@ -299,9 +314,20 @@ export default function GachaCreatePage() {
             />{" "}
             確率方式
           </label>
+
+          {/* ★ デイリー方式 */}
+          <label>
+            <input
+              type="radio"
+              value="daily"
+              checked={mode === "daily"}
+              onChange={() => setMode("daily")}
+            />{" "}
+            デイリー（毎日リセット）
+          </label>
         </div>
 
-        {/* 総数 */}
+        {/* 総数（count のみ） */}
         {mode === "count" && (
           <input
             type="number"

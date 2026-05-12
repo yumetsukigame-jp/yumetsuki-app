@@ -43,6 +43,11 @@ export const createGachaCode = onCall(
         thumbnail,
       } = request.data;
 
+      // ★ daily を許可
+      if (!["count", "probability", "daily"].includes(mode)) {
+        throw new HttpsError("invalid-argument", "mode が不正です");
+      }
+
       if (!title) throw new HttpsError("invalid-argument", "title が必要です");
       if (!mode) throw new HttpsError("invalid-argument", "mode が必要です");
       if (!point) throw new HttpsError("invalid-argument", "point が必要です");
@@ -60,7 +65,7 @@ export const createGachaCode = onCall(
         thumbnail: thumbnail ?? "",
         point: {
           cost: point.cost,
-          maxPerUser: point.maxPerUser,
+          maxPerUser: point.maxPerUser, // daily でも使用
         },
         totalCount: mode === "count" ? totalCount : null,
         frames: frames.map((f: any) => ({
@@ -84,6 +89,7 @@ export const createGachaCode = onCall(
     }
   }
 );
+
 
 export const getPublicGachaList = onCall(
   { region: "us-central1" },
@@ -155,13 +161,27 @@ export const useGachaCode = onCall(
       const historySnap = await historyRef.get();
       const history = historySnap.exists ? historySnap.data()! : { count: 0 };
 
-      if (history.count >= maxPerUser) {
-        throw new HttpsError(
-          "failed-precondition",
-          "これ以上引けません"
-        );
+      // ★ daily ガチャの制限
+      if (gacha.mode === "daily") {
+        if (history.count >= maxPerUser) {
+          throw new HttpsError(
+            "failed-precondition",
+            "今日の回数上限です"
+          );
+        }
       }
 
+      // ★ count モードの制限
+      if (gacha.mode === "count") {
+        if (history.count >= maxPerUser) {
+          throw new HttpsError(
+            "failed-precondition",
+            "これ以上引けません"
+          );
+        }
+      }
+
+      // ★ 抽選ロジック（daily は probability と同じ）
       const frames = gacha.frames;
       let selectedFrame: any = null;
 
@@ -187,6 +207,7 @@ export const useGachaCode = onCall(
           r -= weights[i];
         }
       } else {
+        // probability / daily 共通
         const probs = frames.map((f: any) => f.probability ?? 0);
         const totalProb = probs.reduce((a: number, b: number) => a + b, 0);
 
@@ -226,21 +247,25 @@ export const useGachaCode = onCall(
           );
         }
 
+        // ポイント更新
         tx.update(userRef, {
           points: freshPoints - cost + reward,
         });
 
+        // ★ daily でも count でも共通
         tx.set(historyRef, {
           count: freshHistory.count + 1,
         });
 
-        const updatedFrames = gacha.frames.map((f: any) =>
-          f.label === selectedFrame.label
-            ? { ...f, usedCount: (f.usedCount ?? 0) + 1 }
-            : f
-        );
-
-        tx.update(gachaRef, { frames: updatedFrames });
+        // count モードのみ usedCount を更新
+        if (gacha.mode === "count") {
+          const updatedFrames = gacha.frames.map((f: any) =>
+            f.label === selectedFrame.label
+              ? { ...f, usedCount: (f.usedCount ?? 0) + 1 }
+              : f
+          );
+          tx.update(gachaRef, { frames: updatedFrames });
+        }
 
         const resultRef = db.collection("gachaResults").doc();
         tx.set(resultRef, {
@@ -264,6 +289,7 @@ export const useGachaCode = onCall(
     }
   }
 );
+
 
 export const getGachaResults = onCall(
   { region: "us-central1" },
@@ -355,6 +381,44 @@ export const cleanExpiredGacha = onSchedule(
     await batch.commit();
   }
 );
+
+export const resetDailyGacha = onSchedule(
+  {
+    schedule: "0 6 * * *", // 毎朝6時
+    timeZone: "Asia/Tokyo",
+    region: "us-central1",
+  },
+  async () => {
+    const snap = await db.collection("userGachaHistory").get();
+
+    const batch = db.batch();
+    let count = 0;
+
+    for (const d of snap.docs) {
+      const code = d.id.split("_")[1];
+
+      const gachaRef = db.collection("gachaCodes").doc(code);
+      const gachaSnap = await gachaRef.get();
+
+      // ★ exists() ではなく exists を使う
+      if (!gachaSnap.exists) continue;
+
+      const gacha = gachaSnap.data();
+      if (!gacha) continue;
+
+      // ★ daily のみリセット
+      if (gacha.mode === "daily") {
+        batch.update(d.ref, { count: 0 });
+        count++;
+      }
+    }
+
+    await batch.commit();
+
+    console.log(`Daily gacha reset: ${count} entries reset`);
+  }
+);
+
 
 /* ============================================================
    新機能：ゆめつき今日のニブイチ

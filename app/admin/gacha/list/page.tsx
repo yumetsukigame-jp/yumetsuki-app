@@ -53,6 +53,54 @@ export default function GachaListPage() {
             コード：<span style={{ fontWeight: "bold" }}>{c.code}</span>
           </h2>
 
+          {/* ★ ガチャタイプバッジ */}
+          <div style={{ marginBottom: 8 }}>
+            {c.mode === "daily" && (
+              <span
+                style={{
+                  background: "#2563eb",
+                  color: "white",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  marginRight: 8,
+                  fontSize: 12,
+                }}
+              >
+                デイリー
+              </span>
+            )}
+
+            {c.mode === "count" && (
+              <span
+                style={{
+                  background: "#16a34a",
+                  color: "white",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  marginRight: 8,
+                  fontSize: 12,
+                }}
+              >
+                枠数方式
+              </span>
+            )}
+
+            {c.mode === "probability" && (
+              <span
+                style={{
+                  background: "#d97706",
+                  color: "white",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  marginRight: 8,
+                  fontSize: 12,
+                }}
+              >
+                確率方式
+              </span>
+            )}
+          </div>
+
           <p>作成日：{c.createdAt?.toDate().toLocaleString()}</p>
           <p>期限：{c.expiresAt?.toDate().toLocaleString()}</p>
 
@@ -67,14 +115,22 @@ export default function GachaListPage() {
                 marginBottom: 6,
               }}
             >
-              <strong>{f.name}</strong>
-              <div>確率：{f.probability}</div>
+              <strong>{f.label}</strong>
+
+              {/* ★ daily / probability の確率表示 */}
+              {c.mode !== "count" && (
+                <div>確率：{(f.probability * 100).toFixed(1)}%</div>
+              )}
+
+              {/* ★ count の枠数表示 */}
+              {c.mode === "count" && (
+                <div>
+                  使用数：{f.usedCount} / {f.maxCount ?? "∞"}
+                </div>
+              )}
+
               <div>
-                使用数：{f.usedCount} /{" "}
-                {f.maxCount === null ? "∞" : f.maxCount}
-              </div>
-              <div>
-                報酬：{f.min} ～ {f.max}
+                報酬：{f.rewardMin} ～ {f.rewardMax}
               </div>
             </div>
           ))}

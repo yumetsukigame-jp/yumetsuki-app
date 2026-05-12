@@ -20,7 +20,7 @@ export default function PublicGachaListPage() {
   const [gachas, setGachas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
-  const [open, setOpen] = useState<{ [key: string]: boolean }>({}); // ★ 折りたたみ管理
+  const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -37,9 +37,6 @@ export default function PublicGachaListPage() {
     const uid = auth.currentUser?.uid ?? null;
     const now = new Date();
 
-    /* --------------------------------------------------
-       公開ガチャを先にフィルタ
-    -------------------------------------------------- */
     let filtered = list.filter((g: any) => {
       if (!g.title || g.title.trim() === "") return false;
 
@@ -49,9 +46,6 @@ export default function PublicGachaListPage() {
       return g.public === true;
     });
 
-    /* --------------------------------------------------
-       限定ガチャは Promise.all で並列チェック
-    -------------------------------------------------- */
     if (uid) {
       const limited = list.filter((g: any) => !g.public);
 
@@ -69,15 +63,11 @@ export default function PublicGachaListPage() {
       });
 
       const results = await Promise.all(checks);
-
       filtered = [...filtered, ...results.filter((x) => x !== null)];
     }
 
     filtered = filtered.filter((g) => g.createdAt);
 
-    /* --------------------------------------------------
-       ソート
-    -------------------------------------------------- */
     let sorted = [...filtered];
 
     if (sort === "new") {
@@ -199,12 +189,34 @@ export default function PublicGachaListPage() {
                 {g.title}
               </h2>
 
+              {/* ★ デイリーバッジ */}
+              {g.mode === "daily" && (
+                <span
+                  style={{
+                    display: "inline-block",
+                    background: "#2563eb",
+                    color: "white",
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    marginBottom: 6,
+                  }}
+                >
+                  デイリー
+                </span>
+              )}
+
               <p style={{ margin: "6px 0" }}>
                 種類：{g.public ? "🌐 公開" : "🔒 限定"}
               </p>
 
               <p style={{ margin: "6px 0" }}>
-                方式：{g.mode === "count" ? "枠数方式" : "確率方式"}
+                方式：
+                {g.mode === "daily"
+                  ? "デイリー（毎日リセット）"
+                  : g.mode === "count"
+                  ? "枠数方式"
+                  : "確率方式"}
               </p>
 
               <p style={{ margin: "6px 0" }}>
@@ -233,14 +245,12 @@ export default function PublicGachaListPage() {
               {/* 折りたたみ内容 */}
               {isOpen && (
                 <div style={{ marginTop: 16 }}>
-                  {/* あなたのプレイ回数 */}
                   {g.myCount !== undefined && (
                     <p style={{ margin: "6px 0", color: "#2563eb" }}>
                       あなたのプレイ回数：{g.myCount} 回
                     </p>
                   )}
 
-                  {/* 残り枠の割合バー */}
                   {g.mode === "count" && (
                     <div style={{ margin: "10px 0" }}>
                       <div
@@ -274,7 +284,6 @@ export default function PublicGachaListPage() {
                       : "なし"}
                   </p>
 
-                  {/* ガチャページへ */}
                   <button
                     onClick={() => router.push(`/gacha/${g.code}`)}
                     style={{
