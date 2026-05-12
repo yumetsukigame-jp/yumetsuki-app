@@ -25,80 +25,58 @@ export const createGachaCode = onCall(
   { region: "us-central1" },
   async (request) => {
     try {
+      const uid = request.auth?.uid;
+      if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+
       const {
         title,
-        mode,          // "count" or "probability"
-        resetType,     // "none" or "daily"
+        mode,
+        resetType,
+        publicFlag,
+        thumbnail,
         point,
         totalCount,
         frames,
         expiresAt,
-        publicFlag,
-        thumbnail,
       } = request.data;
 
-      // -----------------------------
-      // バリデーション
-      // -----------------------------
-      if (!title) throw new HttpsError("invalid-argument", "title が必要です");
-
-      if (!["count", "probability"].includes(mode)) {
-        throw new HttpsError("invalid-argument", "mode が不正です");
+      if (!title || !mode || !resetType || !point || !frames) {
+        throw new HttpsError("invalid-argument", "必要な項目が不足しています");
       }
 
-      if (!["none", "daily"].includes(resetType)) {
-        throw new HttpsError("invalid-argument", "resetType が不正です");
-      }
+      // コード生成
+      const code =
+        "YG-" +
+        Math.random().toString(36).substring(2, 10).toUpperCase();
 
-      if (!point || typeof point.cost !== "number") {
-        throw new HttpsError("invalid-argument", "point.cost が必要です");
-      }
+      const gachaRef = db.collection("gachaCodes").doc(code);
 
-      if (typeof point.maxPerUser !== "number") {
-        throw new HttpsError("invalid-argument", "point.maxPerUser が必要です");
-      }
-
-      if (!frames || !Array.isArray(frames)) {
-        throw new HttpsError("invalid-argument", "frames が不正です");
-      }
-
-      if (mode === "count" && (!totalCount || totalCount <= 0)) {
-        throw new HttpsError("invalid-argument", "totalCount が不正です");
-      }
-
-      // -----------------------------
-      // ガチャコード生成
-      // -----------------------------
-      const code = "YG-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-
-      // -----------------------------
-      // Firestore に保存するデータ
-      // -----------------------------
-      const gachaData = {
+      const gachaData: any = {
         code,
         title,
-        mode,          // count / probability
-        resetType,     // none / daily
-        public: publicFlag ?? false,
+        mode, // "count" or "probability"
+        resetType, // "none" or "daily"
+        public: publicFlag,
         thumbnail: thumbnail ?? "",
         point: {
           cost: point.cost,
           maxPerUser: point.maxPerUser,
         },
-        totalCount: mode === "count" ? totalCount : null,
         frames: frames.map((f: any) => ({
           label: f.label,
           maxCount: f.maxCount ?? null,
           usedCount: 0,
           probability: f.probability ?? null,
-          rewardMin: f.rewardMin ?? 0,
-          rewardMax: f.rewardMax ?? 0,
+          rewardMin: f.rewardMin,
+          rewardMax: f.rewardMax,
         })),
+        totalCount: totalCount ?? null,
         createdAt: Timestamp.now(),
         expiresAt: expiresAt ? Timestamp.fromDate(new Date(expiresAt)) : null,
+        owner: uid,
       };
 
-      await db.collection("gachaCodes").doc(code).set(gachaData);
+      await gachaRef.set(gachaData);
 
       return { code };
     } catch (err: any) {

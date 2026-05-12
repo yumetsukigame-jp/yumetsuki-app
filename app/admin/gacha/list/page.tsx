@@ -9,7 +9,7 @@ import {
   doc,
 } from "firebase/firestore";
 
-export default function GachaListPage() {
+export default function AdminGachaListPage() {
   const [codes, setCodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,9 +35,9 @@ export default function GachaListPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>🎛 ガチャコード管理</h1>
+      <h1>🎛 ガチャ管理一覧</h1>
 
-      {codes.length === 0 && <p>ガチャコードがありません。</p>}
+      {codes.length === 0 && <p>ガチャがありません。</p>}
 
       {codes.map((c) => (
         <div
@@ -47,78 +47,63 @@ export default function GachaListPage() {
             padding: 16,
             borderRadius: 8,
             marginBottom: 16,
+            background: "white",
           }}
         >
+          {/* サムネイル */}
+          {c.thumbnail && (
+            <div style={{ marginBottom: 12 }}>
+              <img
+                src={`/gacha/${c.thumbnail}`}
+                style={{
+                  width: 120,
+                  height: 120,
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                }}
+              />
+            </div>
+          )}
+
+          {/* タイトル */}
           <h2 style={{ marginBottom: 8 }}>
-            コード：<span style={{ fontWeight: "bold" }}>{c.code}</span>
+            {c.title}
           </h2>
 
-          {/* ★ 抽選方式バッジ */}
-          <div style={{ marginBottom: 8 }}>
-            {c.mode === "count" && (
-              <span
-                style={{
-                  background: "#16a34a",
-                  color: "white",
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  marginRight: 8,
-                  fontSize: 12,
-                }}
-              >
-                枠数方式
-              </span>
-            )}
+          {/* コード */}
+          <p style={{ margin: "4px 0" }}>
+            コード：<strong>{c.code}</strong>
+          </p>
 
-            {c.mode === "probability" && (
-              <span
-                style={{
-                  background: "#d97706",
-                  color: "white",
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  marginRight: 8,
-                  fontSize: 12,
-                }}
-              >
-                確率方式
-              </span>
-            )}
+          {/* 公開 / 限定 */}
+          <p style={{ margin: "4px 0" }}>
+            種類：{c.public ? "🌐 公開" : "🔒 限定"}
+          </p>
 
-            {/* ★ リセット方式バッジ */}
-            {c.resetType === "daily" && (
-              <span
-                style={{
-                  background: "#2563eb",
-                  color: "white",
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-              >
-                デイリー
-              </span>
-            )}
+          {/* 抽選方式 */}
+          <p style={{ margin: "4px 0" }}>
+            抽選方式：
+            {c.mode === "count" ? "枠数方式" : "確率方式"}
+          </p>
 
-            {c.resetType === "none" && (
-              <span
-                style={{
-                  background: "#6b7280",
-                  color: "white",
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-              >
-                リセットなし
-              </span>
-            )}
-          </div>
+          {/* リセット方式 */}
+          <p style={{ margin: "4px 0" }}>
+            リセット：
+            {c.resetType === "daily" ? "デイリー（毎日6時）" : "なし"}
+          </p>
 
-          <p>作成日：{c.createdAt?.toDate().toLocaleString()}</p>
-          <p>期限：{c.expiresAt?.toDate().toLocaleString()}</p>
+          {/* 期限 */}
+          <p style={{ margin: "4px 0" }}>
+            期限：
+            {c.expiresAt?.toDate
+              ? c.expiresAt.toDate().toLocaleString()
+              : "なし"}
+          </p>
 
-          <h3>枠情報</h3>
+          {/* 枠情報 */}
+          <h3 style={{ marginTop: 12 }}>枠情報</h3>
+
           {c.frames.map((f: any, i: number) => (
             <div
               key={i}
@@ -147,34 +132,37 @@ export default function GachaListPage() {
             </div>
           ))}
 
-          <button
-            onClick={() => navigator.clipboard.writeText(c.code)}
-            style={{
-              marginRight: 10,
-              padding: "6px 12px",
-              background: "#2563eb",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            コピー
-          </button>
+          {/* ボタン */}
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => navigator.clipboard.writeText(c.code)}
+              style={{
+                marginRight: 10,
+                padding: "6px 12px",
+                background: "#2563eb",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              コードをコピー
+            </button>
 
-          <button
-            onClick={() => deleteCode(c.id)}
-            style={{
-              padding: "6px 12px",
-              background: "#dc2626",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            削除
-          </button>
+            <button
+              onClick={() => deleteCode(c.id)}
+              style={{
+                padding: "6px 12px",
+                background: "#dc2626",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              削除
+            </button>
+          </div>
         </div>
       ))}
     </div>

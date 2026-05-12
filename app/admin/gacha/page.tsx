@@ -31,11 +31,12 @@ export default function GachaCreatePage() {
   const [expiresAt, setExpiresAt] = useState<string>("");
 
   const [publicFlag, setPublicFlag] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [createdCode, setCreatedCode] = useState("");
 
   const [thumbnail, setThumbnail] = useState<string>("");
   const [gachaImages, setGachaImages] = useState<string[]>([]);
+
+  const [loading, setLoading] = useState(false);
+  const [createdCode, setCreatedCode] = useState("");
 
   useEffect(() => {
     fetch("/gacha/images.json")
@@ -90,16 +91,16 @@ export default function GachaCreatePage() {
     }
 
     if (cost === "" || cost < 0) {
-      alert("1回あたりのポイントを入力してください（0以上）");
+      alert("ポイントを入力してください");
       return;
     }
 
     if (maxPerUser === "" || maxPerUser <= 0) {
-      alert("1ユーザーの上限回数を1以上で入力してください");
+      alert("上限回数を入力してください");
       return;
     }
 
-    // ★ 枠の自動計算
+    // ★ 最後の枠を自動計算
     if (mode === "count") {
       const sum = frames.reduce(
         (acc, f, idx) =>
@@ -108,30 +109,26 @@ export default function GachaCreatePage() {
             : acc + (typeof f.maxCount === "number" ? f.maxCount : 0),
         0
       );
-      const lastMax = typeof totalCount === "number" ? totalCount - sum : 0;
-
-      if (lastMax < 0) {
-        alert("総数より他の枠の合計が多くなっています");
+      const last = Number(totalCount) - sum;
+      if (last < 0) {
+        alert("枠数の合計が総数を超えています");
         return;
       }
-
-      frames[frames.length - 1].maxCount = lastMax;
+      frames[frames.length - 1].maxCount = last;
     } else {
-      const sumProb = frames.reduce(
+      const sum = frames.reduce(
         (acc, f, idx) =>
           idx === frames.length - 1
             ? acc
             : acc + (typeof f.probability === "number" ? f.probability : 0),
         0
       );
-      const lastProb = 100 - sumProb;
-
-      if (lastProb < 0) {
+      const last = 100 - sum;
+      if (last < 0) {
         alert("確率の合計が100%を超えています");
         return;
       }
-
-      frames[frames.length - 1].probability = lastProb;
+      frames[frames.length - 1].probability = last;
     }
 
     setLoading(true);
@@ -142,13 +139,14 @@ export default function GachaCreatePage() {
       const res: any = await fn({
         title,
         mode: mode === "prob" ? "probability" : "count",
-        resetType, // ★ 追加
+        resetType,
+        publicFlag,
         thumbnail,
         point: {
-          cost: typeof cost === "number" ? cost : 0,
-          maxPerUser: typeof maxPerUser === "number" ? maxPerUser : 1,
+          cost: Number(cost),
+          maxPerUser: Number(maxPerUser),
         },
-        totalCount: mode === "count" ? totalCount : null,
+        totalCount: mode === "count" ? Number(totalCount) : null,
         frames: frames.map((f) => ({
           label: f.label,
           maxCount:
@@ -159,30 +157,16 @@ export default function GachaCreatePage() {
             mode === "prob" && typeof f.probability === "number"
               ? f.probability / 100
               : null,
-          rewardMin: typeof f.rewardMin === "number" ? f.rewardMin : 0,
-          rewardMax: typeof f.rewardMax === "number" ? f.rewardMax : 0,
+          rewardMin: Number(f.rewardMin),
+          rewardMax: Number(f.rewardMax),
         })),
         expiresAt,
-        publicFlag,
       });
 
       setCreatedCode(res.data.code);
-      alert(`ガチャを作成しました！ コード：${res.data.code}`);
-
-      setTitle("");
-      setTotalCount("");
-      setFrames([
-        { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
-        { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
-      ]);
-      setCost(0);
-      setMaxPerUser(1);
-      setExpiresAt("");
-      setPublicFlag(false);
-      setThumbnail("");
-      setResetType("none");
+      alert(`作成しました！ コード：${res.data.code}`);
     } catch (e: any) {
-      alert("作成に失敗しました：" + e.message);
+      alert("作成に失敗：" + e.message);
     }
 
     setLoading(false);
@@ -211,24 +195,20 @@ export default function GachaCreatePage() {
           style={inputStyle}
         />
 
-        {/* ★ 抽選方式 */}
-        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>抽選方式</div>
-
-          <label style={{ marginRight: 16 }}>
+        {/* 抽選方式 */}
+        <div style={boxStyle}>
+          <div style={labelStyle}>抽選方式</div>
+          <label>
             <input
               type="radio"
-              value="count"
               checked={mode === "count"}
               onChange={() => setMode("count")}
             />{" "}
             枠数方式
           </label>
-
-          <label>
+          <label style={{ marginLeft: 16 }}>
             <input
               type="radio"
-              value="prob"
               checked={mode === "prob"}
               onChange={() => setMode("prob")}
             />{" "}
@@ -236,36 +216,83 @@ export default function GachaCreatePage() {
           </label>
         </div>
 
-        {/* ★ リセット方式 */}
-        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>リセット方式</div>
-
-          <label style={{ marginRight: 16 }}>
-            <input
-              type="radio"
-              value="none"
-              checked={resetType === "none"}
-              onChange={() => setResetType("none")}
-            />{" "}
-            通常（リセットなし）
-          </label>
-
+        {/* リセット方式 */}
+        <div style={boxStyle}>
+          <div style={labelStyle}>リセット方式</div>
           <label>
             <input
               type="radio"
-              value="daily"
+              checked={resetType === "none"}
+              onChange={() => setResetType("none")}
+            />{" "}
+            リセットなし
+          </label>
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="radio"
               checked={resetType === "daily"}
               onChange={() => setResetType("daily")}
             />{" "}
-            デイリー（毎日6時リセット）
+            デイリー（毎日6時）
           </label>
+        </div>
+
+        {/* 公開 / 限定 */}
+        <div style={boxStyle}>
+          <div style={labelStyle}>公開設定</div>
+          <label>
+            <input
+              type="radio"
+              checked={publicFlag === true}
+              onChange={() => setPublicFlag(true)}
+            />{" "}
+            公開
+          </label>
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="radio"
+              checked={publicFlag === false}
+              onChange={() => setPublicFlag(false)}
+            />{" "}
+            限定
+          </label>
+        </div>
+
+        {/* サムネイル */}
+        <div style={boxStyle}>
+          <div style={labelStyle}>サムネイル画像</div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {gachaImages.map((img) => (
+              <img
+                key={img}
+                src={`/gacha/${img}`}
+                onClick={() => setThumbnail(img)}
+                style={{
+                  width: 80,
+                  height: 80,
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  border:
+                    thumbnail === img ? "3px solid #2563eb" : "1px solid #ccc",
+                }}
+              />
+            ))}
+          </div>
+
+          {thumbnail && (
+            <p style={{ marginTop: 8 }}>
+              選択中：<strong>{thumbnail}</strong>
+            </p>
+          )}
         </div>
 
         {/* 総数（count のみ） */}
         {mode === "count" && (
           <input
             type="number"
-            placeholder="総数（例：100）"
+            placeholder="総数"
             value={totalCount}
             onChange={(e) =>
               setTotalCount(e.target.value === "" ? "" : Number(e.target.value))
@@ -275,35 +302,33 @@ export default function GachaCreatePage() {
         )}
 
         {/* ポイント設定 */}
-        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>ポイント設定</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="number"
-              placeholder="消費ポイント"
-              value={cost}
-              onChange={(e) =>
-                setCost(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <input
-              type="number"
-              placeholder="上限回数"
-              value={maxPerUser}
-              onChange={(e) =>
-                setMaxPerUser(
-                  e.target.value === "" ? "" : Number(e.target.value)
-                )
-              }
-              style={{ ...inputStyle, flex: 1 }}
-            />
-          </div>
+        <div style={boxStyle}>
+          <div style={labelStyle}>ポイント設定</div>
+          <input
+            type="number"
+            placeholder="消費ポイント"
+            value={cost}
+            onChange={(e) =>
+              setCost(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            style={inputStyle}
+          />
+          <input
+            type="number"
+            placeholder="上限回数"
+            value={maxPerUser}
+            onChange={(e) =>
+              setMaxPerUser(
+                e.target.value === "" ? "" : Number(e.target.value)
+              )
+            }
+            style={inputStyle}
+          />
         </div>
 
         {/* 期限 */}
         <div>
-          <div style={{ fontWeight: "bold", marginBottom: 4 }}>締切日時</div>
+          <div style={labelStyle}>締切日時</div>
           <input
             type="datetime-local"
             value={expiresAt}
@@ -313,8 +338,8 @@ export default function GachaCreatePage() {
         </div>
 
         {/* 枠設定 */}
-        <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-          <div style={{ fontWeight: "bold", marginBottom: 8 }}>枠設定</div>
+        <div style={boxStyle}>
+          <div style={labelStyle}>枠設定</div>
 
           {frames.map((f, i) => (
             <div
@@ -337,39 +362,34 @@ export default function GachaCreatePage() {
               {mode === "count" ? (
                 <input
                   type="number"
-                  placeholder={
-                    i === frames.length - 1 ? "自動計算" : "上限数"
-                  }
+                  placeholder={i === frames.length - 1 ? "自動" : "上限数"}
                   value={f.maxCount}
                   onChange={(e) => updateFrame(i, "maxCount", e.target.value)}
-                  disabled={i === frames.length - 1}
                   style={{ ...inputStyle, flex: 1 }}
                 />
               ) : (
                 <input
                   type="number"
-                  placeholder={
-                    i === frames.length - 1 ? "自動計算" : "確率（%）"
-                  }
+                  placeholder={i === frames.length - 1 ? "自動" : "確率%"}
                   value={f.probability}
                   onChange={(e) =>
                     updateFrame(i, "probability", e.target.value)
                   }
-                  disabled={i === frames.length - 1}
                   style={{ ...inputStyle, flex: 1 }}
                 />
               )}
 
               <input
                 type="number"
-                placeholder="最小Pt"
+                placeholder="最小"
                 value={f.rewardMin}
                 onChange={(e) => updateFrame(i, "rewardMin", e.target.value)}
                 style={{ ...inputStyle, flex: 1 }}
               />
+
               <input
                 type="number"
-                placeholder="最大Pt"
+                placeholder="最大"
                 value={f.rewardMax}
                 onChange={(e) => updateFrame(i, "rewardMax", e.target.value)}
                 style={{ ...inputStyle, flex: 1 }}
@@ -378,15 +398,13 @@ export default function GachaCreatePage() {
           ))}
 
           <button
-            type="button"
             onClick={addFrame}
             style={{
-              marginTop: 8,
-              padding: "6px 12px",
+              padding: "8px 12px",
+              background: "#2563eb",
+              color: "white",
               borderRadius: 6,
-              border: "1px solid #2563eb",
-              background: "white",
-              color: "#2563eb",
+              border: "none",
               cursor: "pointer",
             }}
           >
@@ -394,37 +412,27 @@ export default function GachaCreatePage() {
           </button>
         </div>
 
+        {/* 作成ボタン */}
         <button
           onClick={handleCreate}
           disabled={loading}
           style={{
-            padding: 12,
-            background: loading ? "#999" : "#4f46e5",
+            padding: "12px",
+            background: "#4f46e5",
             color: "white",
             borderRadius: 8,
             border: "none",
-            fontSize: 18,
-            fontWeight: "bold",
-            cursor: loading ? "not-allowed" : "pointer",
-            marginTop: 8,
+            cursor: "pointer",
+            fontSize: 16,
           }}
         >
           {loading ? "作成中…" : "ガチャを作成する"}
         </button>
 
         {createdCode && (
-          <div
-            style={{
-              marginTop: 24,
-              padding: 16,
-              background: "#f0f9ff",
-              borderRadius: 8,
-              border: "1px solid #38bdf8",
-            }}
-          >
-            <h3>🎉 作成されたガチャコード</h3>
-            <p style={{ fontSize: 20, fontWeight: "bold" }}>{createdCode}</p>
-          </div>
+          <p style={{ marginTop: 12 }}>
+            作成されたコード：<strong>{createdCode}</strong>
+          </p>
         )}
       </div>
     </div>
@@ -432,9 +440,19 @@ export default function GachaCreatePage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: 10,
-  border: "1px solid #ccc",
-  borderRadius: 6,
-  fontSize: 16,
   width: "100%",
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+};
+
+const boxStyle: React.CSSProperties = {
+  border: "1px solid #ddd",
+  padding: 12,
+  borderRadius: 8,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontWeight: "bold",
+  marginBottom: 8,
 };
