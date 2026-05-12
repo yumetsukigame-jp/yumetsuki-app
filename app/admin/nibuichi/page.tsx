@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 // Firebase 初期化済み
 import { auth, functions, db } from "../../../firebase";
@@ -11,6 +12,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function AdminNibuichiPage() {
+  const router = useRouter();
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +21,7 @@ export default function AdminNibuichiPage() {
   const [todayResult, setTodayResult] = useState<any>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
+  const [rewardPoints, setRewardPoints] = useState<number>(500); // ★ 初期値 500
   const [sending, setSending] = useState(false);
 
   // -----------------------------
@@ -69,7 +73,7 @@ export default function AdminNibuichiPage() {
   };
 
   // -----------------------------
-  // 今日の結果を確定
+  // 今日の結果を確定 or 修正
   // -----------------------------
   const submitResult = async () => {
     if (!selected) return;
@@ -77,7 +81,7 @@ export default function AdminNibuichiPage() {
     setSending(true);
     try {
       const fn = httpsCallable(functions, "submitNibuichiResult");
-      await fn({ result: selected });
+      await fn({ result: selected, rewardPoints });
       await fetchStats();
     } catch (err) {
       console.error(err);
@@ -123,21 +127,39 @@ export default function AdminNibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
 
-        {todayResult && (
+        {/* ★ 選択中の表示 */}
+        {!todayResult && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
-            今日の結果は確定済み：{todayResult}
+            選択中：{selected}
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* ★ 確定済みの表示 */}
+        {todayResult && (
+          <div className="text-center text-green-600 font-bold mb-3">
+            本日は確定済み：{todayResult}
+          </div>
+        )}
+
+        {/* ★ 配布ポイント入力欄 */}
+        <div className="mt-4">
+          <label className="font-bold">今日の配布ポイント：</label>
+          <input
+            type="number"
+            value={rewardPoints}
+            onChange={(e) => setRewardPoints(Number(e.target.value))}
+            className="border p-2 rounded w-full mt-1"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-4">
           {options.map((opt) => (
             <button
               key={opt.key}
-              disabled={!!todayResult}
               onClick={() => setSelected(opt.key)}
               className={`border rounded-lg overflow-hidden shadow ${
                 selected === opt.key ? "ring-4 ring-red-400" : ""
-              } ${todayResult ? "opacity-60" : ""}`}
+              }`}
             >
               <Image
                 src={opt.img}
@@ -153,21 +175,31 @@ export default function AdminNibuichiPage() {
           ))}
         </div>
 
-        {!todayResult && (
-          <div className="mt-4 text-center">
-            <button
-              disabled={!selected || sending}
-              onClick={submitResult}
-              className={`px-4 py-2 rounded-lg text-white font-bold ${
-                selected
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              今日の結果を確定する
-            </button>
-          </div>
-        )}
+        {/* ★ 確定 or 修正ボタン */}
+        <div className="mt-4 text-center">
+          <button
+            disabled={!selected || sending}
+            onClick={submitResult}
+            className={`px-4 py-2 rounded-lg text-white font-bold ${
+              selected
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            {todayResult ? "結果を修正する" : "この結果で確定する"}
+          </button>
+        </div>
+      </div>
+
+      {/* ★ 総合戦績の訂正ページへのリンク */}
+      <div className="bg-gray-100 p-4 rounded-lg text-center">
+        <h3 className="font-bold mb-2">総合戦績の修正</h3>
+        <button
+          onClick={() => router.push("/admin/nibuichi/edit-stats")}
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          総合戦績を修正する
+        </button>
       </div>
     </div>
   );

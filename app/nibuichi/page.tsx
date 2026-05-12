@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-// ★ Firebase 初期化済みの auth/functions を使う
+// Firebase 初期化済み
 import { auth, functions } from "../../firebase";
 
 import { httpsCallable } from "firebase/functions";
@@ -17,7 +17,7 @@ export default function NibuichiPage() {
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [sending, setSending] = useState(false);
 
-  // ★ 新しく追加：選択中の予想
+  // ★ 選択中の予想
   const [selected, setSelected] = useState<string | null>(null);
 
   // -----------------------------
@@ -43,11 +43,12 @@ export default function NibuichiPage() {
     try {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({});
+
       setStats(res.data.stats ?? null);
       setTodayPrediction(res.data.todayPrediction ?? null);
       setGlobalStats(res.data.global ?? null);
 
-      // ★ すでに予想済みなら選択状態に反映
+      // すでに予想済みなら選択状態に反映
       if (res.data.todayPrediction?.prediction) {
         setSelected(res.data.todayPrediction.prediction);
       }
@@ -58,7 +59,7 @@ export default function NibuichiPage() {
   };
 
   // -----------------------------
-  // 今日の予想を確定（ボタン押下）
+  // 今日の予想を確定
   // -----------------------------
   const sendPrediction = async () => {
     if (!user) return;
@@ -93,7 +94,7 @@ export default function NibuichiPage() {
   }
 
   // -----------------------------
-  // 画像ボタン
+  // 選択肢
   // -----------------------------
   const options = [
     { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
@@ -147,9 +148,17 @@ export default function NibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の予想</h2>
 
-        {todayPrediction?.fixed && (
+        {/* ★ 選択中の表示 */}
+        {!todayPrediction?.fixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
-            今日の予想は確定済み：{todayPrediction.prediction}
+            選択中：{selected}
+          </div>
+        )}
+
+        {/* ★ 確定済みの表示 */}
+        {todayPrediction?.fixed && (
+          <div className="text-center text-green-600 font-bold mb-3">
+            本日は選択済みです：{todayPrediction.prediction}
           </div>
         )}
 
@@ -189,7 +198,7 @@ export default function NibuichiPage() {
                   : "bg-gray-400 cursor-not-allowed"
               }`}
             >
-              予想を確定する
+              {selected ? "この予想で確定する" : "予想を選択してください"}
             </button>
           </div>
         )}
