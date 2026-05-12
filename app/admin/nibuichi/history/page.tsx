@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "../../../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 
 export default function NibuichiHistoryPage() {
   const [user, setUser] = useState<any>(null);
@@ -14,6 +21,9 @@ export default function NibuichiHistoryPage() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [winners, setWinners] = useState<any[]>([]);
   const [perUserReward, setPerUserReward] = useState<number>(0);
+
+  // uid → user info キャッシュ
+  const [userMap, setUserMap] = useState<Record<string, any>>({});
 
   // -----------------------------
   // 管理者判定
@@ -58,6 +68,7 @@ export default function NibuichiHistoryPage() {
     setPredictions([]);
     setWinners([]);
     setPerUserReward(0);
+    setUserMap({});
 
     // daily
     const dailyRef = doc(db, "nibuichi_daily", date);
@@ -87,6 +98,34 @@ export default function NibuichiHistoryPage() {
     if (wins.length > 0 && dailyData.rewardPoints > 0) {
       setPerUserReward(Math.floor(dailyData.rewardPoints / wins.length));
     }
+
+    // -----------------------------
+    // ★ uid → nickname + Xアカウント を取得
+    // -----------------------------
+    const map: Record<string, any> = {};
+
+    for (const p of preds) {
+      const uid = p.uid;
+      if (!map[uid]) {
+        const userRef = doc(db, "users", uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          map[uid] = {
+            nickname: u.nickname ?? "名無し",
+            xAccount: u.xAccount ?? "",
+          };
+        } else {
+          map[uid] = {
+            nickname: "不明ユーザー",
+            xAccount: "",
+          };
+        }
+      }
+    }
+
+    setUserMap(map);
   };
 
   if (loading) {
@@ -99,8 +138,9 @@ export default function NibuichiHistoryPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">
-
-      <h1 className="text-xl font-bold text-center">ニブイチ 日別履歴 & 予想一覧</h1>
+      <h1 className="text-xl font-bold text-center">
+        ニブイチ 日別履歴 & 予想一覧
+      </h1>
 
       {/* 日付選択 */}
       <div className="bg-white shadow p-4 rounded-lg">
@@ -132,11 +172,15 @@ export default function NibuichiHistoryPage() {
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-2">正解者一覧</h2>
           <ul className="space-y-1">
-            {winners.map((w, i) => (
-              <li key={i} className="border-b py-1">
-                UID：{w.uid}（予想：{w.prediction}）
-              </li>
-            ))}
+            {winners.map((w, i) => {
+              const info = userMap[w.uid] ?? {};
+              return (
+                <li key={i} className="border-b py-1">
+                  {info.nickname}（@{info.xAccount}）  
+                  <span className="text-gray-500"> / 予想：{w.prediction}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -146,11 +190,15 @@ export default function NibuichiHistoryPage() {
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-2">全ユーザー予想一覧</h2>
           <ul className="space-y-1">
-            {predictions.map((p, i) => (
-              <li key={i} className="border-b py-1">
-                UID：{p.uid}（予想：{p.prediction}）
-              </li>
-            ))}
+            {predictions.map((p, i) => {
+              const info = userMap[p.uid] ?? {};
+              return (
+                <li key={i} className="border-b py-1">
+                  {info.nickname}（@{info.xAccount}）  
+                  <span className="text-gray-500"> / 予想：{p.prediction}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
