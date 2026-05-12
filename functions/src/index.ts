@@ -461,24 +461,35 @@ export const getNibuichiUserStats = onCall(
     if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
     const today = new Date().toISOString().slice(0, 10);
+
+    // 今日の予想
     const predRef = db
       .collection("nibuichi_user_predictions")
       .doc(`${uid}_${today}`);
     const predSnap = await predRef.get();
 
+    // 個人戦績
     const statsRef = db.collection("nibuichi_user_stats").doc(uid);
     const statsSnap = await statsRef.get();
 
+    // 総合戦績
     const globalRef = db.collection("nibuichi_global_stats").doc("stats");
     const globalSnap = await globalRef.get();
 
+    // ★ 今日の結果（UI が必要としている）
+    const todayRef = db.collection("nibuichi_global").doc("today");
+    const todaySnap = await todayRef.get();
+    const todayResult = todaySnap.exists ? todaySnap.data() : null;
+
     return {
       todayPrediction: predSnap.exists ? predSnap.data() : null,
+      todayResult, // ★ 追加
       stats: statsSnap.exists ? statsSnap.data() : null,
       global: globalSnap.exists ? globalSnap.data() : null,
     };
   }
 );
+
 
 /**
  * ④ 毎朝6時：前日分の結果を集計・山分け・戦績更新

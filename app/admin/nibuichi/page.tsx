@@ -57,11 +57,13 @@ export default function AdminNibuichiPage() {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({});
 
+      // 総合戦績
       setGlobalStats(res.data.global ?? null);
 
-      if (res.data.global?.todayResult) {
-        setTodayResult(res.data.global.todayResult);
-        setSelected(res.data.global.todayResult);
+      // ★ 今日の結果（Functions は top-level に返す）
+      if (res.data.todayResult) {
+        setTodayResult(res.data.todayResult.result);
+        setSelected(res.data.todayResult.result);
       } else {
         setTodayResult(null);
       }
