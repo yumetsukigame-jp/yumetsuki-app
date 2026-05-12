@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { auth, db, functions } from "@/firebase";
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -10,6 +11,68 @@ export default function AdminTopPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
+  const [dailyGachaTime, setDailyGachaTime] = useState<string | null>(null);
+  const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(null);
+
+  const [running, setRunning] = useState(false);
+
+  // -----------------------------
+  // 最新ログ取得
+  // -----------------------------
+  const loadLogs = async () => {
+    const q = query(
+      collection(db, "systemLogs"),
+      orderBy("executedAt", "desc"),
+      limit(20)
+    );
+    const snap = await getDocs(q);
+
+    let gacha = null;
+    let nibuichi = null;
+
+    snap.forEach((d) => {
+      const data = d.data();
+      if (!gacha && data.type === "dailyReset") {
+        gacha = data.executedAt?.toDate().toLocaleString();
+      }
+      if (!nibuichi && data.type === "nibuichiDailyReset") {
+        nibuichi = data.executedAt?.toDate().toLocaleString();
+      }
+    });
+
+    setDailyGachaTime(gacha);
+    setDailyNibuichiTime(nibuichi);
+  };
+
+  // -----------------------------
+  // 手動実行
+  // -----------------------------
+  const runManual = async (type: "gacha" | "nibuichi") => {
+    if (running) return;
+    setRunning(true);
+
+    try {
+      if (type === "gacha") {
+        const fn = httpsCallable(functions, "manualResetDailyGacha");
+        await fn();
+        alert("ガチャの手動リセットが完了しました");
+      } else {
+        const fn = httpsCallable(functions, "manualResetNibuichiDaily");
+        await fn();
+        alert("ニブイチの手動リセットが完了しました");
+      }
+
+      await loadLogs();
+    } catch (e: any) {
+      alert("エラー: " + e.message);
+    }
+
+    setRunning(false);
+  };
+
+  // -----------------------------
+  // 認証チェック
+  // -----------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -26,6 +89,7 @@ export default function AdminTopPage() {
         return;
       }
 
+      await loadLogs();
       setLoading(false);
     });
 
@@ -43,6 +107,33 @@ export default function AdminTopPage() {
       }}
     >
       <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
+
+      {/* ============================
+          自動更新ステータス
+      ============================ */}
+      <Section title="⏱ 自動更新ステータス">
+        <div style={statusBox}>
+          <p>ガチャ最終更新：{dailyGachaTime ?? "記録なし"}</p>
+          <button
+            onClick={() => runManual("gacha")}
+            disabled={running}
+            style={buttonStyle}
+          >
+            ガチャを手動リセット
+          </button>
+        </div>
+
+        <div style={statusBox}>
+          <p>ニブイチ最終更新：{dailyNibuichiTime ?? "記録なし"}</p>
+          <button
+            onClick={() => runManual("nibuichi")}
+            disabled={running}
+            style={buttonStyle}
+          >
+            ニブイチを手動リセット
+          </button>
+        </div>
+      </Section>
 
       {/* ============================
           ユーザー管理カテゴリ
@@ -81,7 +172,7 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
-          ニブイチ管理カテゴリ（追加）
+          ニブイチ管理カテゴリ
       ============================ */}
       <Section title="🎯 ニブイチ管理">
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
@@ -157,3 +248,23 @@ function MenuLink({ href, children }) {
     </a>
   );
 }
+
+/* ------------------------------
+   スタイル
+------------------------------ */
+const statusBox = {
+  padding: "12px",
+  background: "#f3f4f6",
+  borderRadius: "8px",
+  border: "1px solid #ddd",
+};
+
+const buttonStyle = {
+  marginTop: "8px",
+  padding: "8px 12px",
+  background: "#2563eb",
+  color: "white",
+  borderRadius: "6px",
+  border: "none",
+  cursor: "pointer",
+};
