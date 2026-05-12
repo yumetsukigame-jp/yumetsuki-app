@@ -213,9 +213,7 @@ export default function PublicGachaListPage() {
               {/* 抽選方式 */}
               <p style={{ margin: "6px 0" }}>
                 抽選方式：
-                {g.mode === "count"
-                  ? "枠数方式"
-                  : "確率方式"}
+                {g.mode === "count" ? "枠数方式" : "確率方式"}
               </p>
 
               {/* リセット方式 */}
@@ -307,3 +305,10 @@ export default function PublicGachaListPage() {
                   </button>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
