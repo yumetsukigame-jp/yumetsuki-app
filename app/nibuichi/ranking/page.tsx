@@ -11,23 +11,45 @@ export default function NibuichiRankingPage() {
   const [userMap, setUserMap] = useState<Record<string, any>>({});
 
   /* -----------------------------
-     今週の開始日（月曜）を計算
+     今週の開始日（月曜）
   ----------------------------- */
   const getWeekStartDate = () => {
     const d = new Date();
     const day = d.getDay(); // 0=日曜, 1=月曜
-    const diff = (day === 0 ? -6 : 1 - day); // 月曜基準
+    const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
     return d.toISOString().slice(0, 10);
   };
 
   /* -----------------------------
-     今週の終了日（日曜）を計算
+     今週の終了日（日曜）
   ----------------------------- */
   const getWeekEndDate = () => {
     const start = new Date(getWeekStartDate());
-    start.setDate(start.getDate() + 6); // 月曜 + 6 = 日曜
+    start.setDate(start.getDate() + 6);
     return start.toISOString().slice(0, 10);
+  };
+
+  /* -----------------------------
+     同順位を同じ順位にする関数
+  ----------------------------- */
+  const assignRanks = (list: any[], key: string) => {
+    let lastValue: number | null = null;
+    let lastRank = 0;
+
+    return list.map((item, index) => {
+      const value = item[key];
+
+      if (value === lastValue) {
+        item.rank = lastRank;
+      } else {
+        item.rank = index + 1;
+        lastRank = item.rank;
+        lastValue = value;
+      }
+
+      return item;
+    });
   };
 
   useEffect(() => {
@@ -37,15 +59,12 @@ export default function NibuichiRankingPage() {
   const fetchRanking = async () => {
     setLoading(true);
 
-    // -----------------------------
-    // ユーザー戦績を取得
-    // -----------------------------
     const snap = await getDocs(collection(db, "nibuichi_user_stats"));
     const users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
 
-    // -----------------------------
-    // ユーザー情報（displayName / xAccount）を取得
-    // -----------------------------
+    /* -----------------------------
+       ユーザー情報取得
+    ----------------------------- */
     const map: Record<string, any> = {};
 
     for (const u of users) {
@@ -54,7 +73,6 @@ export default function NibuichiRankingPage() {
 
       if (userSnap.exists()) {
         const data = userSnap.data();
-
         map[u.uid] = {
           nickname: data.displayName ?? "名無し",
           xAccount: data.xAccount ?? "",
@@ -69,10 +87,10 @@ export default function NibuichiRankingPage() {
 
     setUserMap(map);
 
-    // -----------------------------
-    // 累計ランキング
-    // -----------------------------
-    const total = users
+    /* -----------------------------
+       累計ランキング
+    ----------------------------- */
+    let total = users
       .filter((u) => (u.total ?? 0) > 0)
       .map((u) => ({
         uid: u.uid,
@@ -82,10 +100,12 @@ export default function NibuichiRankingPage() {
       }))
       .sort((a, b) => b.rate - a.rate);
 
-    // -----------------------------
-    // 週間ランキング
-    // -----------------------------
-    const weekly = users
+    total = assignRanks(total, "rate");
+
+    /* -----------------------------
+       週間ランキング
+    ----------------------------- */
+    let weekly = users
       .filter((u) => (u.weeklyTotal ?? 0) > 0)
       .map((u) => ({
         uid: u.uid,
@@ -95,6 +115,8 @@ export default function NibuichiRankingPage() {
           u.weeklyTotal > 0 ? u.weeklyHit / u.weeklyTotal : 0,
       }))
       .sort((a, b) => b.weeklyRate - a.weeklyRate);
+
+    weekly = assignRanks(weekly, "weeklyRate");
 
     setTotalRank(total);
     setWeeklyRank(weekly);
@@ -127,12 +149,12 @@ export default function NibuichiRankingPage() {
         )}
 
         <ul className="space-y-2">
-          {totalRank.map((u, i) => {
+          {totalRank.map((u) => {
             const info = userMap[u.uid] ?? {};
             return (
-              <li key={i} className="border-b pb-1">
+              <li key={u.uid} className="border-b pb-1">
                 <div className="font-bold">
-                  {i + 1}位：{info.nickname}（{info.xAccount}）
+                  {u.rank}位：{info.nickname}（{info.xAccount}）
                 </div>
                 <div className="text-sm">
                   参加：{u.total} 回 / 的中：{u.hit} 回
@@ -155,12 +177,12 @@ export default function NibuichiRankingPage() {
         )}
 
         <ul className="space-y-2">
-          {weeklyRank.map((u, i) => {
+          {weeklyRank.map((u) => {
             const info = userMap[u.uid] ?? {};
             return (
-              <li key={i} className="border-b pb-1">
+              <li key={u.uid} className="border-b pb-1">
                 <div className="font-bold">
-                  {i + 1}位：{info.nickname}（{info.xAccount}）
+                  {u.rank}位：{info.nickname}（{info.xAccount}）
                 </div>
                 <div className="text-sm">
                   参加：{u.weeklyTotal} 回 / 的中：{u.weeklyHit} 回

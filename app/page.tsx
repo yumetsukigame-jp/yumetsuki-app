@@ -159,19 +159,6 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🔵 ポイント関連 */}
-      <Section title="ポイント関連" color="#2563eb">
-        <MenuButton href="/code" color="#2563eb">
-          コード入力でポイント獲得
-        </MenuButton>
-        <MenuButton href="/reward" color="#2563eb">
-          発送物を選ぶ
-        </MenuButton>
-        <MenuButton href="/history" color="#2563eb">
-          発送履歴を見る
-        </MenuButton>
-      </Section>
-
       {/* 🟣 ガチャ関連 */}
       <Section title="ガチャ" color="#a855f7">
         <MenuButton href="/gacha/list" color="#a855f7">
@@ -182,6 +169,19 @@ export default function Home() {
         </MenuButton>
         <MenuButton href="/gacha/results" color="#a855f7">
           ガチャ結果を見る
+        </MenuButton>
+      </Section>
+
+      {/* 🔵 ポイント関連 */}
+      <Section title="ポイント関連" color="#2563eb">
+        <MenuButton href="/code" color="#2563eb">
+          コード入力でポイント獲得
+        </MenuButton>
+        <MenuButton href="/reward" color="#2563eb">
+          発送物を選ぶ
+        </MenuButton>
+        <MenuButton href="/history" color="#2563eb">
+          発送履歴を見る
         </MenuButton>
       </Section>
 
