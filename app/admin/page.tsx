@@ -10,6 +10,7 @@ import {
   orderBy,
   limit,
   getDocs,
+  where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
@@ -25,6 +26,9 @@ export default function AdminTopPage() {
   );
 
   const [running, setRunning] = useState(false);
+
+  // ★ 発送待ち件数
+  const [pendingShipping, setPendingShipping] = useState<number>(0);
 
   /* -----------------------------
      最新ログ取得
@@ -61,6 +65,21 @@ export default function AdminTopPage() {
       setDailyNibuichiTime(nibuichi);
     } catch (e) {
       console.error("loadLogs error:", e);
+    }
+  };
+
+  /* -----------------------------
+     発送待ち件数取得
+  ----------------------------- */
+  const loadPendingShipping = async () => {
+    try {
+      const col = collection(db, "selectedRewards");
+      const q = query(col, where("shipped", "==", false));
+      const snap = await getDocs(q);
+
+      setPendingShipping(snap.size);
+    } catch (e) {
+      console.error("loadPendingShipping error:", e);
     }
   };
 
@@ -111,6 +130,8 @@ export default function AdminTopPage() {
       }
 
       await loadLogs();
+      await loadPendingShipping(); // ★ 発送待ち件数を読み込む
+
       setLoading(false);
     });
 
@@ -128,6 +149,21 @@ export default function AdminTopPage() {
       }}
     >
       <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
+
+      {/* ============================
+          発送案内（追加）
+      ============================ */}
+      <Section title="📦 発送状況">
+        {pendingShipping > 0 ? (
+          <div style={statusBox}>
+            発送が必要なアイテムが <b>{pendingShipping}</b> 件あります
+          </div>
+        ) : (
+          <div style={statusBoxGreen}>
+            発送が必要なものはありません
+          </div>
+        )}
+      </Section>
 
       {/* ============================
           自動更新ステータス
@@ -165,6 +201,15 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
+          ニブイチ管理カテゴリ
+      ============================ */}
+      <Section title="🎯 ニブイチ管理">
+        <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
+        <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
+        <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
+      </Section>
+
+      {/* ============================
           コード管理カテゴリ
       ============================ */}
       <Section title="🔑 コード管理">
@@ -190,15 +235,6 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping">発送管理（発送物確認）</MenuLink>
         <MenuLink href="/admin/shipping/history">発送履歴</MenuLink>
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
-      </Section>
-
-      {/* ============================
-          ニブイチ管理カテゴリ
-      ============================ */}
-      <Section title="🎯 ニブイチ管理">
-        <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
-        <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
-        <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
       {/* ============================
@@ -278,6 +314,13 @@ const statusBox = {
   background: "#f3f4f6",
   borderRadius: "8px",
   border: "1px solid #ddd",
+};
+
+const statusBoxGreen = {
+  padding: "12px",
+  background: "#e0f7e9",
+  borderRadius: "8px",
+  border: "1px solid #8cd39b",
 };
 
 const buttonStyle = {
