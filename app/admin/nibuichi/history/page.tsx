@@ -1,29 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "../../../../firebase";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { auth, functions, db } from "../../../firebase";
+import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
-export default function NibuichiHistoryPage() {
+export default function AdminNibuichiPage() {
+  const router = useRouter();
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [daily, setDaily] = useState<any>(null);
-  const [predictions, setPredictions] = useState<any[]>([]);
-  const [winners, setWinners] = useState<any[]>([]);
-  const [perUserReward, setPerUserReward] = useState<number>(0);
+  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [todayResult, setTodayResult] = useState<string | null>(null);
 
-  const [userMap, setUserMap] = useState<Record<string, any>>({});
+  const [selected, setSelected] = useState<string | null>(null);
+  const [rewardPoints, setRewardPoints] = useState<number>(500);
+  const [sending, setSending] = useState(false);
 
+  const [editMode, setEditMode] = useState(false); // ★ 修正モード
+
+  // -----------------------------
+  // 管理者判定
+  // -----------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -42,75 +44,62 @@ export default function NibuichiHistoryPage() {
       }
 
       setUser(u);
-      setLoading(false);
+      fetchStats();
     });
 
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    if (!selectedDate) return;
-    fetchDailyData(selectedDate);
-  }, [selectedDate]);
+  // -----------------------------
+  // 戦績 & 今日の結果取得（Firestore直接）
+  // -----------------------------
+  const fetchStats = async () => {
+    setLoading(true);
 
-  const fetchDailyData = async (date: string) => {
-    setDaily(null);
-    setPredictions([]);
-    setWinners([]);
-    setPerUserReward(0);
-    setUserMap({});
+    try {
+      // 総合戦績は Functions から取得
+      const fn = httpsCallable(functions, "getNibuichiUserStats");
+      const res: any = await fn({});
+      setGlobalStats(res.data.global ?? null);
 
-    const normalizedDate = date;
+      // ★ 今日の結果は Firestore から直接取得
+      const today = new Date().toISOString().slice(0, 10);
+      const todayRef = doc(db, "nibuichi_global", today);
+      const todaySnap = await getDoc(todayRef);
 
-    const dailyRef = doc(db, "nibuichi_global", normalizedDate);
-    const dailySnap = await getDoc(dailyRef);
-
-    if (!dailySnap.exists()) {
-      setDaily(null);
-      return;
-    }
-
-    const dailyData = dailySnap.data();
-    setDaily(dailyData);
-
-    const predRef = collection(db, "nibuichi_user_predictions");
-    const q = query(predRef, where("date", "==", normalizedDate));
-    const predSnap = await getDocs(q);
-
-    const preds = predSnap.docs.map((d) => d.data());
-    setPredictions(preds);
-
-    const wins = preds.filter((p) => p.prediction === dailyData.result);
-    setWinners(wins);
-
-    if (wins.length > 0 && dailyData.rewardPoints > 0) {
-      setPerUserReward(Math.floor(dailyData.rewardPoints / wins.length));
-    }
-
-    const map: Record<string, any> = {};
-
-    for (const p of preds) {
-      const uid = p.uid;
-      if (!map[uid]) {
-        const userRef = doc(db, "users", uid);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const u = userSnap.data();
-          map[uid] = {
-            nickname: u.displayName ?? "名無し",
-            xAccount: u.xAccount ?? "",
-          };
-        } else {
-          map[uid] = {
-            nickname: "不明ユーザー",
-            xAccount: "",
-          };
-        }
+      if (todaySnap.exists()) {
+        const data = todaySnap.data();
+        setTodayResult(data.result);
+        setSelected(data.result);
+      } else {
+        setTodayResult(null);
+        setSelected(null);
       }
+
+      setEditMode(false); // 修正モード解除
+    } catch (err) {
+      console.error(err);
     }
 
-    setUserMap(map);
+    setLoading(false);
+  };
+
+  // -----------------------------
+  // 今日の結果を確定 or 修正
+  // -----------------------------
+  const submitResult = async () => {
+    if (!selected) return;
+
+    setSending(true);
+    try {
+      const fn = httpsCallable(functions, "submitNibuichiResult");
+      await fn({ result: selected, rewardPoints });
+
+      await fetchStats(); // 最新状態を再取得
+    } catch (err) {
+      console.error(err);
+    }
+    setSending(false);
   };
 
   if (loading) {
@@ -121,74 +110,146 @@ export default function NibuichiHistoryPage() {
     return <div className="p-6 text-center">管理者のみアクセスできます</div>;
   }
 
-  return (
-    <div className="max-w-2xl mx-auto p-4 space-y-6">
-      <h1 className="text-xl font-bold text-center">
-        ニブイチ 日別履歴 & 投票状況
-      </h1>
+  const isFixed = todayResult != null;
 
+  const options = [
+    { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
+    { key: "nibuni", label: "ニブニ", img: "/nibuichi/nibuni.webp" },
+    { key: "nibuichi", label: "ニブイチ", img: "/nibuichi/nibuichi.webp" },
+    { key: "nibuzero", label: "ニブゼロ", img: "/nibuichi/nibuzero.webp" },
+  ];
+
+  return (
+    <div className="max-w-md mx-auto p-4 space-y-6">
+
+      <h1 className="text-xl font-bold text-center">ニブイチ管理画面</h1>
+
+      {/* ゆめつき戦績 */}
       <div className="bg-white shadow p-4 rounded-lg">
-        <label className="font-bold">日付を選択：</label>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="border p-2 rounded w-full mt-1"
-        />
+        <h2 className="text-lg font-bold mb-2">ゆめつきの戦績</h2>
+        <div className="space-y-1 text-sm">
+          <div>勝（ニブニ）：{globalStats?.win ?? 0}</div>
+          <div>分（ニブイチ）：{globalStats?.draw ?? 0}</div>
+          <div>敗（ニブゼロ）：{globalStats?.lose ?? 0}</div>
+          <div>爆アド：{globalStats?.bakuado ?? 0}</div>
+        </div>
       </div>
 
-      {daily && (
-        <div className="bg-white shadow p-4 rounded-lg space-y-2">
-          <h2 className="text-lg font-bold">日別データ</h2>
+      {/* 今日の結果 */}
+      <div className="bg-white shadow p-4 rounded-lg">
+        <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
 
-          <div>結果：{daily.result ?? "未確定"}</div>
-          <div>配布ポイント：{daily.rewardPoints}</div>
-          <div>集計済み：{daily.processed ? "はい" : "いいえ"}</div>
+        {/* 状態表示 */}
+        {!isFixed && selected && (
+          <div className="text-center text-blue-600 font-bold mb-3">
+            選択中：{selected}
+          </div>
+        )}
 
-          <div>正解者数：{winners.length}</div>
-          <div>1人あたりの山分けポイント：{perUserReward}</div>
+        {isFixed && !editMode && (
+          <div className="text-center text-green-600 font-bold mb-3">
+            本日は確定済み：{todayResult}
+          </div>
+        )}
+
+        {editMode && (
+          <div className="text-center text-orange-600 font-bold mb-3">
+            修正モード：{selected}
+          </div>
+        )}
+
+        {/* 配布ポイント */}
+        <div className="mt-4">
+          <label className="font-bold">今日の配布ポイント：</label>
+          <input
+            type="number"
+            value={rewardPoints}
+            onChange={(e) => setRewardPoints(Number(e.target.value))}
+            className="border p-2 rounded w-full mt-1"
+            disabled={isFixed && !editMode}
+          />
         </div>
-      )}
 
-      {winners.length > 0 && (
-        <div className="bg-white shadow p-4 rounded-lg">
-          <h2 className="text-lg font-bold mb-2">正解者一覧</h2>
-          <ul className="space-y-1">
-            {winners.map((w, i) => {
-              const info = userMap[w.uid] ?? {};
-              return (
-                <li key={i} className="border-b py-1">
-                  {info.nickname}（{info.xAccount}）
-                  <span className="text-gray-500"> / 予想：{w.prediction}</span>
-                </li>
-              );
-            })}
-          </ul>
+        {/* 選択肢 */}
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          {options.map((opt) => (
+            <button
+              key={opt.key}
+              disabled={isFixed && !editMode}
+              onClick={() => setSelected(opt.key)}
+              className={`border rounded-lg overflow-hidden shadow ${
+                selected === opt.key ? "ring-4 ring-red-400" : ""
+              } ${(isFixed && !editMode) ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <Image
+                src={opt.img}
+                alt={opt.label}
+                width={300}
+                height={300}
+                className="w-full"
+              />
+              <div className="text-center py-1 text-sm font-bold">
+                {opt.label}
+              </div>
+            </button>
+          ))}
         </div>
-      )}
 
-      {predictions.length > 0 && (
-        <div className="bg-white shadow p-4 rounded-lg">
-          <h2 className="text-lg font-bold mb-2">全ユーザーの投票状況</h2>
-          <ul className="space-y-1">
-            {predictions.map((p, i) => {
-              const info = userMap[p.uid] ?? {};
-              return (
-                <li key={i} className="border-b py-1">
-                  {info.nickname}（{info.xAccount}）
-                  <span className="text-gray-500"> / 予想：{p.prediction}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+        {/* ボタン */}
+        <div className="mt-4 text-center">
 
-      {selectedDate && !daily && (
-        <div className="text-center text-gray-500">
-          この日のデータはありません
+          {/* 修正モードでない & 確定済み → 修正ボタン */}
+          {isFixed && !editMode && (
+            <button
+              onClick={() => setEditMode(true)}
+              className="px-4 py-2 rounded-lg text-white font-bold bg-blue-600 hover:bg-blue-700"
+            >
+              結果を修正する
+            </button>
+          )}
+
+          {/* 修正モード中 → 修正を確定する */}
+          {editMode && (
+            <button
+              disabled={!selected || sending}
+              onClick={submitResult}
+              className={`px-4 py-2 rounded-lg text-white font-bold ${
+                !selected
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-orange-600 hover:bg-orange-700"
+              }`}
+            >
+              修正を確定する
+            </button>
+          )}
+
+          {/* 未確定 → 通常の確定ボタン */}
+          {!isFixed && (
+            <button
+              disabled={!selected || sending}
+              onClick={submitResult}
+              className={`px-4 py-2 rounded-lg text-white font-bold ${
+                !selected
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              この結果で確定する
+            </button>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* 総合戦績修正 */}
+      <div className="bg-gray-100 p-4 rounded-lg text-center">
+        <h3 className="font-bold mb-2">総合戦績の修正</h3>
+        <button
+          onClick={() => router.push("/admin/nibuichi/edit-stats")}
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          総合戦績を修正する
+        </button>
+      </div>
     </div>
   );
 }
