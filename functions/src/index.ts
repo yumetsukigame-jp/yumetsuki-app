@@ -7,19 +7,8 @@ initializeApp();
 const db = getFirestore();
 
 /* ============================================================
-   共通：バッチ分割処理（500件制限対策）
-============================================================ */
-async function commitBatches(batches: FirebaseFirestore.WriteBatch[]) {
-  for (const batch of batches) {
-    await batch.commit();
-  }
-}
-
-/* ============================================================
    既存：ガチャ機能
 ============================================================ */
-
-
 
 export const createGachaCode = onCall(
   { region: "us-central1" },
@@ -44,18 +33,16 @@ export const createGachaCode = onCall(
         throw new HttpsError("invalid-argument", "必要な項目が不足しています");
       }
 
-      // コード生成
       const code =
-        "YG-" +
-        Math.random().toString(36).substring(2, 10).toUpperCase();
+        "YG-" + Math.random().toString(36).substring(2, 10).toUpperCase();
 
       const gachaRef = db.collection("gachaCodes").doc(code);
 
       const gachaData: any = {
         code,
         title,
-        mode, // "count" or "probability"
-        resetType, // "none" or "daily"
+        mode,
+        resetType,
         public: publicFlag,
         thumbnail: thumbnail ?? "",
         point: {
@@ -85,8 +72,6 @@ export const createGachaCode = onCall(
     }
   }
 );
-
-
 
 export const getPublicGachaList = onCall(
   { region: "us-central1" },
@@ -133,12 +118,10 @@ export const useGachaCode = onCall(
 
       const gacha: any = gachaSnap.data();
 
-      // 期限チェック
       if (gacha.expiresAt && gacha.expiresAt.toDate() < new Date()) {
         throw new HttpsError("failed-precondition", "期限切れのガチャです");
       }
 
-      // ユーザー情報
       const userRef = db.collection("users").doc(uid);
       const userSnap = await userRef.get();
       const user = userSnap.data()!;
@@ -151,54 +134,35 @@ export const useGachaCode = onCall(
         throw new HttpsError("failed-precondition", "ポイントが不足しています");
       }
 
-      // 利用履歴
       const historyRef = db
         .collection("userGachaHistory")
         .doc(`${uid}_${code}`);
       const historySnap = await historyRef.get();
       const history = historySnap.exists ? historySnap.data()! : { count: 0 };
 
-      // -----------------------------
-      // ★ resetType による制限
-      // -----------------------------
       if (gacha.resetType === "daily") {
         if (history.count >= maxPerUser) {
-          throw new HttpsError(
-            "failed-precondition",
-            "今日の回数上限です"
-          );
+          throw new HttpsError("failed-precondition", "今日の回数上限です");
         }
       }
 
-      // 通常（リセットなし）
       if (gacha.resetType === "none") {
         if (history.count >= maxPerUser) {
-          throw new HttpsError(
-            "failed-precondition",
-            "上限回数に達しています"
-          );
+          throw new HttpsError("failed-precondition", "上限回数に達しています");
         }
       }
 
-      // -----------------------------
-      // ★ 抽選ロジック
-      // mode = count / probability
-      // -----------------------------
       const frames = gacha.frames;
       let selectedFrame: any = null;
 
       if (gacha.mode === "count") {
-        // 残り数を重みとして抽選
         const weights = frames.map(
           (f: any) => Math.max(0, (f.maxCount ?? 0) - (f.usedCount ?? 0))
         );
         const total = weights.reduce((a: number, b: number) => a + b, 0);
 
         if (total <= 0) {
-          throw new HttpsError(
-            "failed-precondition",
-            "すべての枠が終了しています"
-          );
+          throw new HttpsError("failed-precondition", "すべての枠が終了しています");
         }
 
         let r = Math.random() * total;
@@ -210,7 +174,6 @@ export const useGachaCode = onCall(
           r -= weights[i];
         }
       } else {
-        // probability
         const probs = frames.map((f: any) => f.probability ?? 0);
         const totalProb = probs.reduce((a: number, b: number) => a + b, 0);
 
@@ -228,16 +191,12 @@ export const useGachaCode = onCall(
         throw new HttpsError("internal", "抽選に失敗しました");
       }
 
-      // 報酬計算
       const reward =
         Math.floor(
           Math.random() *
             (selectedFrame.rewardMax - selectedFrame.rewardMin + 1)
         ) + selectedFrame.rewardMin;
 
-      // -----------------------------
-      // ★ トランザクション
-      // -----------------------------
       await db.runTransaction(async (tx) => {
         const freshUser = (await tx.get(userRef)).data()!;
         const freshHistorySnap = await tx.get(historyRef);
@@ -248,23 +207,17 @@ export const useGachaCode = onCall(
         const freshPoints = Number(freshUser.points ?? 0);
 
         if (freshPoints < cost) {
-          throw new HttpsError(
-            "failed-precondition",
-            "ポイントが不足しています"
-          );
+          throw new HttpsError("failed-precondition", "ポイントが不足しています");
         }
 
-        // ポイント更新
         tx.update(userRef, {
           points: freshPoints - cost + reward,
         });
 
-        // 利用回数更新（resetType に関係なく +1）
         tx.set(historyRef, {
           count: freshHistory.count + 1,
         });
 
-        // count モードのみ usedCount を更新
         if (gacha.mode === "count") {
           const updatedFrames = gacha.frames.map((f: any) =>
             f.label === selectedFrame.label
@@ -274,7 +227,6 @@ export const useGachaCode = onCall(
           tx.update(gachaRef, { frames: updatedFrames });
         }
 
-        // 結果保存
         const resultRef = db.collection("gachaResults").doc();
         tx.set(resultRef, {
           id: resultRef.id,
@@ -297,8 +249,6 @@ export const useGachaCode = onCall(
     }
   }
 );
-
-
 
 export const getGachaResults = onCall(
   { region: "us-central1" },
@@ -344,6 +294,9 @@ export const getGachaResults = onCall(
   }
 );
 
+/* ============================================================
+   手動：ガチャ使用回数リセット（個別）
+============================================================ */
 export const resetGachaUsage = onCall(
   { region: "us-central1" },
   async (request) => {
@@ -372,6 +325,9 @@ export const resetGachaUsage = onCall(
   }
 );
 
+/* ============================================================
+   自動：期限切れガチャ削除
+============================================================ */
 export const cleanExpiredGacha = onSchedule(
   {
     schedule: "0 0 * * *",
@@ -391,143 +347,206 @@ export const cleanExpiredGacha = onSchedule(
   }
 );
 
+/* ============================================================
+   ★ 自動：デイリーガチャ完全リセット（毎朝6時）
+============================================================ */
 export const resetDailyGacha = onSchedule(
   {
-    schedule: "0 6 * * *", // 毎朝6時
+    schedule: "0 21 * * *", // JST 6:00
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
   async () => {
-    console.log("Running resetDailyGacha...");
+    console.log("=== resetDailyGacha START ===");
 
-    const snap = await db.collection("userGachaHistory").get();
+    const now = Timestamp.now();
 
+    const gachaSnap = await db
+      .collection("gachaCodes")
+      .where("resetType", "==", "daily")
+      .get();
+
+    let resetGachaCount = 0;
+    let resetHistoryCount = 0;
+
+    for (const docSnap of gachaSnap.docs) {
+      const data = docSnap.data();
+
+      const newFrames = data.frames.map((f: any) => ({
+        ...f,
+        usedCount: 0,
+      }));
+
+      await docSnap.ref.update({
+        frames: newFrames,
+        lastResetAt: now,
+      });
+
+      resetGachaCount++;
+    }
+
+    const historySnap = await db.collection("userGachaHistory").get();
     const batch = db.batch();
-    let count = 0;
 
-    for (const d of snap.docs) {
-      const code = d.id.split("_")[1]; // uid は不要
+    for (const d of historySnap.docs) {
+      const code = d.id.split("_")[1];
+      const target = gachaSnap.docs.find((g) => g.id === code);
 
-      const gachaRef = db.collection("gachaCodes").doc(code);
-      const gachaSnap = await gachaRef.get();
-
-      if (!gachaSnap.exists) continue;
-
-      const gacha = gachaSnap.data();
-      if (!gacha) continue;
-
-      // ★ resetType === "daily" のガチャだけリセット
-      if (gacha.resetType === "daily") {
+      if (target) {
         batch.update(d.ref, { count: 0 });
-        count++;
+        resetHistoryCount++;
       }
     }
 
     await batch.commit();
 
-    console.log(`Daily reset completed: ${count} entries reset`);
+    await db.collection("systemLogs").add({
+      type: "dailyReset",
+      executedAt: now,
+      resetGachaCount,
+      resetHistoryCount,
+    });
+
+    console.log("=== resetDailyGacha END ===");
   }
 );
 
+/* ============================================================
+   ★ 手動：デイリーガチャリセット
+============================================================ */
+export const manualResetDailyGacha = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+
+    console.log("=== manualResetDailyGacha START ===");
+
+    const now = Timestamp.now();
+
+    const gachaSnap = await db
+      .collection("gachaCodes")
+      .where("resetType", "==", "daily")
+      .get();
+
+    let resetGachaCount = 0;
+    let resetHistoryCount = 0;
+
+    for (const docSnap of gachaSnap.docs) {
+      const data = docSnap.data();
+
+      const newFrames = data.frames.map((f: any) => ({
+        ...f,
+        usedCount: 0,
+      }));
+
+      await docSnap.ref.update({
+        frames: newFrames,
+        lastResetAt: now,
+      });
+
+      resetGachaCount++;
+    }
+
+    const historySnap = await db.collection("userGachaHistory").get();
+    const batch = db.batch();
+
+    for (const d of historySnap.docs) {
+      const code = d.id.split("_")[1];
+      const target = gachaSnap.docs.find((g) => g.id === code);
+
+      if (target) {
+        batch.update(d.ref, { count: 0 });
+        resetHistoryCount++;
+      }
+    }
+
+    await batch.commit();
+
+    await db.collection("systemLogs").add({
+      type: "manualDailyReset",
+      executedAt: now,
+      executedBy: uid,
+      resetGachaCount,
+      resetHistoryCount,
+    });
+
+    console.log("=== manualResetDailyGacha END ===");
+
+    return {
+      message: "手動リセットが完了しました",
+      resetGachaCount,
+      resetHistoryCount,
+    };
+  }
+);
 
 /* ============================================================
-   新機能：ゆめつき今日のニブイチ
+   ★ ニブイチ：今日の予想を保存
 ============================================================ */
-
-/**
- * ① ユーザーの予想を保存
- */
 export const saveNibuichiPrediction = onCall(
   { region: "us-central1" },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
-    const prediction = request.data.prediction;
-    if (!prediction)
+    const { prediction } = request.data;
+    if (!prediction) {
       throw new HttpsError("invalid-argument", "prediction が必要です");
-
-    const today = new Date().toISOString().slice(0, 10);
-    const docId = `${uid}_${today}`;
-
-    const ref = db.collection("nibuichi_user_predictions").doc(docId);
-    const snap = await ref.get();
-
-    if (snap.exists && snap.data()?.fixed) {
-      throw new HttpsError(
-        "failed-precondition",
-        "今日の予想は確定済みです"
-      );
     }
 
-    await ref.set(
-      {
-        uid,
-        date: today,
-        prediction,
-        fixed: false,
-        createdAt: Timestamp.now(),
-      },
-      { merge: true }
-    );
+    const today = new Date().toISOString().slice(0, 10);
+
+    const ref = db
+      .collection("nibuichi_user_predictions")
+      .doc(`${uid}_${today}`);
+
+    await ref.set({
+      uid,
+      date: today,
+      prediction,
+      fixed: true,
+      createdAt: Timestamp.now(),
+    });
 
     return { message: "予想を保存しました" };
   }
 );
-
-/**
- * ② 管理者が今日の結果を確定
- * - 今日の結果と配布ポイントを保存するだけ
- * - 集計・山分け・戦績更新は翌日6時のバッチで行う
- */
+/* ============================================================
+   ★ ニブイチ：今日の結果を登録（管理者用）
+============================================================ */
 export const submitNibuichiResult = onCall(
   { region: "us-central1" },
   async (request) => {
-    const result = request.data.result;
-    const rewardPoints = request.data.rewardPoints ?? 500;
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
+    const { result, rewardPoints } = request.data;
     if (!result) {
       throw new HttpsError("invalid-argument", "result が必要です");
     }
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // ★ UI が読む保存先（管理画面の todayResult 用）
-    await db
-      .collection("nibuichi_global")
-      .doc("today")
-      .set(
-        {
-          result,
-          rewardPoints,
-          date: today,
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true }
-      );
+    const ref = db.collection("nibuichi_global").doc("today");
 
-    // ★ 集計バッチ用（既存処理）
-    await db
-      .collection("nibuichi_daily")
-      .doc(today)
-      .set(
-        {
-          result,
-          rewardPoints,
-          createdAt: Timestamp.now(),
-          processed: false,
-        },
-        { merge: true }
-      );
+    await ref.set(
+      {
+        date: today,
+        result,
+        rewardPoints: rewardPoints ?? 0,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
 
-    return { message: "今日の結果を保存しました" };
+    return { message: "今日の結果を登録しました" };
   }
 );
 
-
-/**
- * ③ ユーザー画面用データ取得
- */
+/* ============================================================
+   ★ ニブイチ：個人戦績を取得
+============================================================ */
 export const getNibuichiUserStats = onCall(
   { region: "us-central1" },
   async (request) => {
@@ -536,217 +555,160 @@ export const getNibuichiUserStats = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
+    // 個人戦績
+    const statsRef = db.collection("nibuichi_user_stats").doc(uid);
+    const statsSnap = await statsRef.get();
+    const stats = statsSnap.exists
+      ? statsSnap.data()
+      : { total: 0, hit: 0, rate: 0 };
+
     // 今日の予想
     const predRef = db
       .collection("nibuichi_user_predictions")
       .doc(`${uid}_${today}`);
     const predSnap = await predRef.get();
+    const todayPrediction = predSnap.exists ? predSnap.data() : null;
 
-    // 個人戦績
-    const statsRef = db.collection("nibuichi_user_stats").doc(uid);
-    const statsSnap = await statsRef.get();
-
-    // 総合戦績
-    const globalRef = db.collection("nibuichi_global_stats").doc("stats");
+    // ゆめつき戦績（global）
+    const globalRef = db.collection("nibuichi_global").doc("stats");
     const globalSnap = await globalRef.get();
-
-    // ★ 今日の結果（UI が必要としている）
-    const todayRef = db.collection("nibuichi_global").doc("today");
-    const todaySnap = await todayRef.get();
-    const todayResult = todaySnap.exists ? todaySnap.data() : null;
+    const global = globalSnap.exists
+      ? globalSnap.data()
+      : { win: 0, draw: 0, lose: 0, bakuado: 0 };
 
     return {
-      todayPrediction: predSnap.exists ? predSnap.data() : null,
-      todayResult, // ★ 追加
-      stats: statsSnap.exists ? statsSnap.data() : null,
-      global: globalSnap.exists ? globalSnap.data() : null,
+      stats,
+      todayPrediction,
+      global,
     };
   }
 );
 
 
-/**
- * ④ 毎朝6時：前日分の結果を集計・山分け・戦績更新
- * - 前日の日付を対象にする
- * - 結果が未入力ならスキップ（後から入力されたら次の6時に処理）
- */
-/**
- * ④ 毎朝6時：前日分の結果を集計・山分け・戦績更新
- * - 累計 / 週間 / 月間 をすべて更新
- */
-export const processNibuichiDaily = onSchedule(
-  {
-    schedule: "0 6 * * *",
-    timeZone: "Asia/Tokyo",
-    region: "us-central1",
-  },
-  async () => {
-    const now = new Date();
-
-    // 前日
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const dateStr = yesterday.toISOString().slice(0, 10);
-
-    // ① 前日の結果ドキュメント取得
-    const dailyRef = db.collection("nibuichi_daily").doc(dateStr);
-    const dailySnap = await dailyRef.get();
-    if (!dailySnap.exists) return;
-
-    const daily = dailySnap.data() as any;
-    if (daily.processed) return;
-
-    const result = daily.result;
-    const rewardPoints = Number(daily.rewardPoints ?? 0);
-
-    // ② 前日の予想を取得
-    const predSnap = await db
-      .collection("nibuichi_user_predictions")
-      .where("date", "==", dateStr)
-      .get();
-
-    const preds = predSnap.docs.map((d) => d.data() as any);
-
-    // 正解者
-    const winners = preds.filter((p) => p.prediction === result);
-    const winnerCount = winners.length;
-
-    let perUserReward = 0;
-    if (winnerCount > 0 && rewardPoints > 0) {
-      perUserReward = Math.floor(rewardPoints / winnerCount);
-    }
-
-    const batches: FirebaseFirestore.WriteBatch[] = [];
-    let batch = db.batch();
-    let opCount = 0;
-
-    // -----------------------------
-    // 週の開始日（月曜）
-    // -----------------------------
-    const day = yesterday.getDay(); // 0:日〜6:土
-    const diffToMonday = (day + 6) % 7;
-    const monday = new Date(yesterday);
-    monday.setDate(yesterday.getDate() - diffToMonday);
-    const weekStartStr = monday.toISOString().slice(0, 10);
-
-    // -----------------------------
-    // 月初
-    // -----------------------------
-    const monthStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
-    const monthStartStr = monthStart.toISOString().slice(0, 10);
-
-    // -----------------------------
-    // ③ ユーザー戦績更新
-    // -----------------------------
-    for (const p of preds) {
-      const uid = p.uid;
-      const hit = p.prediction === result;
-
-      const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
-      const userRef = db.collection("users").doc(uid);
-
-      const statsSnap = await userStatsRef.get();
-      const stats = statsSnap.exists ? statsSnap.data() as any : {};
-
-      // 週リセット
-      const needWeeklyReset = stats.lastWeeklyReset !== weekStartStr;
-
-      // 月リセット
-      const needMonthlyReset = stats.lastMonthlyReset !== monthStartStr;
-
-      const newWeeklyTotal = needWeeklyReset ? 0 : (stats.weeklyTotal ?? 0);
-      const newWeeklyHit = needWeeklyReset ? 0 : (stats.weeklyHit ?? 0);
-
-      const newMonthlyTotal = needMonthlyReset ? 0 : (stats.monthlyTotal ?? 0);
-      const newMonthlyHit = needMonthlyReset ? 0 : (stats.monthlyHit ?? 0);
-
-      batch.set(
-        userStatsRef,
-        {
-          // 累計
-          total: FieldValue.increment(1),
-          hit: hit ? FieldValue.increment(1) : FieldValue.increment(0),
-
-          // 週間
-          weeklyTotal: newWeeklyTotal + 1,
-          weeklyHit: newWeeklyHit + (hit ? 1 : 0),
-          lastWeeklyReset: weekStartStr,
-
-          // 月間
-          monthlyTotal: newMonthlyTotal + 1,
-          monthlyHit: newMonthlyHit + (hit ? 1 : 0),
-          lastMonthlyReset: monthStartStr,
-        },
-        { merge: true }
-      );
-
-      // ポイント付与
-      if (hit && perUserReward > 0) {
-        batch.update(userRef, {
-          points: FieldValue.increment(perUserReward),
-        });
-      }
-
-      opCount++;
-      if (opCount >= 400) {
-        batches.push(batch);
-        batch = db.batch();
-        opCount = 0;
-      }
-    }
-
-    // daily を processed=true に
-    batch.update(dailyRef, { processed: true });
-
-    // 前日の予想を削除
-    for (const d of predSnap.docs) {
-      batch.delete(d.ref);
-      opCount++;
-      if (opCount >= 400) {
-        batches.push(batch);
-        batch = db.batch();
-        opCount = 0;
-      }
-    }
-
-    batches.push(batch);
-    await commitBatches(batches);
-  }
-);
-
-
-/**
- * ⑤ 総合戦績の手動修正
- * - win / draw / lose / bakuado を管理画面から直接編集
- */
+/* ============================================================
+   ★ ニブイチ：総合戦績を編集（管理者用）
+============================================================ */
 export const editNibuichiGlobalStats = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { win, draw, lose, bakuado } = request.data || {};
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
-    if (
-      typeof win !== "number" ||
-      typeof draw !== "number" ||
-      typeof lose !== "number" ||
-      typeof bakuado !== "number"
-    ) {
-      throw new HttpsError(
-        "invalid-argument",
-        "win / draw / lose / bakuado は数値で指定してください"
-      );
-    }
+    const { win, draw, lose, bakuado } = request.data;
 
-    const ref = db.collection("nibuichi_global_stats").doc("stats");
+    const ref = db.collection("nibuichi_global").doc("stats");
 
     await ref.set(
       {
-        win,
-        draw,
-        lose,
-        bakuado,
+        win: win ?? 0,
+        draw: draw ?? 0,
+        lose: lose ?? 0,
+        bakuado: bakuado ?? 0,
+        updatedAt: Timestamp.now(),
       },
       { merge: true }
     );
 
     return { message: "総合戦績を更新しました" };
+  }
+);
+
+/* ============================================================
+   ★ ニブイチ：前日の集計（毎日実行）
+============================================================ */
+export const processNibuichiDaily = onSchedule(
+  {
+    schedule: "5 21 * * *", // JST 6:05
+    timeZone: "Asia/Tokyo",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("=== processNibuichiDaily START ===");
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 今日の結果
+    const todayRef = db.collection("nibuichi_global").doc("today");
+    const todaySnap = await todayRef.get();
+    if (!todaySnap.exists) {
+      console.log("今日の結果が未登録のため終了");
+      return;
+    }
+
+    const todayData = todaySnap.data()!;
+    const result = todayData.result;
+    const rewardPoints = todayData.rewardPoints ?? 0;
+
+    // 今日の予想一覧
+    const predSnap = await db
+      .collection("nibuichi_user_predictions")
+      .where("date", "==", today)
+      .get();
+
+    const statsBatch = db.batch();
+    const userBatch = db.batch();
+
+    let globalWin = 0;
+    let globalDraw = 0;
+    let globalLose = 0;
+    let globalBakuado = 0;
+
+    for (const docSnap of predSnap.docs) {
+      const data = docSnap.data();
+      const uid = data.uid;
+      const prediction = data.prediction;
+
+      const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
+      const userStatsSnap = await userStatsRef.get();
+
+      const userStats = userStatsSnap.exists
+        ? userStatsSnap.data()!
+        : { total: 0, hit: 0 };
+
+      const isHit = prediction === result;
+
+      // 個人戦績更新
+      statsBatch.set(
+        userStatsRef,
+        {
+          total: userStats.total + 1,
+          hit: userStats.hit + (isHit ? 1 : 0),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+      // 当たりならポイント付与
+      if (isHit && rewardPoints > 0) {
+        const userRef = db.collection("users").doc(uid);
+        userBatch.update(userRef, {
+          points: FieldValue.increment(rewardPoints),
+        });
+      }
+
+      // 総合戦績集計
+      if (result === "nibuni") globalWin++;
+      if (result === "nibuichi") globalDraw++;
+      if (result === "nibuzero") globalLose++;
+      if (result === "bakuado") globalBakuado++;
+    }
+
+    await statsBatch.commit();
+    await userBatch.commit();
+
+    // 総合戦績更新
+    const globalRef = db.collection("nibuichi_global").doc("stats");
+    await globalRef.set(
+      {
+        win: FieldValue.increment(globalWin),
+        draw: FieldValue.increment(globalDraw),
+        lose: FieldValue.increment(globalLose),
+        bakuado: FieldValue.increment(globalBakuado),
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+
+    console.log("=== processNibuichiDaily END ===");
   }
 );

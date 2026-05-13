@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, where, orderBy } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
 
 export default function NibuichiHistoryPage() {
   const [user, setUser] = useState<any>(null);
@@ -21,63 +29,76 @@ export default function NibuichiHistoryPage() {
       }
 
       setUser(u);
+
+      // 履歴取得（例外が起きても止まらない）
       await fetchHistory(u.uid);
       await fetchPointHistory(u.uid);
+
       setLoading(false);
     });
 
     return () => unsub();
   }, []);
 
-  // -----------------------------
-  // ニブイチ履歴取得
-  // -----------------------------
+  /* ============================================================
+     ニブイチ履歴取得（修正版）
+  ============================================================ */
   const fetchHistory = async (uid: string) => {
-    const col = collection(db, "nibuichi_user_predictions");
-    const q = query(col, where("uid", "==", uid), orderBy("date", "desc"));
-    const snap = await getDocs(q);
+    try {
+      const col = collection(db, "nibuichi_user_predictions");
+      const q = query(col, where("uid", "==", uid), orderBy("date", "desc"));
+      const snap = await getDocs(q);
 
-    const list: any[] = [];
+      const list: any[] = [];
 
-    for (const docSnap of snap.docs) {
-      const data = docSnap.data();
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
 
-      // 結果を取得
-      const resultRef = doc(db, "nibuichi_global_results", data.date);
-      const resultSnap = await getDoc(resultRef);
+        // 🔥 結果は nibuichi_global/{date} に保存されている
+        const resultRef = doc(db, "nibuichi_global", data.date);
+        const resultSnap = await getDoc(resultRef);
 
-      const result = resultSnap.exists() ? resultSnap.data().result : null;
+        const result = resultSnap.exists() ? resultSnap.data().result : null;
 
-      list.push({
-        date: data.date,
-        prediction: data.prediction,
-        result,
-      });
+        list.push({
+          date: data.date,
+          prediction: data.prediction,
+          result,
+        });
+      }
+
+      setHistory(list);
+    } catch (err) {
+      console.error("fetchHistory error:", err);
+      setHistory([]); // ← エラーでも空配列で UI を動かす
     }
-
-    setHistory(list);
   };
 
-  // -----------------------------
-  // ニブイチで獲得したポイント履歴
-  // -----------------------------
+  /* ============================================================
+     ニブイチ獲得ポイント履歴（修正版）
+  ============================================================ */
   const fetchPointHistory = async (uid: string) => {
-    const col = collection(db, "pointHistory");
-    const q = query(
-      col,
-      where("user", "==", uid),
-      where("type", "==", "nibuichi"),
-      orderBy("createdAt", "desc")
-    );
+    try {
+      const col = collection(db, "pointHistory");
+      const q = query(
+        col,
+        where("user", "==", uid),
+        where("type", "==", "nibuichi"),
+        orderBy("createdAt", "desc")
+      );
 
-    const snap = await getDocs(q);
+      const snap = await getDocs(q);
 
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
-    setPointHistory(list);
+      setPointHistory(list);
+    } catch (err) {
+      console.error("fetchPointHistory error:", err);
+      setPointHistory([]); // ← エラーでも空配列
+    }
   };
 
   if (loading) {
@@ -99,7 +120,9 @@ export default function NibuichiHistoryPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">予想履歴</h2>
 
-        {history.length === 0 && <p>まだ履歴がありません。</p>}
+        {history.length === 0 && (
+          <p className="text-gray-600">まだ履歴がありません。</p>
+        )}
 
         <div className="space-y-3">
           {history.map((item, i) => {
@@ -113,9 +136,12 @@ export default function NibuichiHistoryPage() {
                 <div className="font-bold">{item.date}</div>
                 <div>予想：{item.prediction}</div>
                 <div>結果：{item.result ?? "未確定"}</div>
-                <div className={hit ? "text-green-600" : "text-red-600"}>
-                  {item.result ? (hit ? "的中！" : "ハズレ") : ""}
-                </div>
+
+                {item.result && (
+                  <div className={hit ? "text-green-600" : "text-red-600"}>
+                    {hit ? "的中！" : "ハズレ"}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -128,7 +154,9 @@ export default function NibuichiHistoryPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">獲得ポイント履歴</h2>
 
-        {pointHistory.length === 0 && <p>まだポイント履歴がありません。</p>}
+        {pointHistory.length === 0 && (
+          <p className="text-gray-600">まだポイント履歴がありません。</p>
+        )}
 
         <div className="space-y-3">
           {pointHistory.map((item) => (
