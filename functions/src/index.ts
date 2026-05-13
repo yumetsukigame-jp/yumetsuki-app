@@ -7,6 +7,15 @@ initializeApp();
 const db = getFirestore();
 
 /* ============================================================
+   共通：昨日の日付を取得
+============================================================ */
+function getYesterdayDateString() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/* ============================================================
    既存：ガチャ機能
 ============================================================ */
 
@@ -249,7 +258,9 @@ export const useGachaCode = onCall(
     }
   }
 );
-
+/* ============================================================
+   ガチャ結果一覧
+============================================================ */
 export const getGachaResults = onCall(
   { region: "us-central1" },
   async () => {
@@ -295,7 +306,7 @@ export const getGachaResults = onCall(
 );
 
 /* ============================================================
-   手動：ガチャ使用回数リセット（個別）
+   手動：ガチャ使用回数リセット
 ============================================================ */
 export const resetGachaUsage = onCall(
   { region: "us-central1" },
@@ -348,7 +359,7 @@ export const cleanExpiredGacha = onSchedule(
 );
 
 /* ============================================================
-   ★ 自動：デイリーガチャ完全リセット（毎朝6時）
+   自動：デイリーガチャ完全リセット（毎朝6時）
 ============================================================ */
 export const resetDailyGacha = onSchedule(
   {
@@ -412,7 +423,7 @@ export const resetDailyGacha = onSchedule(
 );
 
 /* ============================================================
-   ★ 手動：デイリーガチャリセット
+   手動：デイリーガチャリセット
 ============================================================ */
 export const manualResetDailyGacha = onCall(
   { region: "us-central1" },
@@ -482,7 +493,7 @@ export const manualResetDailyGacha = onCall(
 );
 
 /* ============================================================
-   ★ ニブイチ：今日の予想を保存
+   ニブイチ：予想保存
 ============================================================ */
 export const saveNibuichiPrediction = onCall(
   { region: "us-central1" },
@@ -512,8 +523,9 @@ export const saveNibuichiPrediction = onCall(
     return { message: "予想を保存しました" };
   }
 );
+
 /* ============================================================
-   ★ ニブイチ：今日の結果を登録（管理者用）
+   ニブイチ：結果登録（管理者）
 ============================================================ */
 export const submitNibuichiResult = onCall(
   { region: "us-central1" },
@@ -528,13 +540,14 @@ export const submitNibuichiResult = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
-    const ref = db.collection("nibuichi_global").doc("today");
+    const ref = db.collection("nibuichi_global").doc(today);
 
     await ref.set(
       {
         date: today,
         result,
         rewardPoints: rewardPoints ?? 0,
+        processed: false,
         updatedAt: Timestamp.now(),
       },
       { merge: true }
@@ -545,7 +558,7 @@ export const submitNibuichiResult = onCall(
 );
 
 /* ============================================================
-   ★ ニブイチ：個人戦績を取得
+   ニブイチ：個人戦績取得
 ============================================================ */
 export const getNibuichiUserStats = onCall(
   { region: "us-central1" },
@@ -555,21 +568,18 @@ export const getNibuichiUserStats = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // 個人戦績
     const statsRef = db.collection("nibuichi_user_stats").doc(uid);
     const statsSnap = await statsRef.get();
     const stats = statsSnap.exists
       ? statsSnap.data()
       : { total: 0, hit: 0, rate: 0 };
 
-    // 今日の予想
     const predRef = db
       .collection("nibuichi_user_predictions")
       .doc(`${uid}_${today}`);
     const predSnap = await predRef.get();
     const todayPrediction = predSnap.exists ? predSnap.data() : null;
 
-    // ゆめつき戦績（global）
     const globalRef = db.collection("nibuichi_global").doc("stats");
     const globalSnap = await globalRef.get();
     const global = globalSnap.exists
@@ -584,9 +594,8 @@ export const getNibuichiUserStats = onCall(
   }
 );
 
-
 /* ============================================================
-   ★ ニブイチ：総合戦績を編集（管理者用）
+   ニブイチ：総合戦績編集
 ============================================================ */
 export const editNibuichiGlobalStats = onCall(
   { region: "us-central1" },
@@ -614,7 +623,7 @@ export const editNibuichiGlobalStats = onCall(
 );
 
 /* ============================================================
-   ★ ニブイチ：前日の集計（毎日実行）
+   ★ 自動：ニブイチ前日集計（毎朝6:05）
 ============================================================ */
 export const processNibuichiDaily = onSchedule(
   {
@@ -625,24 +634,23 @@ export const processNibuichiDaily = onSchedule(
   async () => {
     console.log("=== processNibuichiDaily START ===");
 
-    const today = new Date().toISOString().slice(0, 10);
+    const targetDate = getYesterdayDateString();
 
-    // 今日の結果
-    const todayRef = db.collection("nibuichi_global").doc("today");
-    const todaySnap = await todayRef.get();
-    if (!todaySnap.exists) {
-      console.log("今日の結果が未登録のため終了");
+    const dailyRef = db.collection("nibuichi_global").doc(targetDate);
+    const dailySnap = await dailyRef.get();
+
+    if (!dailySnap.exists) {
+      console.log("昨日の結果が未登録のため終了");
       return;
     }
 
-    const todayData = todaySnap.data()!;
-    const result = todayData.result;
-    const rewardPoints = todayData.rewardPoints ?? 0;
+    const dailyData = dailySnap.data()!;
+    const result = dailyData.result;
+    const rewardPoints = dailyData.rewardPoints ?? 0;
 
-    // 今日の予想一覧
     const predSnap = await db
       .collection("nibuichi_user_predictions")
-      .where("date", "==", today)
+      .where("date", "==", targetDate)
       .get();
 
     const statsBatch = db.batch();
@@ -667,7 +675,6 @@ export const processNibuichiDaily = onSchedule(
 
       const isHit = prediction === result;
 
-      // 個人戦績更新
       statsBatch.set(
         userStatsRef,
         {
@@ -678,7 +685,6 @@ export const processNibuichiDaily = onSchedule(
         { merge: true }
       );
 
-      // 当たりならポイント付与
       if (isHit && rewardPoints > 0) {
         const userRef = db.collection("users").doc(uid);
         userBatch.update(userRef, {
@@ -686,7 +692,6 @@ export const processNibuichiDaily = onSchedule(
         });
       }
 
-      // 総合戦績集計
       if (result === "nibuni") globalWin++;
       if (result === "nibuichi") globalDraw++;
       if (result === "nibuzero") globalLose++;
@@ -696,7 +701,6 @@ export const processNibuichiDaily = onSchedule(
     await statsBatch.commit();
     await userBatch.commit();
 
-    // 総合戦績更新
     const globalRef = db.collection("nibuichi_global").doc("stats");
     await globalRef.set(
       {
@@ -710,5 +714,140 @@ export const processNibuichiDaily = onSchedule(
     );
 
     console.log("=== processNibuichiDaily END ===");
+  }
+);
+
+/* ============================================================
+   ★ 手動：ニブイチ前日集計
+============================================================ */
+export const manualResetNibuichiDaily = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+
+    console.log("=== manualResetNibuichiDaily START ===");
+
+    const targetDate = getYesterdayDateString();
+
+    const dailyRef = db.collection("nibuichi_global").doc(targetDate);
+    const dailySnap = await dailyRef.get();
+
+    if (!dailySnap.exists) {
+      return { message: "昨日の結果が未登録のため終了" };
+    }
+
+    const dailyData = dailySnap.data()!;
+    const result = dailyData.result;
+    const rewardPoints = dailyData.rewardPoints ?? 0;
+
+    const predSnap = await db
+      .collection("nibuichi_user_predictions")
+      .where("date", "==", targetDate)
+      .get();
+
+    const statsBatch = db.batch();
+    const userBatch = db.batch();
+
+    let globalWin = 0;
+    let globalDraw = 0;
+    let globalLose = 0;
+    let globalBakuado = 0;
+
+    for (const docSnap of predSnap.docs) {
+      const data = docSnap.data();
+      const uid = data.uid;
+      const prediction = data.prediction;
+
+      const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
+      const userStatsSnap = await userStatsRef.get();
+
+      const userStats = userStatsSnap.exists
+        ? userStatsSnap.data()!
+        : { total: 0, hit: 0 };
+
+      const isHit = prediction === result;
+
+      statsBatch.set(
+        userStatsRef,
+        {
+          total: userStats.total + 1,
+          hit: userStats.hit + (isHit ? 1 : 0),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+      if (isHit && rewardPoints > 0) {
+        const userRef = db.collection("users").doc(uid);
+        userBatch.update(userRef, {
+          points: FieldValue.increment(rewardPoints),
+        });
+      }
+
+      if (result === "nibuni") globalWin++;
+      if (result === "nibuichi") globalDraw++;
+      if (result === "nibuzero") globalLose++;
+      if (result === "bakuado") globalBakuado++;
+    }
+
+    await statsBatch.commit();
+    await userBatch.commit();
+
+    const globalRef = db.collection("nibuichi_global").doc("stats");
+    await globalRef.set(
+      {
+        win: FieldValue.increment(globalWin),
+        draw: FieldValue.increment(globalDraw),
+        lose: FieldValue.increment(globalLose),
+        bakuado: FieldValue.increment(globalBakuado),
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+
+    await db.collection("systemLogs").add({
+      type: "manualNibuichiDailyReset",
+      executedAt: Timestamp.now(),
+      executedBy: uid,
+      targetDate,
+    });
+
+    console.log("=== manualResetNibuichiDaily END ===");
+
+    return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
+  }
+);
+/* ============================================================
+   ★ ニブイチ：週次リセット（毎週月曜 6:00）
+============================================================ */
+export const resetNibuichiWeekly = onSchedule(
+  {
+    schedule: "0 21 * * 1", // JST 6:00（月曜）
+    timeZone: "Asia/Tokyo",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("=== resetNibuichiWeekly START ===");
+
+    const snap = await db.collection("nibuichi_user_stats").get();
+    const batch = db.batch();
+
+    for (const docSnap of snap.docs) {
+      batch.update(docSnap.ref, {
+        weeklyTotal: 0,
+        weeklyHit: 0,
+        updatedAt: Timestamp.now(),
+      });
+    }
+
+    await batch.commit();
+
+    await db.collection("systemLogs").add({
+      type: "weeklyReset",
+      executedAt: Timestamp.now(),
+    });
+
+    console.log("=== resetNibuichiWeekly END ===");
   }
 );

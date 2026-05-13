@@ -2,12 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 
 export default function NibuichiRankingPage() {
   const [loading, setLoading] = useState(true);
   const [weeklyRank, setWeeklyRank] = useState<any[]>([]);
   const [totalRank, setTotalRank] = useState<any[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, any>>({});
+
+  /* -----------------------------
+     今週の開始日（月曜）を計算
+  ----------------------------- */
+  const getWeekStartDate = () => {
+    const d = new Date();
+    const day = d.getDay(); // 0=日曜, 1=月曜
+    const diff = (day === 0 ? -6 : 1 - day); // 月曜基準
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  };
+
+  /* -----------------------------
+     今週の終了日（日曜）を計算
+  ----------------------------- */
+  const getWeekEndDate = () => {
+    const start = new Date(getWeekStartDate());
+    start.setDate(start.getDate() + 6); // 月曜 + 6 = 日曜
+    return start.toISOString().slice(0, 10);
+  };
 
   useEffect(() => {
     fetchRanking();
@@ -16,8 +37,37 @@ export default function NibuichiRankingPage() {
   const fetchRanking = async () => {
     setLoading(true);
 
+    // -----------------------------
+    // ユーザー戦績を取得
+    // -----------------------------
     const snap = await getDocs(collection(db, "nibuichi_user_stats"));
     const users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+
+    // -----------------------------
+    // ユーザー情報（displayName / xAccount）を取得
+    // -----------------------------
+    const map: Record<string, any> = {};
+
+    for (const u of users) {
+      const userRef = doc(db, "users", u.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+
+        map[u.uid] = {
+          nickname: data.displayName ?? "名無し",
+          xAccount: data.xAccount ?? "",
+        };
+      } else {
+        map[u.uid] = {
+          nickname: "不明ユーザー",
+          xAccount: "",
+        };
+      }
+    }
+
+    setUserMap(map);
 
     // -----------------------------
     // 累計ランキング
@@ -55,10 +105,18 @@ export default function NibuichiRankingPage() {
     return <div className="p-6 text-center">読み込み中…</div>;
   }
 
+  const weekStart = getWeekStartDate();
+  const weekEnd = getWeekEndDate();
+
   return (
     <div className="max-w-md mx-auto p-4 space-y-8">
 
       <h1 className="text-xl font-bold text-center">ニブイチ ランキング</h1>
+
+      {/* 今週の期間 */}
+      <div className="text-center text-sm text-gray-600">
+        今週：{weekStart} 〜 {weekEnd}
+      </div>
 
       {/* 累計ランキング */}
       <div className="bg-white shadow p-4 rounded-lg">
@@ -69,19 +127,22 @@ export default function NibuichiRankingPage() {
         )}
 
         <ul className="space-y-2">
-          {totalRank.map((u, i) => (
-            <li key={i} className="border-b pb-1">
-              <div className="font-bold">
-                {i + 1}位：{u.uid}
-              </div>
-              <div className="text-sm">
-                参加：{u.total} 回 / 的中：{u.hit} 回
-              </div>
-              <div className="text-sm">
-                正解率：{(u.rate * 100).toFixed(1)}%
-              </div>
-            </li>
-          ))}
+          {totalRank.map((u, i) => {
+            const info = userMap[u.uid] ?? {};
+            return (
+              <li key={i} className="border-b pb-1">
+                <div className="font-bold">
+                  {i + 1}位：{info.nickname}（{info.xAccount}）
+                </div>
+                <div className="text-sm">
+                  参加：{u.total} 回 / 的中：{u.hit} 回
+                </div>
+                <div className="text-sm">
+                  正解率：{(u.rate * 100).toFixed(1)}%
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -94,19 +155,22 @@ export default function NibuichiRankingPage() {
         )}
 
         <ul className="space-y-2">
-          {weeklyRank.map((u, i) => (
-            <li key={i} className="border-b pb-1">
-              <div className="font-bold">
-                {i + 1}位：{u.uid}
-              </div>
-              <div className="text-sm">
-                参加：{u.weeklyTotal} 回 / 的中：{u.weeklyHit} 回
-              </div>
-              <div className="text-sm">
-                正解率：{(u.weeklyRate * 100).toFixed(1)}%
-              </div>
-            </li>
-          ))}
+          {weeklyRank.map((u, i) => {
+            const info = userMap[u.uid] ?? {};
+            return (
+              <li key={i} className="border-b pb-1">
+                <div className="font-bold">
+                  {i + 1}位：{info.nickname}（{info.xAccount}）
+                </div>
+                <div className="text-sm">
+                  参加：{u.weeklyTotal} 回 / 的中：{u.weeklyHit} 回
+                </div>
+                <div className="text-sm">
+                  正解率：{(u.weeklyRate * 100).toFixed(1)}%
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
