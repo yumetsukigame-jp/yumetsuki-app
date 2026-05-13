@@ -21,7 +21,7 @@ export default function AdminNibuichiPage() {
   const [rewardPoints, setRewardPoints] = useState<number>(500);
   const [sending, setSending] = useState(false);
 
-  const [editMode, setEditMode] = useState(false); // ★ 修正モード追加
+  const [editMode, setEditMode] = useState(false);
 
   // -----------------------------
   // 管理者判定
@@ -51,31 +51,45 @@ export default function AdminNibuichiPage() {
   }, []);
 
   // -----------------------------
+  // 今日の結果を Firestore から直接取得
+  // -----------------------------
+  const fetchTodayResult = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // ★ ここが今回の核心
+    const ref = doc(db, "nibuichi_global", today);
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      const data = snap.data();
+      setTodayResult(data.result ?? null);
+      setSelected(data.result ?? null);
+      setRewardPoints(data.rewardPoints ?? 500);
+    } else {
+      setTodayResult(null);
+      setSelected(null);
+    }
+  };
+
+  // -----------------------------
   // 戦績 & 今日の結果取得
   // -----------------------------
   const fetchStats = async () => {
     setLoading(true);
+
     try {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({});
-
       setGlobalStats(res.data.global ?? null);
 
-      if (res.data.todayResult) {
-        setTodayResult(res.data.todayResult.result);
-        setSelected(res.data.todayResult.result);
-      } else {
-        setTodayResult(null);
-        setSelected(null);
-      }
-
-      setEditMode(false); // ★ 修正モード解除
+      await fetchTodayResult();
+      setEditMode(false);
     } catch (err) {
       console.error(err);
     }
+
     setLoading(false);
   };
-
   // -----------------------------
   // 今日の結果を確定 or 修正
   // -----------------------------
@@ -86,6 +100,9 @@ export default function AdminNibuichiPage() {
     try {
       const fn = httpsCallable(functions, "submitNibuichiResult");
       await fn({ result: selected, rewardPoints });
+
+      // Firestore の反映待ち
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
       await fetchStats();
     } catch (err) {
@@ -102,14 +119,8 @@ export default function AdminNibuichiPage() {
     return <div className="p-6 text-center">管理者のみアクセスできます</div>;
   }
 
-  // -----------------------------
-  // 確定済み判定
-  // -----------------------------
   const isFixed = todayResult != null;
 
-  // -----------------------------
-  // 選択肢
-  // -----------------------------
   const options = [
     { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
     { key: "nibuni", label: "ニブニ", img: "/nibuichi/nibuni.webp" },
@@ -137,21 +148,18 @@ export default function AdminNibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
 
-        {/* 選択中の表示 */}
         {!isFixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
             選択中：{selected}
           </div>
         )}
 
-        {/* 確定済みの表示 */}
         {isFixed && !editMode && (
           <div className="text-center text-green-600 font-bold mb-3">
             本日は確定済み：{todayResult}
           </div>
         )}
 
-        {/* 修正モード中の表示 */}
         {editMode && (
           <div className="text-center text-orange-600 font-bold mb-3">
             修正モード：{selected}
@@ -198,7 +206,6 @@ export default function AdminNibuichiPage() {
         {/* ボタン */}
         <div className="mt-4 text-center">
 
-          {/* 修正モードでない & 確定済み → 修正ボタン */}
           {isFixed && !editMode && (
             <button
               onClick={() => setEditMode(true)}
@@ -208,7 +215,6 @@ export default function AdminNibuichiPage() {
             </button>
           )}
 
-          {/* 修正モード中 → 修正を確定する */}
           {editMode && (
             <button
               disabled={!selected || sending}
@@ -223,7 +229,6 @@ export default function AdminNibuichiPage() {
             </button>
           )}
 
-          {/* 未確定 → 通常の確定ボタン */}
           {!isFixed && (
             <button
               disabled={!selected || sending}
