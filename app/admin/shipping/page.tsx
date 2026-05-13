@@ -15,10 +15,17 @@ export default function ShippingAdminPage() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ★ 発送済みカードの開閉状態
+  const [openMap, setOpenMap] = useState<{ [uid: string]: boolean }>({});
+
+  const toggleOpen = (uid: string) => {
+    setOpenMap((prev) => ({ ...prev, [uid]: !prev[uid] }));
+  };
+
   const fetchData = async () => {
     const snap = await getDocs(collection(db, "selectedRewards"));
 
-    const data = [];
+    const data: any[] = [];
 
     for (const d of snap.docs) {
       const uid = d.id;
@@ -37,9 +44,15 @@ export default function ShippingAdminPage() {
         ...rewardData,
         userName: userData.name ?? "不明",
         userEmail: userData.email ?? "不明",
-        userX: userData.xAccount ?? "不明", // ★ Xアカウント追加
+        userX: userData.xAccount ?? "不明",
       });
     }
+
+    // ★ 未発送 → 発送済み の順に並び替え
+    data.sort((a, b) => {
+      if (a.shipped === b.shipped) return 0;
+      return a.shipped ? 1 : -1; // 未発送(false) が先
+    });
 
     setList(data);
     setLoading(false);
@@ -70,7 +83,7 @@ export default function ShippingAdminPage() {
         shippedAt,
         userName: item.userName,
         userEmail: item.userEmail,
-        userX: item.userX, // ★ Xアカウントも履歴に保存
+        userX: item.userX,
       });
     } else {
       await updateDoc(ref, {
@@ -91,51 +104,78 @@ export default function ShippingAdminPage() {
       </h1>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {list.map((item) => (
-          <div
-            key={item.uid}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "16px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <p><strong>ユーザー名：</strong> {item.userName}</p>
-              <p><strong>メール：</strong> {item.userEmail}</p>
-              <p><strong>X：</strong> {item.userX}</p> {/* ★ 表示追加 */}
-              <p><strong>ユーザーID：</strong> {item.uid}</p>
-              <p><strong>発送物：</strong> {item.name}</p>
-              <p><strong>ポイント：</strong> {item.cost} pt</p>
-              <p><strong>選択日時：</strong> {item.timestamp?.toDate().toLocaleString()}</p>
+        {list.map((item) => {
+          const isOpen = openMap[item.uid] ?? !item.shipped; 
+          // ★ 未発送は最初から開く、発送済みは閉じる
 
-              {item.shipped && (
-                <p style={{ color: "green" }}>
-                  <strong>発送済み：</strong>{" "}
-                  {item.shippedAt?.toDate().toLocaleString()}
-                </p>
-              )}
-            </div>
-
-            <button
-              onClick={() => toggleShipped(item.uid, item.shipped, item)}
+          return (
+            <div
+              key={item.uid}
               style={{
-                padding: "10px 16px",
-                background: item.shipped ? "#aaa" : "#10b981",
-                color: "white",
+                border: "1px solid #ddd",
                 borderRadius: "8px",
-                border: "none",
-                cursor: "pointer",
-                minWidth: "140px",
+                padding: "16px",
+                background: item.shipped ? "#f5f5f5" : "#fffbe6", // ★ 色分け
               }}
             >
-              {item.shipped ? "未発送に戻す" : "発送済みにする"}
-            </button>
-          </div>
-        ))}
+              {/* ヘッダー部分（クリックで開閉） */}
+              <div
+                onClick={() => toggleOpen(item.uid)}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  cursor: "pointer",
+                }}
+              >
+                <div>
+                  <strong>{item.userName}</strong>（{item.userEmail}）
+                  <br />
+                  <span style={{ fontSize: "12px", color: "#666" }}>
+                    {item.shipped
+                      ? `発送済み：${item.shippedAt
+                          ?.toDate()
+                          .toLocaleString()}`
+                      : "未発送"}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: "20px" }}>
+                  {isOpen ? "▲" : "▼"}
+                </div>
+              </div>
+
+              {/* 詳細（開閉） */}
+              {isOpen && (
+                <div style={{ marginTop: "12px" }}>
+                  <p><strong>X：</strong> {item.userX}</p>
+                  <p><strong>ユーザーID：</strong> {item.uid}</p>
+                  <p><strong>発送物：</strong> {item.name}</p>
+                  <p><strong>ポイント：</strong> {item.cost} pt</p>
+                  <p>
+                    <strong>選択日時：</strong>{" "}
+                    {item.timestamp?.toDate().toLocaleString()}
+                  </p>
+
+                  <button
+                    onClick={() => toggleShipped(item.uid, item.shipped, item)}
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px 16px",
+                      background: item.shipped ? "#aaa" : "#10b981",
+                      color: "white",
+                      borderRadius: "8px",
+                      border: "none",
+                      cursor: "pointer",
+                      minWidth: "140px",
+                    }}
+                  >
+                    {item.shipped ? "未発送に戻す" : "発送済みにする"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
