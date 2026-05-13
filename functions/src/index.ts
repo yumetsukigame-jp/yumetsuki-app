@@ -547,7 +547,7 @@ export const submitNibuichiResult = onCall(
         date: today,
         result,
         rewardPoints: rewardPoints ?? 0,
-        processed: false,
+        processed: true,   // ← ★ ここを true に変更
         updatedAt: Timestamp.now(),
       },
       { merge: true }
@@ -713,9 +713,17 @@ export const processNibuichiDaily = onSchedule(
       { merge: true }
     );
 
+    // ★★★ 追加：systemLogs に記録（管理画面が読む形式）
+    await db.collection("systemLogs").add({
+      type: "nibuichiDailyReset",
+      executedAt: Timestamp.now(),
+      targetDate,
+    });
+
     console.log("=== processNibuichiDaily END ===");
   }
 );
+
 
 /* ============================================================
    ★ 手動：ニブイチ前日集計
@@ -806,8 +814,9 @@ export const manualResetNibuichiDaily = onCall(
       { merge: true }
     );
 
+    // ★★★ 追加：管理画面が読めるログ形式に統一
     await db.collection("systemLogs").add({
-      type: "manualNibuichiDailyReset",
+      type: "nibuichiDailyReset",   // ← 自動と同じ形式に統一
       executedAt: Timestamp.now(),
       executedBy: uid,
       targetDate,
@@ -818,6 +827,7 @@ export const manualResetNibuichiDaily = onCall(
     return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
   }
 );
+
 /* ============================================================
    ★ ニブイチ：週次リセット（毎週月曜 6:00）
 ============================================================ */
