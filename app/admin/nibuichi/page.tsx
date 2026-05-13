@@ -21,6 +21,8 @@ export default function AdminNibuichiPage() {
   const [rewardPoints, setRewardPoints] = useState<number>(500);
   const [sending, setSending] = useState(false);
 
+  const [editMode, setEditMode] = useState(false); // ★ 修正モード追加
+
   // -----------------------------
   // 管理者判定
   // -----------------------------
@@ -57,16 +59,17 @@ export default function AdminNibuichiPage() {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({});
 
-      // 総合戦績
       setGlobalStats(res.data.global ?? null);
 
-      // ★ 今日の結果（Functions は top-level に返す）
       if (res.data.todayResult) {
         setTodayResult(res.data.todayResult.result);
         setSelected(res.data.todayResult.result);
       } else {
         setTodayResult(null);
+        setSelected(null);
       }
+
+      setEditMode(false); // ★ 修正モード解除
     } catch (err) {
       console.error(err);
     }
@@ -142,9 +145,16 @@ export default function AdminNibuichiPage() {
         )}
 
         {/* 確定済みの表示 */}
-        {isFixed && (
+        {isFixed && !editMode && (
           <div className="text-center text-green-600 font-bold mb-3">
             本日は確定済み：{todayResult}
+          </div>
+        )}
+
+        {/* 修正モード中の表示 */}
+        {editMode && (
+          <div className="text-center text-orange-600 font-bold mb-3">
+            修正モード：{selected}
           </div>
         )}
 
@@ -156,6 +166,7 @@ export default function AdminNibuichiPage() {
             value={rewardPoints}
             onChange={(e) => setRewardPoints(Number(e.target.value))}
             className="border p-2 rounded w-full mt-1"
+            disabled={isFixed && !editMode}
           />
         </div>
 
@@ -164,11 +175,11 @@ export default function AdminNibuichiPage() {
           {options.map((opt) => (
             <button
               key={opt.key}
-              disabled={isFixed}
+              disabled={isFixed && !editMode}
               onClick={() => setSelected(opt.key)}
               className={`border rounded-lg overflow-hidden shadow ${
                 selected === opt.key ? "ring-4 ring-red-400" : ""
-              } ${isFixed ? "opacity-60 cursor-not-allowed" : ""}`}
+              } ${(isFixed && !editMode) ? "opacity-60 cursor-not-allowed" : ""}`}
             >
               <Image
                 src={opt.img}
@@ -184,19 +195,48 @@ export default function AdminNibuichiPage() {
           ))}
         </div>
 
-        {/* 確定 or 修正ボタン */}
+        {/* ボタン */}
         <div className="mt-4 text-center">
-          <button
-            disabled={!selected || sending}
-            onClick={submitResult}
-            className={`px-4 py-2 rounded-lg text-white font-bold ${
-              selected
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-gray-400 cursor-not-allowed"
-            }`}
-          >
-            {isFixed ? "結果を修正する" : "この結果で確定する"}
-          </button>
+
+          {/* 修正モードでない & 確定済み → 修正ボタン */}
+          {isFixed && !editMode && (
+            <button
+              onClick={() => setEditMode(true)}
+              className="px-4 py-2 rounded-lg text-white font-bold bg-blue-600 hover:bg-blue-700"
+            >
+              結果を修正する
+            </button>
+          )}
+
+          {/* 修正モード中 → 修正を確定する */}
+          {editMode && (
+            <button
+              disabled={!selected || sending}
+              onClick={submitResult}
+              className={`px-4 py-2 rounded-lg text-white font-bold ${
+                !selected
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-orange-600 hover:bg-orange-700"
+              }`}
+            >
+              修正を確定する
+            </button>
+          )}
+
+          {/* 未確定 → 通常の確定ボタン */}
+          {!isFixed && (
+            <button
+              disabled={!selected || sending}
+              onClick={submitResult}
+              className={`px-4 py-2 rounded-lg text-white font-bold ${
+                !selected
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              この結果で確定する
+            </button>
+          )}
         </div>
       </div>
 
