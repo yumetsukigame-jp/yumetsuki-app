@@ -17,8 +17,16 @@ export default function NibuichiHistoryPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
+
+  // 結果（nibuichi_global）
   const [daily, setDaily] = useState<any>(null);
+
+  // 投票状況（nibuichi_user_predictions）
   const [predictions, setPredictions] = useState<any[]>([]);
+
+  // 集計後履歴（nibuichi_daily）
+  const [history, setHistory] = useState<any[]>([]);
+
   const [winners, setWinners] = useState<any[]>([]);
   const [perUserReward, setPerUserReward] = useState<number>(0);
 
@@ -60,11 +68,12 @@ export default function NibuichiHistoryPage() {
   }, [selectedDate]);
 
   /* ============================================================
-     日別データ取得（当日未確定にも対応）
+     日別データ取得（結果・投票状況・履歴）
   ============================================================ */
   const fetchDailyData = async (date: string) => {
     setDaily(null);
     setPredictions([]);
+    setHistory([]);
     setWinners([]);
     setPerUserReward(0);
     setUserMap({});
@@ -72,8 +81,7 @@ export default function NibuichiHistoryPage() {
     const normalizedDate = date;
 
     /* -----------------------------
-       ① 確定データ（nibuichi_global）を読む
-       → 当日は存在しないので daily=null のまま
+       ① 結果（nibuichi_global）
     ----------------------------- */
     const dailyRef = doc(db, "nibuichi_global", normalizedDate);
     const dailySnap = await getDoc(dailyRef);
@@ -85,18 +93,26 @@ export default function NibuichiHistoryPage() {
     }
 
     /* -----------------------------
-       ② 当日の予想（nibuichi_user_predictions）を読む
-       → daily が無くても必ず読む
+       ② 投票状況（nibuichi_user_predictions）
     ----------------------------- */
     const predRef = collection(db, "nibuichi_user_predictions");
-    const q = query(predRef, where("date", "==", normalizedDate));
-    const predSnap = await getDocs(q);
+    const qPred = query(predRef, where("date", "==", normalizedDate));
+    const predSnap = await getDocs(qPred);
 
     const preds = predSnap.docs.map((d) => d.data());
     setPredictions(preds);
 
     /* -----------------------------
-       ③ daily がある場合のみ winners を計算
+       ③ 集計後履歴（nibuichi_daily）
+    ----------------------------- */
+    const histCol = collection(db, "nibuichi_daily", normalizedDate, "predictions");
+    const histSnap = await getDocs(histCol);
+
+    const histList = histSnap.docs.map((d) => d.data());
+    setHistory(histList);
+
+    /* -----------------------------
+       ④ 正解者計算（結果がある場合のみ）
     ----------------------------- */
     if (dailyData) {
       const wins = preds.filter((p) => p.prediction === dailyData.result);
@@ -108,7 +124,7 @@ export default function NibuichiHistoryPage() {
     }
 
     /* -----------------------------
-       ④ ユーザー情報を取得
+       ⑤ ユーザー情報取得
     ----------------------------- */
     const map: Record<string, any> = {};
 
@@ -150,7 +166,7 @@ export default function NibuichiHistoryPage() {
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">
       <h1 className="text-xl font-bold text-center">
-        ニブイチ 日別履歴 & 投票状況
+        ニブイチ 日別履歴 & 投票状況（管理者）
       </h1>
 
       {/* 日付選択 */}
@@ -164,9 +180,9 @@ export default function NibuichiHistoryPage() {
         />
       </div>
 
-      {/* 日別データ（daily が無くても表示） */}
+      {/* 結果 */}
       <div className="bg-white shadow p-4 rounded-lg space-y-2">
-        <h2 className="text-lg font-bold">日別データ</h2>
+        <h2 className="text-lg font-bold">結果（nibuichi_global）</h2>
 
         <div>結果：{daily?.result ?? "未確定"}</div>
         <div>配布ポイント：{daily?.rewardPoints ?? 0}</div>
@@ -182,25 +198,21 @@ export default function NibuichiHistoryPage() {
         )}
       </div>
 
-      {/* 正解者一覧（daily がある時だけ） */}
-      {daily && winners.length > 0 && (
+      {/* 集計後履歴 */}
+      {history.length > 0 && (
         <div className="bg-white shadow p-4 rounded-lg">
-          <h2 className="text-lg font-bold mb-2">正解者一覧</h2>
+          <h2 className="text-lg font-bold mb-2">集計後履歴（nibuichi_daily）</h2>
           <ul className="space-y-1">
-            {winners.map((w, i) => {
-              const info = userMap[w.uid] ?? {};
-              return (
-                <li key={i} className="border-b py-1">
-                  {info.nickname}（{info.xAccount}）
-                  <span className="text-gray-500"> / 予想：{w.prediction}</span>
-                </li>
-              );
-            })}
+            {history.map((h, i) => (
+              <li key={i} className="border-b py-1">
+                UID：{h.uid} / 予想：{h.prediction} / 結果：{h.result} / {h.rewardPoints}pt
+              </li>
+            ))}
           </ul>
         </div>
       )}
 
-      {/* 全ユーザーの投票状況（当日も表示） */}
+      {/* 投票状況 */}
       {predictions.length > 0 && (
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-2">全ユーザーの投票状況</h2>
@@ -218,8 +230,8 @@ export default function NibuichiHistoryPage() {
         </div>
       )}
 
-      {/* daily も predictions も無い場合 */}
-      {selectedDate && !daily && predictions.length === 0 && (
+      {/* データなし */}
+      {selectedDate && !daily && predictions.length === 0 && history.length === 0 && (
         <div className="text-center text-gray-500">
           この日のデータはありません
         </div>
