@@ -1,19 +1,11 @@
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 initializeApp();
 const db = getFirestore();
 
-/* ============================================================
-   共通：昨日の日付を取得
-============================================================ */
-function getYesterdayDateString() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
 
 /* ============================================================
    既存：ガチャ機能
@@ -623,6 +615,17 @@ export const editNibuichiGlobalStats = onCall(
 );
 
 /* ============================================================
+   JST版：昨日の日付を取得
+============================================================ */
+function getYesterdayDateString() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  jst.setDate(jst.getDate() - 1);
+  return jst.toISOString().slice(0, 10);
+}
+
+
+/* ============================================================
    ★ 自動：ニブイチ前日集計（毎朝6:05）
 ============================================================ */
 export const processNibuichiDaily = onSchedule(
@@ -635,6 +638,7 @@ export const processNibuichiDaily = onSchedule(
     console.log("=== processNibuichiDaily START ===");
 
     const targetDate = getYesterdayDateString();
+    console.log("targetDate:", targetDate);
 
     const dailyRef = db.collection("nibuichi_global").doc(targetDate);
     const dailySnap = await dailyRef.get();
@@ -653,8 +657,11 @@ export const processNibuichiDaily = onSchedule(
       .where("date", "==", targetDate)
       .get();
 
+    console.log("pred count:", predSnap.size);
+
     const statsBatch = db.batch();
     const userBatch = db.batch();
+    const deleteBatch = db.batch();
 
     let globalWin = 0;
     let globalDraw = 0;
@@ -675,6 +682,7 @@ export const processNibuichiDaily = onSchedule(
 
       const isHit = prediction === result;
 
+      // ★ ユーザー戦績更新
       statsBatch.set(
         userStatsRef,
         {
@@ -685,6 +693,7 @@ export const processNibuichiDaily = onSchedule(
         { merge: true }
       );
 
+      // ★ ポイント付与
       if (isHit && rewardPoints > 0) {
         const userRef = db.collection("users").doc(uid);
         userBatch.update(userRef, {
@@ -692,15 +701,40 @@ export const processNibuichiDaily = onSchedule(
         });
       }
 
+      // ★ グローバル集計
       if (result === "nibuni") globalWin++;
       if (result === "nibuichi") globalDraw++;
       if (result === "nibuzero") globalLose++;
       if (result === "bakuado") globalBakuado++;
+
+      // ★★★ 履歴保存（新仕様）
+      const historyRef = db
+        .collection("nibuichi_daily")
+        .doc(targetDate)
+        .collection("predictions")
+        .doc(uid);
+
+      statsBatch.set(
+        historyRef,
+        {
+          uid,
+          prediction,
+          result,
+          rewardPoints,
+          createdAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+      // ★★★ 予想削除
+      deleteBatch.delete(docSnap.ref);
     }
 
     await statsBatch.commit();
     await userBatch.commit();
+    await deleteBatch.commit();
 
+    // ★ グローバル戦績更新
     const globalRef = db.collection("nibuichi_global").doc("stats");
     await globalRef.set(
       {
@@ -713,7 +747,7 @@ export const processNibuichiDaily = onSchedule(
       { merge: true }
     );
 
-    // ★★★ 追加：systemLogs に記録（管理画面が読む形式）
+    // ★ systemLogs
     await db.collection("systemLogs").add({
       type: "nibuichiDailyReset",
       executedAt: Timestamp.now(),
@@ -725,23 +759,26 @@ export const processNibuichiDaily = onSchedule(
 );
 
 
+
 /* ============================================================
-   ★ 手動：ニブイチ前日集計
+   ★ 手動：ニブイチ前日集計（履歴保存＋予想削除版）
 ============================================================ */
 export const manualResetNibuichiDaily = onCall(
   { region: "us-central1" },
   async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+    const adminUid = request.auth?.uid;
+    if (!adminUid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
     console.log("=== manualResetNibuichiDaily START ===");
 
     const targetDate = getYesterdayDateString();
+    console.log("targetDate:", targetDate);
 
     const dailyRef = db.collection("nibuichi_global").doc(targetDate);
     const dailySnap = await dailyRef.get();
 
     if (!dailySnap.exists) {
+      console.log("昨日の結果が未登録のため終了");
       return { message: "昨日の結果が未登録のため終了" };
     }
 
@@ -756,6 +793,7 @@ export const manualResetNibuichiDaily = onCall(
 
     const statsBatch = db.batch();
     const userBatch = db.batch();
+    const deleteBatch = db.batch();
 
     let globalWin = 0;
     let globalDraw = 0;
@@ -764,10 +802,10 @@ export const manualResetNibuichiDaily = onCall(
 
     for (const docSnap of predSnap.docs) {
       const data = docSnap.data();
-      const uid = data.uid;
+      const userId = data.uid;
       const prediction = data.prediction;
 
-      const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
+      const userStatsRef = db.collection("nibuichi_user_stats").doc(userId);
       const userStatsSnap = await userStatsRef.get();
 
       const userStats = userStatsSnap.exists
@@ -776,6 +814,7 @@ export const manualResetNibuichiDaily = onCall(
 
       const isHit = prediction === result;
 
+      // ★ ユーザー戦績更新
       statsBatch.set(
         userStatsRef,
         {
@@ -786,22 +825,48 @@ export const manualResetNibuichiDaily = onCall(
         { merge: true }
       );
 
+      // ★ ポイント付与
       if (isHit && rewardPoints > 0) {
-        const userRef = db.collection("users").doc(uid);
+        const userRef = db.collection("users").doc(userId);
         userBatch.update(userRef, {
           points: FieldValue.increment(rewardPoints),
         });
       }
 
+      // ★ グローバル集計
       if (result === "nibuni") globalWin++;
       if (result === "nibuichi") globalDraw++;
       if (result === "nibuzero") globalLose++;
       if (result === "bakuado") globalBakuado++;
+
+      // ★★★ 履歴保存（新仕様）
+      const historyRef = db
+        .collection("nibuichi_daily")
+        .doc(targetDate)
+        .collection("predictions")
+        .doc(userId);
+
+      statsBatch.set(
+        historyRef,
+        {
+          uid: userId,
+          prediction,
+          result,
+          rewardPoints,
+          createdAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+      // ★★★ 予想削除
+      deleteBatch.delete(docSnap.ref);
     }
 
     await statsBatch.commit();
     await userBatch.commit();
+    await deleteBatch.commit();
 
+    // ★ グローバル戦績更新
     const globalRef = db.collection("nibuichi_global").doc("stats");
     await globalRef.set(
       {
@@ -814,11 +879,11 @@ export const manualResetNibuichiDaily = onCall(
       { merge: true }
     );
 
-    // ★★★ 追加：管理画面が読めるログ形式に統一
+    // ★ systemLogs
     await db.collection("systemLogs").add({
-      type: "nibuichiDailyReset",   // ← 自動と同じ形式に統一
+      type: "nibuichiDailyReset",
       executedAt: Timestamp.now(),
-      executedBy: uid,
+      executedBy: adminUid,
       targetDate,
     });
 
@@ -828,12 +893,13 @@ export const manualResetNibuichiDaily = onCall(
   }
 );
 
+
 /* ============================================================
-   ★ ニブイチ：週次リセット（毎週月曜 6:00）
+   ★ ニブイチ：週次リセット（毎週火曜 6:00）
 ============================================================ */
 export const resetNibuichiWeekly = onSchedule(
   {
-    schedule: "0 21 * * 1", // JST 6:00（月曜）
+    schedule: "0 21 * * 2", // JST 6:00（火曜）
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
@@ -853,11 +919,66 @@ export const resetNibuichiWeekly = onSchedule(
 
     await batch.commit();
 
+    await db
+      .collection("nibuichi_global")
+      .doc("stats")
+      .set(
+        {
+          weeklyResetAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
     await db.collection("systemLogs").add({
       type: "weeklyReset",
       executedAt: Timestamp.now(),
     });
 
     console.log("=== resetNibuichiWeekly END ===");
+  }
+);
+/* ============================================================
+   ★ ニブイチ：月次リセット（毎月2日 6:00）
+============================================================ */
+export const resetNibuichiMonthly = onSchedule(
+  {
+    schedule: "0 21 2 * *", // JST 6:00（毎月2日）
+    timeZone: "Asia/Tokyo",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("=== resetNibuichiMonthly START ===");
+
+    const snap = await db.collection("nibuichi_user_stats").get();
+    const batch = db.batch();
+
+    for (const docSnap of snap.docs) {
+      batch.update(docSnap.ref, {
+        monthlyTotal: 0,
+        monthlyHit: 0,
+        updatedAt: Timestamp.now(),
+      });
+    }
+
+    await batch.commit();
+
+    // ★ 月次リセット日時を保存
+    await db
+      .collection("nibuichi_global")
+      .doc("stats")
+      .set(
+        {
+          monthlyResetAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+    // ★ systemLogs に記録
+    await db.collection("systemLogs").add({
+      type: "monthlyReset",
+      executedAt: Timestamp.now(),
+    });
+
+    console.log("=== resetNibuichiMonthly END ===");
   }
 );

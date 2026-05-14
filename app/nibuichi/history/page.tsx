@@ -30,7 +30,6 @@ export default function NibuichiHistoryPage() {
 
       setUser(u);
 
-      // 履歴取得（例外が起きても止まらない）
       await fetchHistory(u.uid);
       await fetchPointHistory(u.uid);
 
@@ -41,41 +40,46 @@ export default function NibuichiHistoryPage() {
   }, []);
 
   /* ============================================================
-     ニブイチ履歴取得（修正版）
+     ニブイチ履歴取得（新仕様：nibuichi_daily を読む）
   ============================================================ */
   const fetchHistory = async (uid: string) => {
     try {
-      const col = collection(db, "nibuichi_user_predictions");
-      const q = query(col, where("uid", "==", uid), orderBy("date", "desc"));
-      const snap = await getDocs(q);
+      const dailyCol = collection(db, "nibuichi_daily");
+      const dailySnap = await getDocs(dailyCol);
 
       const list: any[] = [];
 
-      for (const docSnap of snap.docs) {
-        const data = docSnap.data();
+      for (const dayDoc of dailySnap.docs) {
+        const date = dayDoc.id;
 
-        // 🔥 結果は nibuichi_global/{date} に保存されている
-        const resultRef = doc(db, "nibuichi_global", data.date);
-        const resultSnap = await getDoc(resultRef);
+        // 各日の predictions/{uid} を読む
+        const predRef = doc(db, "nibuichi_daily", date, "predictions", uid);
+        const predSnap = await getDoc(predRef);
 
-        const result = resultSnap.exists() ? resultSnap.data().result : null;
+        if (!predSnap.exists()) continue; // その日は予想していない
+
+        const data = predSnap.data();
 
         list.push({
-          date: data.date,
+          date,
           prediction: data.prediction,
-          result,
+          result: data.result,
+          hit: data.prediction === data.result,
         });
       }
+
+      // 日付降順に並べる
+      list.sort((a, b) => (a.date < b.date ? 1 : -1));
 
       setHistory(list);
     } catch (err) {
       console.error("fetchHistory error:", err);
-      setHistory([]); // ← エラーでも空配列で UI を動かす
+      setHistory([]);
     }
   };
 
   /* ============================================================
-     ニブイチ獲得ポイント履歴（修正版）
+     ニブイチ獲得ポイント履歴（そのままでOK）
   ============================================================ */
   const fetchPointHistory = async (uid: string) => {
     try {
@@ -97,7 +101,7 @@ export default function NibuichiHistoryPage() {
       setPointHistory(list);
     } catch (err) {
       console.error("fetchPointHistory error:", err);
-      setPointHistory([]); // ← エラーでも空配列
+      setPointHistory([]);
     }
   };
 
@@ -125,26 +129,19 @@ export default function NibuichiHistoryPage() {
         )}
 
         <div className="space-y-3">
-          {history.map((item, i) => {
-            const hit = item.result && item.prediction === item.result;
+          {history.map((item, i) => (
+            <div key={i} className="border p-3 rounded-lg bg-gray-50">
+              <div className="font-bold">{item.date}</div>
+              <div>予想：{item.prediction}</div>
+              <div>結果：{item.result ?? "未確定"}</div>
 
-            return (
-              <div
-                key={i}
-                className="border p-3 rounded-lg bg-gray-50"
-              >
-                <div className="font-bold">{item.date}</div>
-                <div>予想：{item.prediction}</div>
-                <div>結果：{item.result ?? "未確定"}</div>
-
-                {item.result && (
-                  <div className={hit ? "text-green-600" : "text-red-600"}>
-                    {hit ? "的中！" : "ハズレ"}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              {item.result && (
+                <div className={item.hit ? "text-green-600" : "text-red-600"}>
+                  {item.hit ? "的中！" : "ハズレ"}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -160,10 +157,7 @@ export default function NibuichiHistoryPage() {
 
         <div className="space-y-3">
           {pointHistory.map((item) => (
-            <div
-              key={item.id}
-              className="border p-3 rounded-lg bg-gray-50"
-            >
+            <div key={item.id} className="border p-3 rounded-lg bg-gray-50">
               <div className="font-bold">
                 {item.createdAt?.toDate
                   ? item.createdAt.toDate().toLocaleString()
