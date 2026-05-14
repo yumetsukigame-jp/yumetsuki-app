@@ -560,31 +560,41 @@ export const getNibuichiUserStats = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
+    // 個人戦績
     const statsRef = db.collection("nibuichi_user_stats").doc(uid);
     const statsSnap = await statsRef.get();
     const stats = statsSnap.exists
       ? statsSnap.data()
       : { total: 0, hit: 0, rate: 0 };
 
+    // 今日の予想
     const predRef = db
       .collection("nibuichi_user_predictions")
       .doc(`${uid}_${today}`);
     const predSnap = await predRef.get();
     const todayPrediction = predSnap.exists ? predSnap.data() : null;
 
+    // 総合戦績
     const globalRef = db.collection("nibuichi_global").doc("stats");
     const globalSnap = await globalRef.get();
     const global = globalSnap.exists
       ? globalSnap.data()
       : { win: 0, draw: 0, lose: 0, bakuado: 0 };
 
+    // ★ 今日の結果（重要）
+    const todayResultRef = db.collection("nibuichi_global").doc(today);
+    const todayResultSnap = await todayResultRef.get();
+    const todayResult = todayResultSnap.exists ? todayResultSnap.data() : null;
+
     return {
       stats,
       todayPrediction,
       global,
+      todayResult, // ← ★ 追加
     };
   }
 );
+
 
 /* ============================================================
    ニブイチ：総合戦績編集

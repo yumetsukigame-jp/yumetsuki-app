@@ -10,11 +10,13 @@ export default function NibuichiPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [stats, setStats] = useState<any>(null); // 個人戦績
-  const [todayPrediction, setTodayPrediction] = useState<any>(null); // 今日の予想
-  const [globalStats, setGlobalStats] = useState<any>(null); // ゆめつき戦績
+  const [stats, setStats] = useState<any>(null);
+  const [todayPrediction, setTodayPrediction] = useState<any>(null);
+  const [globalStats, setGlobalStats] = useState<any>(null);
 
-  const [selected, setSelected] = useState<string | null>(null); // 選択中
+  const [todayResult, setTodayResult] = useState<any>(null); // ← ★ 今日の結果
+
+  const [selected, setSelected] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   // -----------------------------
@@ -44,8 +46,8 @@ export default function NibuichiPage() {
       setStats(res.data.stats ?? null);
       setTodayPrediction(res.data.todayPrediction ?? null);
       setGlobalStats(res.data.global ?? null);
+      setTodayResult(res.data.todayResult ?? null); // ← ★ 追加
 
-      // 予想済みなら選択状態に反映
       if (res.data.todayPrediction?.prediction) {
         setSelected(res.data.todayPrediction.prediction);
       }
@@ -65,12 +67,14 @@ export default function NibuichiPage() {
     // すでに確定済みなら何もしない
     if (todayPrediction?.fixed || todayPrediction?.prediction) return;
 
+    // ★ 結果確定済みなら予想禁止
+    if (todayResult?.processed === true) return;
+
     setSending(true);
     try {
       const fn = httpsCallable(functions, "saveNibuichiPrediction");
       await fn({ prediction: selected });
 
-      // 🔥 Firestore の最新状態を再取得して UI 更新
       await fetchStats();
     } catch (err) {
       console.error(err);
@@ -94,9 +98,6 @@ export default function NibuichiPage() {
     );
   }
 
-  // -----------------------------
-  // 選択肢
-  // -----------------------------
   const options = [
     { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
     { key: "nibuni", label: "ニブニ", img: "/nibuichi/nibuni.webp" },
@@ -105,14 +106,16 @@ export default function NibuichiPage() {
   ];
 
   // -----------------------------
-  // 確定済み判定（fixed が無くても prediction があれば確定扱い）
+  // ★ 確定済み判定
   // -----------------------------
-  const isFixed = todayPrediction?.fixed || todayPrediction?.prediction;
+  const isFixed =
+    todayPrediction?.fixed ||
+    todayPrediction?.prediction ||
+    todayResult?.processed === true; // ← ★ 今日の結果が確定していたら予想禁止
 
   return (
     <div className="max-w-md mx-auto p-4 space-y-6">
 
-      {/* トップ画像 */}
       <div className="w-full">
         <Image
           src="/nibuichi/top.webp"
@@ -154,14 +157,19 @@ export default function NibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の予想</h2>
 
-        {/* 選択中の表示 */}
+        {/* ★ 結果確定済みメッセージ */}
+        {todayResult?.processed && (
+          <div className="text-center text-red-600 font-bold mb-3">
+            本日の結果はすでに確定済みです
+          </div>
+        )}
+
         {!isFixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
             選択中：{selected}
           </div>
         )}
 
-        {/* 確定済みの表示 */}
         {isFixed && (
           <div className="text-center text-green-600 font-bold mb-3">
             本日は選択済みです：{todayPrediction?.prediction}
@@ -192,7 +200,6 @@ export default function NibuichiPage() {
           ))}
         </div>
 
-        {/* 予想確定ボタン */}
         {!isFixed && (
           <div className="mt-4 text-center">
             <button
