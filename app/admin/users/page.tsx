@@ -21,7 +21,7 @@ export default function UsersPage() {
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
   const fetchUsers = async () => {
-    // ★★★★★ ここが追加部分：createdAt が無いユーザーを自動修正 ★★★★★
+    // ★ createdAt が無いユーザーを自動修正
     const allSnap = await getDocs(collection(db, "users"));
     for (const d of allSnap.docs) {
       const data = d.data();
@@ -31,7 +31,6 @@ export default function UsersPage() {
         });
       }
     }
-    // ★★★★★ 追加ここまで ★★★★★
 
     // createdAt で並び替え
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
@@ -222,6 +221,29 @@ export default function UsersPage() {
           <p><strong>メール：</strong> {user.email || "不明"}</p>
           <p><strong>名前：</strong> {user.name || "未登録"}</p>
           <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
+
+          {/* ★ サブスク状態 */}
+          <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
+
+          <button
+            onClick={async () => {
+              await updateDoc(doc(db, "users", user.id), {
+                subscriber: !user.subscriber,
+              });
+              alert("サブスク状態を更新しました");
+              fetchUsers();
+            }}
+            style={{
+              padding: "6px 10px",
+              background: user.subscriber ? "#dc2626" : "#16a34a",
+              color: "white",
+              borderRadius: "6px",
+              border: "none",
+              marginBottom: "8px",
+            }}
+          >
+            {user.subscriber ? "サブスク解除" : "サブスク付与"}
+          </button>
 
           {!user.xAccountConfirmed ? (
             <button

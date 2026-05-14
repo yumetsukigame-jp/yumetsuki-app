@@ -10,7 +10,10 @@ import { onAuthStateChanged } from "firebase/auth";
 
 export default function Home() {
   const [points, setPoints] = useState<number | null>(null);
+  const [nickname, setNickname] = useState<string | null>(null);
   const [xAccount, setXAccount] = useState<string | null>(null);
+  const [subscriber, setSubscriber] = useState<boolean>(false);
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -45,10 +48,14 @@ export default function Home() {
       if (snap.exists()) {
         const data = snap.data();
         setPoints(data.points || 0);
+        setNickname(data.displayName || "名無し");
         setXAccount(data.xAccount || null);
+        setSubscriber(data.subscriber === true);
       } else {
         setPoints(0);
+        setNickname("名無し");
         setXAccount(null);
+        setSubscriber(false);
       }
 
       // ★ 今日のニブイチ予想取得
@@ -118,13 +125,28 @@ export default function Home() {
         }}
       />
 
-      <h2 style={{ marginBottom: "10px" }}>ようこそ ゆめつきの書斎へ</h2>
-
-      {xAccount && (
-        <p style={{ fontSize: "18px", color: "#444", marginBottom: "10px" }}>
-          X アカウント：{xAccount}
-        </p>
+      {/* ★ サブスクバッジ */}
+      {subscriber && (
+        <div
+          style={{
+            background: "#facc15",
+            color: "#78350f",
+            padding: "6px 12px",
+            borderRadius: "8px",
+            fontWeight: "bold",
+            display: "inline-block",
+            marginBottom: "10px",
+          }}
+        >
+          ★ サブスクライバー
+        </div>
       )}
+
+      {/* ★ 名前表示（ニックネーム + Xアカウント） */}
+      <h2 style={{ marginBottom: "10px" }}>
+        {nickname}
+        {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
+      </h2>
 
       <h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
         現在のポイント：
@@ -133,7 +155,7 @@ export default function Home() {
         </span>
       </h1>
 
-      {/* 🟡 今日のニブイチ参加状況 */}
+      {/* 🟡 今日のニブイチ */}
       <Section title="今日のニブイチ" color="#eab308">
         <div
           style={{
@@ -159,7 +181,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🟣 ガチャ関連 */}
+      {/* 🟣 ガチャ */}
       <Section title="ガチャ" color="#a855f7">
         <MenuButton href="/gacha/list" color="#a855f7">
           ガチャ一覧を見る
@@ -172,7 +194,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🔵 ポイント関連 */}
+      {/* 🔵 ポイント */}
       <Section title="ポイント関連" color="#2563eb">
         <MenuButton href="/code" color="#2563eb">
           コード入力でポイント獲得
@@ -185,7 +207,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🟢 アカウント関連 */}
+      {/* 🟢 アカウント */}
       <Section title="アカウント" color="#16a34a">
         <MenuButton href="/archive" color="#16a34a">
           書庫を見る
