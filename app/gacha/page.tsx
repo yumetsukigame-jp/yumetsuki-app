@@ -96,9 +96,12 @@ export default function GachaInner() {
         setLoading(false);
         return;
       }
+
       const userSnap = await getDoc(doc(db, "users", uid));
       const user = userSnap.data();
-      if (!user?.isSubscriber) {
+
+      // ★ Firestore の構造に合わせて修正（subscriber を参照）
+      if (!user?.subscriber) {
         setError("このガチャはサブスク会員限定です");
         setLoading(false);
         return;
