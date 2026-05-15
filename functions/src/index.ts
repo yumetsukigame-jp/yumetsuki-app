@@ -141,12 +141,16 @@ export const getPublicGachaList = onCall(
         expiresAt: data.expiresAt ?? null,
         createdAt: data.createdAt ?? null,
 
-        // ★ これが無いと一覧に出ない
+        // ★ 追加
+        resetType: data.resetType ?? "none",
+
+        // ★ publicFlags も追加済み
         publicFlags: data.publicFlags ?? [],
       };
     });
   }
 );
+
 
 
 export const useGachaCode = onCall(
@@ -674,8 +678,12 @@ export const getNibuichiUserStats = onCall(
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
 
-    const todayJst = nowJST();
-    const today = getDateStringJST(todayJst);
+    // ★ JST の今日を正しく取得
+    const today = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+    )
+      .toISOString()
+      .slice(0, 10);
 
     // 個人戦績
     const statsRef = db.collection("nibuichi_user_stats").doc(uid);
@@ -712,6 +720,7 @@ export const getNibuichiUserStats = onCall(
   }
 );
 
+
 /* ============================================================
    ニブイチ：総合戦績編集
 ============================================================ */
@@ -723,7 +732,8 @@ export const editNibuichiGlobalStats = onCall(
 
     const { win, draw, lose, bakuado } = request.data;
 
-    const ref = db.collection("nibuichi_global").doc("stats");
+    // ★ 修正：正しいコレクションに書き込む
+    const ref = db.collection("nibuichi_global_stats").doc("stats");
 
     await ref.set(
       {
@@ -739,6 +749,7 @@ export const editNibuichiGlobalStats = onCall(
     return { message: "総合戦績を更新しました" };
   }
 );
+
 
 /* ============================================================
    ★ 自動：ニブイチ前日集計（毎朝6:05）

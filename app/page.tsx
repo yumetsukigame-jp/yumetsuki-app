@@ -4,10 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import {
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -25,7 +22,7 @@ export default function Home() {
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
 
-  // ★ 全体戦績（stats ドキュメント）
+  // ★ 全体戦績
   const [totalBattle, setTotalBattle] = useState(0);
   const [totalWin, setTotalWin] = useState(0);
   const [totalDraw, setTotalDraw] = useState(0);
@@ -43,8 +40,14 @@ export default function Home() {
       }
 
       setLoggedIn(true);
-
       const uid = user.uid;
+
+      // ★ JST 今日
+      const today = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+      )
+        .toISOString()
+        .slice(0, 10);
 
       // 管理者判定
       const adminRef = doc(db, "admins", uid);
@@ -68,24 +71,21 @@ export default function Home() {
         setSubscriber(false);
       }
 
-      // ★ 今日のニブイチ予想
-      const today = new Date().toISOString().slice(0, 10);
+      // ★ 今日のニブイチ予想（JST）
       const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
       const predSnap = await getDoc(predRef);
-
       if (predSnap.exists()) {
         setTodayPrediction(predSnap.data().prediction);
       }
 
-      // ★ 今日の結果
-      const resultRef = doc(db, "nibuichi_global", "today");
+      // ★ 今日の結果（JST）
+      const resultRef = doc(db, "nibuichi_global", today);
       const resultSnap = await getDoc(resultRef);
-
       if (resultSnap.exists()) {
         setTodayResult(resultSnap.data().result);
       }
 
-      // ★ 全体戦績（nibuichi_global_stats/stats）
+      // ★ 全体戦績
       const statsRef = doc(db, "nibuichi_global_stats", "stats");
       const statsSnap = await getDoc(statsRef);
 
@@ -198,7 +198,7 @@ export default function Home() {
           {nibuichiStatus}
         </div>
 
-        {/* ★ 全体戦績（A の位置） */}
+        {/* ★ 全体戦績 */}
         <div
           style={{
             marginTop: "12px",

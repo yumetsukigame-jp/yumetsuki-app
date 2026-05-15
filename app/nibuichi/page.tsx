@@ -14,7 +14,7 @@ export default function NibuichiPage() {
   const [todayPrediction, setTodayPrediction] = useState<any>(null);
   const [globalStats, setGlobalStats] = useState<any>(null);
 
-  const [todayResult, setTodayResult] = useState<any>(null); // ← ★ 今日の結果
+  const [todayResult, setTodayResult] = useState<any>(null); // 今日の結果
 
   const [selected, setSelected] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -46,7 +46,7 @@ export default function NibuichiPage() {
       setStats(res.data.stats ?? null);
       setTodayPrediction(res.data.todayPrediction ?? null);
       setGlobalStats(res.data.global ?? null);
-      setTodayResult(res.data.todayResult ?? null); // ← ★ 追加
+      setTodayResult(res.data.todayResult ?? null);
 
       if (res.data.todayPrediction?.prediction) {
         setSelected(res.data.todayPrediction.prediction);
@@ -64,11 +64,11 @@ export default function NibuichiPage() {
     if (!user) return;
     if (!selected) return;
 
-    // すでに確定済みなら何もしない
-    if (todayPrediction?.fixed || todayPrediction?.prediction) return;
-
-    // ★ 結果確定済みなら予想禁止
+    // ★ 結果確定済みなら絶対に送信させない
     if (todayResult?.processed === true) return;
+
+    // ★ すでに予想済みなら送信させない
+    if (todayPrediction?.prediction) return;
 
     setSending(true);
     try {
@@ -106,12 +106,9 @@ export default function NibuichiPage() {
   ];
 
   // -----------------------------
-  // ★ 確定済み判定
+  // ★ 結果確定フェーズ判定（最優先）
   // -----------------------------
-  const isFixed =
-    todayPrediction?.fixed ||
-    todayPrediction?.prediction ||
-    todayResult?.processed === true; // ← ★ 今日の結果が確定していたら予想禁止
+  const isFixed = todayResult?.processed === true;
 
   return (
     <div className="max-w-md mx-auto p-4 space-y-6">
@@ -157,22 +154,31 @@ export default function NibuichiPage() {
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の予想</h2>
 
-        {/* ★ 結果確定済みメッセージ */}
-        {todayResult?.processed && (
-          <div className="text-center text-red-600 font-bold mb-3">
-            本日の結果はすでに確定済みです
-          </div>
+        {/* ★ 結果確定フェーズ（最優先表示） */}
+        {isFixed && (
+          <>
+            <div className="text-center text-red-600 font-bold mb-3">
+              本日の結果はすでに確定済みです
+            </div>
+
+            {todayPrediction?.prediction && (
+              <div className="text-center text-green-600 font-bold mb-3">
+                あなたの予想：{todayPrediction.prediction}
+              </div>
+            )}
+          </>
         )}
 
+        {/* ★ 未確定フェーズ */}
         {!isFixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
             選択中：{selected}
           </div>
         )}
 
-        {isFixed && (
+        {!isFixed && todayPrediction?.prediction && (
           <div className="text-center text-green-600 font-bold mb-3">
-            本日は選択済みです：{todayPrediction?.prediction}
+            本日は選択済みです：{todayPrediction.prediction}
           </div>
         )}
 
@@ -180,11 +186,15 @@ export default function NibuichiPage() {
           {options.map((opt) => (
             <button
               key={opt.key}
-              disabled={isFixed}
+              disabled={isFixed || todayPrediction?.prediction}
               onClick={() => setSelected(opt.key)}
               className={`border rounded-lg overflow-hidden shadow ${
                 selected === opt.key ? "ring-4 ring-blue-400" : ""
-              } ${isFixed ? "opacity-60 cursor-not-allowed" : ""}`}
+              } ${
+                isFixed || todayPrediction?.prediction
+                  ? "opacity-60 cursor-not-allowed"
+                  : ""
+              }`}
             >
               <Image
                 src={opt.img}
@@ -200,7 +210,8 @@ export default function NibuichiPage() {
           ))}
         </div>
 
-        {!isFixed && (
+        {/* ★ 送信ボタン（未確定時のみ） */}
+        {!isFixed && !todayPrediction?.prediction && (
           <div className="mt-4 text-center">
             <button
               disabled={!selected || sending}
