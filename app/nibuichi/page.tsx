@@ -35,13 +35,19 @@ export default function NibuichiPage() {
   }, []);
 
   // -----------------------------
-  // 戦績・今日の予想取得
+  // 戦績・今日の予想取得（JST 日付を送る）
   // -----------------------------
   const fetchStats = async () => {
     setLoading(true);
     try {
+      // ★ JST の今日を生成
+      const todayJST = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+      ).toISOString().slice(0, 10);
+
+      // ★ JST の今日をバックエンドに渡す
       const fn = httpsCallable(functions, "getNibuichiUserStats");
-      const res: any = await fn({});
+      const res: any = await fn({ date: todayJST });
 
       setStats(res.data.stats ?? null);
       setTodayPrediction(res.data.todayPrediction ?? null);
