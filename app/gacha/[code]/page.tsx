@@ -49,16 +49,9 @@ export default function GachaDetailPage() {
        ★ publicFlags によるアクセス制御
     -------------------------------------------------- */
 
-    // 🌐 公開 → 誰でもOK
     const isPublic = flags.includes("public");
-
-    // 🔒 limited → 過去に引いた人だけ
     const isLimited = flags.includes("limited");
-
-    // ⭐ subscriber → サブスク限定
     const isSubscriberOnly = flags.includes("subscriber");
-
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者限定
     const isWinnerOnly = flags.includes("nibuichi_winner");
 
     // ★ 公開でない場合はログイン必須
@@ -85,7 +78,8 @@ export default function GachaDetailPage() {
       const userSnap = await getDoc(doc(db, "users", currentUid!));
       const user = userSnap.data();
 
-      if (!user?.isSubscriber) {
+      // ★ 修正：Firestore の構造に合わせて subscriber を参照
+      if (!user?.subscriber) {
         setError("このガチャはサブスク会員限定です");
         setLoading(false);
         return;
@@ -127,7 +121,6 @@ export default function GachaDetailPage() {
   if (error) return <p style={{ padding: 24, color: "red" }}>{error}</p>;
   if (!gacha) return null;
 
-  // ★ 残数は履歴ベース
   const remaining =
     gacha.mode === "count"
       ? gacha.totalCount - allResults.length
