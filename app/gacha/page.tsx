@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
-import { functions, db } from "@/firebase";
+import { functions, db, auth } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function GachaInner() {
@@ -21,7 +21,7 @@ export default function GachaInner() {
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
-  // URL から code を取得（useSearchParams を使わない）
+  // URL から code を取得
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -30,6 +30,23 @@ export default function GachaInner() {
     }
   }, []);
 
+  /* --------------------------------------------------
+     publicFlags 表示
+  -------------------------------------------------- */
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+    };
+    if (flags.length === 0) return "（未設定）";
+    return flags.map((f) => map[f] ?? f).join(" / ");
+  };
+
+  /* --------------------------------------------------
+     ガチャコード確認（publicFlags 判定）
+  -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
     setGacha(null);
@@ -50,10 +67,67 @@ export default function GachaInner() {
       return;
     }
 
-    setGacha(snap.data());
+    const data = snap.data();
+    const flags: string[] = data.publicFlags ?? [];
+    const uid = auth.currentUser?.uid ?? null;
+
+    const isPublic = flags.includes("public");
+    const isSubscriberOnly = flags.includes("subscriber");
+    const isWinnerOnly = flags.includes("nibuichi_winner");
+
+    /* --------------------------------------------------
+       publicFlags によるアクセス制御
+       ※ limited は「コードを知っていれば誰でも引ける」ため制限しない
+    -------------------------------------------------- */
+
+    // 🌐 公開でない場合はログイン必須
+    if (!isPublic) {
+      if (!uid) {
+        setError("このガチャは限定公開です（ログインが必要です）");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // ⭐ subscriber → サブスク会員のみ
+    if (isSubscriberOnly) {
+      if (!uid) {
+        setError("このガチャはサブスク会員限定です");
+        setLoading(false);
+        return;
+      }
+      const userSnap = await getDoc(doc(db, "users", uid));
+      const user = userSnap.data();
+      if (!user?.isSubscriber) {
+        setError("このガチャはサブスク会員限定です");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
+    if (isWinnerOnly) {
+      if (!uid) {
+        setError("このガチャは前日のニブイチ的中者限定です");
+        setLoading(false);
+        return;
+      }
+      const winnerSnap = await getDoc(doc(db, "nibuichiWinners", uid));
+      if (!winnerSnap.exists()) {
+        setError("このガチャは前日のニブイチ的中者限定です");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // ★ アクセスOK
+    setGacha(data);
     setLoading(false);
   };
 
+  /* --------------------------------------------------
+     ガチャ実行
+  -------------------------------------------------- */
   const play = async () => {
     setError("");
     setResult(null);
@@ -82,7 +156,9 @@ export default function GachaInner() {
     }
   };
 
-  // 1リール（縦3段）
+  /* --------------------------------------------------
+     1リール（縦3段）
+  -------------------------------------------------- */
   const Reel = ({ frames }: any) => {
     return (
       <div
@@ -96,7 +172,6 @@ export default function GachaInner() {
           position: "relative",
         }}
       >
-        {/* 回転中は frames を縦にスクロール */}
         <div
           style={{
             animation: spinning ? "spin 0.15s linear infinite" : "none",
@@ -120,7 +195,6 @@ export default function GachaInner() {
           ))}
         </div>
 
-        {/* 停止後：中央段だけ当選枠に差し替える */}
         {stop && (
           <div
             style={{
@@ -142,7 +216,6 @@ export default function GachaInner() {
           </div>
         )}
 
-        {/* CSS アニメーション */}
         <style>{`
           @keyframes spin {
             0% { transform: translateY(0); }
@@ -215,6 +288,11 @@ export default function GachaInner() {
           <h2 style={{ textAlign: "center", marginBottom: 10 }}>
             {gacha.title}
           </h2>
+
+          {/* 公開設定 */}
+          <p style={{ textAlign: "center", marginBottom: 10 }}>
+            {renderFlags(gacha.publicFlags)}
+          </p>
 
           <button
             onClick={play}

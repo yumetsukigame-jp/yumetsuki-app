@@ -124,28 +124,30 @@ export default function NibuichiHistoryPage() {
     }
 
     /* -----------------------------
-       ⑤ ユーザー情報取得
+       ⑤ ユーザー情報取得（predictions + history 両方）
     ----------------------------- */
     const map: Record<string, any> = {};
 
-    for (const p of preds) {
-      const uid = p.uid;
-      if (!map[uid]) {
-        const userRef = doc(db, "users", uid);
-        const userSnap = await getDoc(userRef);
+    const allUids = new Set([
+      ...preds.map((p) => p.uid),
+      ...histList.map((h) => h.uid),
+    ]);
 
-        if (userSnap.exists()) {
-          const u = userSnap.data();
-          map[uid] = {
-            nickname: u.displayName ?? "名無し",
-            xAccount: u.xAccount ?? "",
-          };
-        } else {
-          map[uid] = {
-            nickname: "不明ユーザー",
-            xAccount: "",
-          };
-        }
+    for (const uid of allUids) {
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const u = userSnap.data();
+        map[uid] = {
+          nickname: u.displayName ?? "名無し",
+          xAccount: u.xAccount ?? "",
+        };
+      } else {
+        map[uid] = {
+          nickname: "不明ユーザー",
+          xAccount: "",
+        };
       }
     }
 
@@ -198,16 +200,22 @@ export default function NibuichiHistoryPage() {
         )}
       </div>
 
-      {/* 集計後履歴 */}
+      {/* 集計後履歴（nibuichi_daily） */}
       {history.length > 0 && (
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-2">集計後履歴（nibuichi_daily）</h2>
           <ul className="space-y-1">
-            {history.map((h, i) => (
-              <li key={i} className="border-b py-1">
-                UID：{h.uid} / 予想：{h.prediction} / 結果：{h.result} / {h.rewardPoints}pt
-              </li>
-            ))}
+            {history.map((h, i) => {
+              const info = userMap[h.uid] ?? {};
+              return (
+                <li key={i} className="border-b py-1">
+                  {info.nickname ?? "不明ユーザー"}（{info.xAccount ?? ""}）
+                  <span className="text-gray-500">
+                    {" "} / 予想：{h.prediction} / 結果：{h.result} / {perUserReward}pt
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

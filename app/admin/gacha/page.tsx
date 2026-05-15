@@ -7,6 +7,13 @@ import { functions } from "@/firebase";
 type Mode = "count" | "prob";
 type ResetType = "none" | "daily";
 
+// ★ 公開設定の型（複数選択）
+type PublicFlag =
+  | "public"
+  | "limited"
+  | "subscriber"
+  | "nibuichi_winner";
+
 type FrameInput = {
   label: string;
   maxCount: number | "";
@@ -30,7 +37,8 @@ export default function GachaCreatePage() {
   const [maxPerUser, setMaxPerUser] = useState<number | "">(1);
   const [expiresAt, setExpiresAt] = useState<string>("");
 
-  const [publicFlag, setPublicFlag] = useState(false);
+  // ★ publicFlags（複数選択）
+  const [publicFlags, setPublicFlags] = useState<PublicFlag[]>(["public"]);
 
   const [thumbnail, setThumbnail] = useState<string>("");
   const [gachaImages, setGachaImages] = useState<string[]>([]);
@@ -44,6 +52,14 @@ export default function GachaCreatePage() {
       .then((data) => setGachaImages(data))
       .catch(() => setGachaImages([]));
   }, []);
+
+  const toggleFlag = (flag: PublicFlag) => {
+    setPublicFlags((prev) =>
+      prev.includes(flag)
+        ? prev.filter((f) => f !== flag)
+        : [...prev, flag]
+    );
+  };
 
   const addFrame = () => {
     setFrames((prev) => [
@@ -140,7 +156,7 @@ export default function GachaCreatePage() {
         title,
         mode: mode === "prob" ? "probability" : "count",
         resetType,
-        publicFlag,
+        publicFlags, // ★ 配列で送信
         thumbnail,
         point: {
           cost: Number(cost),
@@ -195,6 +211,47 @@ export default function GachaCreatePage() {
           style={inputStyle}
         />
 
+        {/* ★ 公開設定（複数選択） */}
+        <div style={boxStyle}>
+          <div style={labelStyle}>公開設定（複数選択可）</div>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("public")}
+              onChange={() => toggleFlag("public")}
+            />{" "}
+            全体公開
+          </label>
+
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("limited")}
+              onChange={() => toggleFlag("limited")}
+            />{" "}
+            限定公開
+          </label>
+
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("subscriber")}
+              onChange={() => toggleFlag("subscriber")}
+            />{" "}
+            サブスク限定
+          </label>
+
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("nibuichi_winner")}
+              onChange={() => toggleFlag("nibuichi_winner")}
+            />{" "}
+            前日のニブイチ的中者限定
+          </label>
+        </div>
+
         {/* 抽選方式 */}
         <div style={boxStyle}>
           <div style={labelStyle}>抽選方式</div>
@@ -234,27 +291,6 @@ export default function GachaCreatePage() {
               onChange={() => setResetType("daily")}
             />{" "}
             デイリー（毎日6時）
-          </label>
-        </div>
-
-        {/* 公開 / 限定 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>公開設定</div>
-          <label>
-            <input
-              type="radio"
-              checked={publicFlag === true}
-              onChange={() => setPublicFlag(true)}
-            />{" "}
-            公開
-          </label>
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="radio"
-              checked={publicFlag === false}
-              onChange={() => setPublicFlag(false)}
-            />{" "}
-            限定
           </label>
         </div>
 

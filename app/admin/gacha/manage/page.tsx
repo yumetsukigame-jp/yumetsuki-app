@@ -48,10 +48,25 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
-  const recreateCode = async (frames: any[], title: string, totalCount: number) => {
-    const fn = httpsCallable(functions, "createGachaCode");
-    const res: any = await fn({ frames, title, totalCount });
-    alert(`新しいコードを発行しました：${res.data.code}`);
+  /* -----------------------------------------
+     ★ 再発行＝内容変更（updateDoc）
+  ----------------------------------------- */
+  const updateGacha = async (codeData: any) => {
+    if (!confirm("このガチャの内容を更新しますか？")) return;
+
+    await updateDoc(doc(db, "gachaCodes", codeData.id), {
+      title: codeData.title,
+      frames: codeData.frames,
+      totalCount: codeData.totalCount,
+      mode: codeData.mode,
+      resetType: codeData.resetType,
+      publicFlags: codeData.publicFlags,
+      point: codeData.point,
+      thumbnail: codeData.thumbnail,
+      expiresAt: codeData.expiresAt,
+    });
+
+    alert("ガチャ内容を更新しました");
     await loadCodes();
   };
 
@@ -66,16 +81,20 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
-  const updatePublic = async (id: string, value: boolean) => {
-    await updateDoc(doc(db, "gachaCodes", id), { public: value });
+  /* -----------------------------------------
+     ★ publicFlags 更新
+  ----------------------------------------- */
+  const updatePublicFlags = async (id: string, newFlags: string[]) => {
+    await updateDoc(doc(db, "gachaCodes", id), {
+      publicFlags: newFlags,
+      public: null,
+    });
     await loadCodes();
   };
 
   const getUserInfo = async (uid: string) => {
     const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) {
-      return { label: uid };
-    }
+    if (!snap.exists()) return { label: uid };
 
     const data = snap.data();
     const displayName = data.displayName ?? "";
@@ -141,8 +160,8 @@ export default function GachaManagePage() {
             getResultsByCode={getResultsByCode}
             updateTitle={updateTitle}
             updateExpire={updateExpire}
-            updatePublic={updatePublic}
-            recreateCode={recreateCode}
+            updatePublicFlags={updatePublicFlags}
+            updateGacha={updateGacha}
             deleteCode={deleteCode}
           />
         ))}
@@ -159,8 +178,8 @@ function GachaItem({
   getResultsByCode,
   updateTitle,
   updateExpire,
-  updatePublic,
-  recreateCode,
+  updatePublicFlags,
+  updateGacha,
   deleteCode,
 }) {
   const [open, setOpen] = useState(false);
@@ -177,14 +196,16 @@ function GachaItem({
     }
   };
 
+  /* -----------------------------------------
+     ★ 残数＝履歴ベースで計算
+  ----------------------------------------- */
   const remaining =
     codeData.mode === "count"
-      ? codeData.totalCount -
-        codeData.frames.reduce((a: number, f: any) => a + f.usedCount, 0)
+      ? codeData.totalCount - results.length
       : "∞";
 
   /* ------------------------------
-     ★ 使用回数リセット関数
+     ★ 使用回数リセット
   ------------------------------ */
   const resetUsage = async () => {
     if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
@@ -193,6 +214,20 @@ function GachaItem({
     const res: any = await fn({ code: codeData.code });
 
     alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
+  };
+
+  /* ------------------------------
+     ★ publicFlags 表示
+  ------------------------------ */
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+    };
+    if (flags.length === 0) return "（未設定）";
+    return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
   return (
@@ -204,7 +239,7 @@ function GachaItem({
         marginBottom: 24,
       }}
     >
-      {/* タイトル + 削除ボタン */}
+      {/* タイトル + 削除 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2
           onClick={toggle}
@@ -226,25 +261,32 @@ function GachaItem({
       <p>
         1回 {codeData.point.cost} pt（上限 {codeData.point.maxPerUser} 回）
       </p>
+
+      {/* ★ 履歴ベースの残数 */}
       <p>残数：{remaining}</p>
 
-      <p>
-        公開設定：
-        {codeData.public ? (
-          <span style={{ color: "#10b981", fontWeight: "bold" }}>公開</span>
-        ) : (
-          <span style={{ color: "#6b7280", fontWeight: "bold" }}>限定</span>
-        )}
-      </p>
+      {/* 公開設定 */}
+      <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 
-      <button
-        onClick={() => updatePublic(codeData.id, !codeData.public)}
-        style={btnToggle}
-      >
-        {codeData.public ? "限定にする" : "公開にする"}
-      </button>
+      {/* 公開設定の編集 */}
+      <div style={{ marginBottom: 12 }}>
+        {["public", "limited", "subscriber", "nibuichi_winner"].map((flag) => (
+          <label key={flag} style={{ marginRight: 12 }}>
+            <input
+              type="checkbox"
+              checked={codeData.publicFlags?.includes(flag)}
+              onChange={(e) => {
+                const flags = new Set(codeData.publicFlags ?? []);
+                e.target.checked ? flags.add(flag) : flags.delete(flag);
+                updatePublicFlags(codeData.id, Array.from(flags));
+              }}
+            />
+            {renderFlags([flag])}
+          </label>
+        ))}
+      </div>
 
-      {/* ★ 使用回数リセットボタン */}
+      {/* 使用回数リセット */}
       <button
         onClick={resetUsage}
         style={{
@@ -314,13 +356,12 @@ function GachaItem({
             コピー
           </button>
 
+          {/* ★ 再発行＝内容更新 */}
           <button
-            onClick={() =>
-              recreateCode(codeData.frames, codeData.title, codeData.totalCount)
-            }
+            onClick={() => updateGacha(codeData)}
             style={btnGreen}
           >
-            再発行
+            内容を更新
           </button>
 
           <button
@@ -354,7 +395,7 @@ function FrameList({ frames, results, getUserInfo, mode }) {
             <h3>
               {f.label || f.name}（
               {mode === "count"
-                ? `${f.usedCount}/${f.maxCount}`
+                ? `${frameResults.length}/${f.maxCount}`
                 : `${Math.round(f.probability * 100)}%`}
               ）
             </h3>
@@ -438,15 +479,5 @@ const btnRedSmall = {
   borderRadius: 6,
   border: "none",
   fontSize: 14,
-  cursor: "pointer",
-};
-
-const btnToggle = {
-  marginBottom: 12,
-  padding: "6px 12px",
-  background: "#6b7280",
-  color: "white",
-  borderRadius: 6,
-  border: "none",
   cursor: "pointer",
 };

@@ -37,19 +37,31 @@ export default function PublicGachaListPage() {
     const uid = auth.currentUser?.uid ?? null;
     const now = new Date();
 
-    // 公開ガチャ
+    /* --------------------------------------------------
+       公開ガチャ（publicFlags.includes("public")）
+    -------------------------------------------------- */
     let filtered = list.filter((g: any) => {
       if (!g.title || g.title.trim() === "") return false;
 
       const exp = toDateSafe(g.expiresAt);
       if (exp && exp < now) return false;
 
-      return g.public === true;
+      return (
+        Array.isArray(g.publicFlags) &&
+        g.publicFlags.includes("public")
+      );
     });
 
-    // 限定ガチャ（履歴があるものだけ）
+    /* --------------------------------------------------
+       限定ガチャ（publicFlags に public が無いもの）
+       → B仕様：履歴があるものだけ一覧に追加
+    -------------------------------------------------- */
     if (uid) {
-      const limited = list.filter((g: any) => !g.public);
+      const limited = list.filter(
+        (g: any) =>
+          Array.isArray(g.publicFlags) &&
+          !g.publicFlags.includes("public")
+      );
 
       const checks = limited.map(async (g: any) => {
         const historyRef = doc(db, "userGachaHistory", `${uid}_${g.code}`);
@@ -70,7 +82,9 @@ export default function PublicGachaListPage() {
 
     filtered = filtered.filter((g) => g.createdAt);
 
-    // ソート
+    /* --------------------------------------------------
+       ソート
+    -------------------------------------------------- */
     let sorted = [...filtered];
 
     if (sort === "new") {
@@ -95,6 +109,20 @@ export default function PublicGachaListPage() {
 
     setGachas(sorted);
     setLoading(false);
+  };
+
+  /* --------------------------------------------------
+     publicFlags 表示
+  -------------------------------------------------- */
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+    };
+    if (!Array.isArray(flags)) return "（未設定）";
+    return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
   return (
@@ -137,12 +165,6 @@ export default function PublicGachaListPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
-          const remaining =
-            g.mode === "count"
-              ? g.totalCount -
-                g.frames.reduce((a: number, f: any) => a + (f.usedCount ?? 0), 0)
-              : "∞";
-
           const totalUsed = g.frames.reduce(
             (sum: number, f: any) => sum + (f.usedCount ?? 0),
             0
@@ -153,6 +175,11 @@ export default function PublicGachaListPage() {
             g.mode === "count" && totalMax > 0
               ? Math.round((totalUsed / totalMax) * 100)
               : 0;
+
+          const remaining =
+            g.mode === "count"
+              ? totalMax - totalUsed
+              : "∞";
 
           const isOpen = open[g.code] ?? false;
 
@@ -189,26 +216,8 @@ export default function PublicGachaListPage() {
                 {g.title}
               </h2>
 
-              {/* ★ デイリーバッジ */}
-              {g.resetType === "daily" && (
-                <span
-                  style={{
-                    display: "inline-block",
-                    background: "#2563eb",
-                    color: "white",
-                    padding: "2px 8px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    marginBottom: 6,
-                  }}
-                >
-                  デイリー
-                </span>
-              )}
-
-              <p style={{ margin: "6px 0" }}>
-                種類：{g.public ? "🌐 公開" : "🔒 限定"}
-              </p>
+              {/* 公開設定 */}
+              <p style={{ margin: "6px 0" }}>{renderFlags(g.publicFlags)}</p>
 
               {/* 抽選方式 */}
               <p style={{ margin: "6px 0" }}>

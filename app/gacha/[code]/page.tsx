@@ -12,6 +12,7 @@ export default function GachaDetailPage() {
 
   const [gacha, setGacha] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [resultsLoading, setResultsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [allResults, setAllResults] = useState<any[]>([]);
@@ -42,18 +43,33 @@ export default function GachaDetailPage() {
     }
 
     const data = snap.data();
+    const flags: string[] = data.publicFlags ?? [];
 
     /* --------------------------------------------------
-       ★ 限定ガチャのアクセス判定（B仕様）
-       public === false の場合は履歴を確認
+       ★ publicFlags によるアクセス制御
     -------------------------------------------------- */
-    if (!data.public) {
-      if (!currentUid) {
-        setError("このガチャは限定公開です");
-        setLoading(false);
-        return;
-      }
 
+    // 🌐 公開 → 誰でもOK
+    const isPublic = flags.includes("public");
+
+    // 🔒 limited → 過去に引いた人だけ
+    const isLimited = flags.includes("limited");
+
+    // ⭐ subscriber → サブスク限定
+    const isSubscriberOnly = flags.includes("subscriber");
+
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者限定
+    const isWinnerOnly = flags.includes("nibuichi_winner");
+
+    // ★ 公開でない場合はログイン必須
+    if (!isPublic && !currentUid) {
+      setError("このガチャは限定公開です");
+      setLoading(false);
+      return;
+    }
+
+    // 🔒 limited → 過去に引いた人だけ
+    if (isLimited) {
       const historyRef = doc(db, "userGachaHistory", `${currentUid}_${code}`);
       const historySnap = await getDoc(historyRef);
 
@@ -64,21 +80,45 @@ export default function GachaDetailPage() {
       }
     }
 
-    setGacha(data);
+    // ⭐ subscriber → サブスク会員のみ
+    if (isSubscriberOnly) {
+      const userSnap = await getDoc(doc(db, "users", currentUid!));
+      const user = userSnap.data();
 
-    // ★ このガチャの結果だけ取得
+      if (!user?.isSubscriber) {
+        setError("このガチャはサブスク会員限定です");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
+    if (isWinnerOnly) {
+      const winnerSnap = await getDoc(doc(db, "nibuichiWinners", currentUid!));
+      if (!winnerSnap.exists()) {
+        setError("このガチャは前日のニブイチ的中者限定です");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // ★ アクセスOK
+    setGacha(data);
+    setLoading(false);
+
+    /* --------------------------------------------------
+       ★ このガチャの結果を取得
+    -------------------------------------------------- */
+    setResultsLoading(true);
+
     const fn = httpsCallable(functions, "getGachaResults");
     const res: any = await fn();
     const list = res.data.filter((r: any) => r.code === code);
 
     setAllResults(list);
-    setLoading(false);
+    setResultsLoading(false);
   };
 
-  /* --------------------------------------------------
-     ★ ガチャ実行せず、統一ガチャ画面へ遷移
-     （演出を統一するため）
-  -------------------------------------------------- */
   const play = () => {
     router.push(`/gacha?code=${code}`);
   };
@@ -87,10 +127,10 @@ export default function GachaDetailPage() {
   if (error) return <p style={{ padding: 24, color: "red" }}>{error}</p>;
   if (!gacha) return null;
 
+  // ★ 残数は履歴ベース
   const remaining =
     gacha.mode === "count"
-      ? gacha.totalCount -
-        gacha.frames.reduce((a: number, f: any) => a + (f.usedCount ?? 0), 0)
+      ? gacha.totalCount - allResults.length
       : "∞";
 
   return (
@@ -126,18 +166,20 @@ export default function GachaDetailPage() {
         ガチャを引く（演出あり）
       </button>
 
-      {/* ★ このガチャの全結果（簡易版） */}
       <h2 style={{ marginTop: 32 }}>📜 このガチャの当選状況</h2>
 
-      <SimpleFrameList
-        frames={gacha.frames}
-        mode={gacha.mode}
-        results={allResults}
-        currentUid={currentUid}
-        getUserInfo={getUserInfo}
-      />
+      {resultsLoading ? (
+        <p>当選状況を読み込み中…</p>
+      ) : (
+        <SimpleFrameList
+          frames={gacha.frames}
+          mode={gacha.mode}
+          results={allResults}
+          currentUid={currentUid}
+          getUserInfo={getUserInfo}
+        />
+      )}
 
-      {/* ★ このガチャの結果一覧ページへ */}
       <button
         onClick={() => router.push(`/gacha/results?code=${code}`)}
         style={{
@@ -155,7 +197,6 @@ export default function GachaDetailPage() {
         このガチャの結果一覧ページへ
       </button>
 
-      {/* ★ 他のガチャの結果一覧へ */}
       <button
         onClick={() => router.push(`/gacha/results`)}
         style={{
@@ -177,7 +218,7 @@ export default function GachaDetailPage() {
 }
 
 /* ------------------------------------------
-   ★ 簡易版 FrameList（displayName + xAccount 対応）
+   ★ 簡易版 FrameList
 ------------------------------------------ */
 function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any) {
   return (
@@ -191,7 +232,7 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
             <h3>
               {frameName}{" "}
               {mode === "count"
-                ? `（${f.usedCount}/${f.maxCount}）`
+                ? `（${list.length}/${f.maxCount}）`
                 : `（${Math.round(f.probability * 100)}%）`}
             </h3>
 
@@ -217,7 +258,7 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
 }
 
 /* ------------------------------------------
-   ★ 名前表示コンポーネント（displayName + xAccount）
+   ★ 名前表示
 ------------------------------------------ */
 function UserNameItem({ result, currentUid, getUserInfo }: any) {
   const [name, setName] = useState("読み込み中…");

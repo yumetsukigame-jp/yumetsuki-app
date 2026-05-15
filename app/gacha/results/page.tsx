@@ -7,7 +7,17 @@ import { doc, getDoc } from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /* --------------------------------------------------
-   内側コンポーネント（useSearchParams を使う部分）
+   Timestamp を安全に Date に変換する関数
+-------------------------------------------------- */
+function toDateSafe(ts: any) {
+  if (!ts) return null;
+  if (ts.toDate) return ts.toDate();
+  if (ts._seconds) return new Date(ts._seconds * 1000);
+  return null;
+}
+
+/* --------------------------------------------------
+   内側コンポーネント
 -------------------------------------------------- */
 function ResultsContent() {
   const [grouped, setGrouped] = useState<any>({});
@@ -19,7 +29,7 @@ function ResultsContent() {
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState<"new" | "old">("new");
 
-  const [loading, setLoading] = useState(true); // ★ 追加：読み込み中フラグ
+  const [loading, setLoading] = useState(true);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -31,10 +41,25 @@ function ResultsContent() {
     loadResults();
   }, []);
 
+  /* --------------------------------------------------
+     displayName + Xアカウント
+  -------------------------------------------------- */
+  const getUserInfo = async (uid: string) => {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (!snap.exists()) return "名無し";
+
+    const u = snap.data();
+    return u.displayName || u.xAccount || "名無し";
+  };
+
+  /* --------------------------------------------------
+     結果ロード
+  -------------------------------------------------- */
   const loadResults = async () => {
+    setLoading(true);
+
     const fn = httpsCallable(functions, "getGachaResults");
     const res: any = await fn();
-
     const list = res.data || [];
 
     // ★ ガチャコードで絞り込み
@@ -49,7 +74,7 @@ function ResultsContent() {
       groupedData[r.code].push(r);
     }
 
-    // ★ Firestore からタイトル・公開設定・枠情報・サムネを取得
+    // ★ Firestore からタイトル・publicFlags・枠情報・サムネを取得
     const titleMap: any = {};
     const metaMap: any = {};
 
@@ -63,7 +88,6 @@ function ResultsContent() {
 
       const d = snap.data();
 
-      // ★ タイトルなし（削除扱い）は除外
       if (!d.title || d.title.trim() === "") {
         delete groupedData[code];
         continue;
@@ -71,25 +95,29 @@ function ResultsContent() {
 
       titleMap[code] = d.title;
       metaMap[code] = {
-        public: d.public ?? false,
+        publicFlags: d.publicFlags ?? [],
         frames: d.frames ?? [],
         mode: d.mode,
-        thumbnail: d.thumbnail ?? "", // ★ サムネ画像
+        thumbnail: d.thumbnail ?? "",
       };
     }
 
-    // ★ 限定ガチャは「自分が引いたものだけ」残す
+    /* --------------------------------------------------
+       ★ B仕様：publicFlags によるアクセス制限はしない
+       → ただし limited の場合は「自分が引いたかどうか」を表示用に保持
+    -------------------------------------------------- */
     if (!filterCode && currentUid) {
       for (const code of Object.keys(groupedData)) {
         const info = metaMap[code];
+        const flags = info.publicFlags;
 
-        if (!info.public) {
+        const isLimited = flags.includes("limited");
+
+        if (isLimited) {
           const hasMine = groupedData[code].some(
             (r: any) => r.uid === currentUid
           );
-          if (!hasMine) {
-            delete groupedData[code];
-          }
+          metaMap[code].hasMine = hasMine;
         }
       }
     }
@@ -97,16 +125,21 @@ function ResultsContent() {
     setGrouped(groupedData);
     setTitles(titleMap);
     setMeta(metaMap);
-    setLoading(false); // ★ 読み込み完了
+    setLoading(false);
   };
 
-  // ★ displayName + Xアカウント
-  const getUserInfo = async (uid: string) => {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) return "不明なユーザー";
-
-    const u = snap.data();
-    return u.displayName || u.xAccount || "名無し";
+  /* --------------------------------------------------
+     publicFlags 表示
+  -------------------------------------------------- */
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+    };
+    if (flags.length === 0) return "（未設定）";
+    return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
   return (
@@ -208,7 +241,7 @@ function ResultsContent() {
         </div>
       </div>
 
-      {/* ★ 読み込み中表示 */}
+      {/* ★ 読み込み中 */}
       {loading ? (
         <p>結果読み込み中…</p>
       ) : Object.keys(grouped).length === 0 ? (
@@ -220,6 +253,7 @@ function ResultsContent() {
         Object.entries(grouped).map(([code, items]: any) => {
           const title = titles[code];
           const info = meta[code];
+          const flags = info.publicFlags ?? [];
 
           return (
             <div
@@ -247,7 +281,7 @@ function ResultsContent() {
                 <div>
                   <h2 style={{ margin: 0 }}>{title}</h2>
                   <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
-                    {info.public ? "🌐 公開" : "🔒 限定"}
+                    {renderFlags(flags)}
                   </p>
                 </div>
                 <span style={{ fontSize: 24 }}>
@@ -255,7 +289,7 @@ function ResultsContent() {
                 </span>
               </div>
 
-              {/* ★ サムネ画像 */}
+              {/* サムネ */}
               {info.thumbnail && (
                 <div style={{ marginTop: 12, textAlign: "center" }}>
                   <img
@@ -293,7 +327,7 @@ function ResultsContent() {
 }
 
 /* --------------------------------------------------
-   枠ごとの表示
+   枠ごとの表示（履歴ベース）
 -------------------------------------------------- */
 function FrameList({
   items,
@@ -310,6 +344,7 @@ function FrameList({
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
+        // ★ 履歴ベースで抽出
         let list = items.filter((r: any) => r.frameName === frameName);
 
         if (filterMine && currentUid) {
@@ -321,7 +356,7 @@ function FrameList({
           list = list.filter(
             (r: any) =>
               r.frameName.toLowerCase().includes(s) ||
-              r.userName?.toLowerCase().includes(s)
+              (r.userName ?? "").toLowerCase().includes(s)
           );
         }
 
@@ -336,7 +371,7 @@ function FrameList({
             <h3>
               {frameName}{" "}
               {mode === "count"
-                ? `（${f.usedCount}/${f.maxCount}）`
+                ? `（${list.length}/${f.maxCount}）`
                 : `（${Math.round(f.probability * 100)}%）`}
             </h3>
 
@@ -389,7 +424,7 @@ function UserResultItem({ result, getUserInfo, highlight }: any) {
 }
 
 /* --------------------------------------------------
-   外側：Suspense で包む
+   外側：Suspense
 -------------------------------------------------- */
 export default function GachaResultsPage() {
   return (

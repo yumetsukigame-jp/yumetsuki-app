@@ -33,6 +33,20 @@ export default function AdminGachaListPage() {
 
   if (loading) return <div style={{ padding: 24 }}>読み込み中…</div>;
 
+  // ★ publicFlags を人間向けに変換
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+    };
+
+    if (flags.length === 0) return "（未設定）";
+
+    return flags.map((f) => map[f] ?? f).join(" / ");
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <h1>🎛 ガチャ管理一覧</h1>
@@ -67,18 +81,16 @@ export default function AdminGachaListPage() {
           )}
 
           {/* タイトル */}
-          <h2 style={{ marginBottom: 8 }}>
-            {c.title}
-          </h2>
+          <h2 style={{ marginBottom: 8 }}>{c.title}</h2>
 
           {/* コード */}
           <p style={{ margin: "4px 0" }}>
             コード：<strong>{c.code}</strong>
           </p>
 
-          {/* 公開 / 限定 */}
+          {/* 公開設定（publicFlags） */}
           <p style={{ margin: "4px 0" }}>
-            種類：{c.public ? "🌐 公開" : "🔒 限定"}
+            種類：{renderFlags(c.publicFlags)}
           </p>
 
           {/* 抽選方式 */}

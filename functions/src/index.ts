@@ -43,7 +43,7 @@ export const createGachaCode = onCall(
         title,
         mode,
         resetType,
-        publicFlag,
+        publicFlags, // ← ★ 配列で受け取る
         thumbnail,
         point,
         totalCount,
@@ -51,10 +51,25 @@ export const createGachaCode = onCall(
         expiresAt,
       } = request.data;
 
+      // 必須チェック
       if (!title || !mode || !resetType || !point || !frames) {
         throw new HttpsError("invalid-argument", "必要な項目が不足しています");
       }
 
+      // ★ publicFlags のバリデーション
+      if (!Array.isArray(publicFlags)) {
+        throw new HttpsError("invalid-argument", "publicFlags は配列である必要があります");
+      }
+
+      const validFlags = ["public", "limited", "subscriber", "nibuichi_winner"];
+
+      for (const flag of publicFlags) {
+        if (!validFlags.includes(flag)) {
+          throw new HttpsError("invalid-argument", `publicFlags に不正な値があります: ${flag}`);
+        }
+      }
+
+      // コード生成
       const code =
         "YG-" + Math.random().toString(36).substring(2, 10).toUpperCase();
 
@@ -63,14 +78,18 @@ export const createGachaCode = onCall(
       const gachaData: any = {
         code,
         title,
-        mode,
-        resetType,
-        public: publicFlag,
+        mode, // "count" or "probability"
+        resetType, // "none" or "daily"
+
+        // ★ publicFlags をそのまま保存
+        publicFlags,
+
         thumbnail: thumbnail ?? "",
         point: {
           cost: point.cost,
           maxPerUser: point.maxPerUser,
         },
+
         frames: frames.map((f: any) => ({
           label: f.label,
           maxCount: f.maxCount ?? null,
@@ -79,10 +98,12 @@ export const createGachaCode = onCall(
           rewardMin: f.rewardMin,
           rewardMax: f.rewardMax,
         })),
+
         totalCount: totalCount ?? null,
         createdAt: Timestamp.now(),
-        // expiresAt は UI 側で JST を意識して渡す前提
+
         expiresAt: expiresAt ? Timestamp.fromDate(new Date(expiresAt)) : null,
+
         owner: uid,
       };
 
@@ -95,6 +116,8 @@ export const createGachaCode = onCall(
     }
   }
 );
+
+
 
 export const getPublicGachaList = onCall(
   { region: "us-central1" },
@@ -110,7 +133,6 @@ export const getPublicGachaList = onCall(
       return {
         code: d.id,
         title: data.title ?? "",
-        public: data.public ?? false,
         thumbnail: data.thumbnail ?? "",
         mode: data.mode,
         point: data.point,
@@ -118,10 +140,14 @@ export const getPublicGachaList = onCall(
         frames: data.frames ?? [],
         expiresAt: data.expiresAt ?? null,
         createdAt: data.createdAt ?? null,
+
+        // ★ これが無いと一覧に出ない
+        publicFlags: data.publicFlags ?? [],
       };
     });
   }
 );
+
 
 export const useGachaCode = onCall(
   { region: "us-central1" },
@@ -141,11 +167,74 @@ export const useGachaCode = onCall(
 
       const gacha: any = gachaSnap.data();
 
-      // ★ 期限切れ判定を JST ベースに統一
+      // ★ publicFlags（複数条件）
+      const flags: string[] = gacha.publicFlags ?? [];
+
+      // ★ 期限切れ判定（JST）
       const now = nowJST();
       if (gacha.expiresAt && gacha.expiresAt.toDate() < now) {
         throw new HttpsError("failed-precondition", "期限切れのガチャです");
       }
+
+      /* ============================================================
+         ★ 公開設定（public / limited）
+         ※ limited の場合は「URLを知っている人だけ引ける」など
+         ※ 今回は特に制限しないが、必要ならここに追加可能
+      ============================================================ */
+
+      // 例：もし limited の場合に owner だけ引けるようにしたいなら
+      // if (flags.includes("limited") && gacha.owner !== uid) { ... }
+
+      /* ============================================================
+         ★ サブスク限定
+      ============================================================ */
+      if (flags.includes("subscriber")) {
+        const userRef = db.collection("users").doc(uid);
+        const userSnap = await userRef.get();
+        const userData = userSnap.data();
+
+        if (!userData?.subscriber) {
+          throw new HttpsError(
+            "permission-denied",
+            "このガチャはサブスクライバー限定です"
+          );
+        }
+      }
+
+      /* ============================================================
+         ★ 前日のニブイチ的中者限定
+      ============================================================ */
+      if (flags.includes("nibuichi_winner")) {
+        const yesterday = getYesterdayDateStringJST();
+
+        const histRef = db
+          .collection("nibuichi_daily")
+          .doc(yesterday)
+          .collection("predictions")
+          .doc(uid);
+
+        const histSnap = await histRef.get();
+
+        // ★ Admin SDK は exists（プロパティ）
+        if (!histSnap.exists) {
+          throw new HttpsError(
+            "permission-denied",
+            "前日のニブイチ的中者のみ引けるガチャです"
+          );
+        }
+
+        const hist = histSnap.data();
+        if (!hist || hist.prediction !== hist.result) {
+          throw new HttpsError(
+            "permission-denied",
+            "前日のニブイチ的中者のみ引けるガチャです"
+          );
+        }
+      }
+
+      /* ============================================================
+         ★ ここから先は既存のガチャ処理（変更なし）
+      ============================================================ */
 
       const userRef = db.collection("users").doc(uid);
       const userSnap = await userRef.get();
@@ -274,6 +363,8 @@ export const useGachaCode = onCall(
     }
   }
 );
+
+
 /* ============================================================
    ガチャ結果一覧
 ============================================================ */

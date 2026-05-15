@@ -4,7 +4,10 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -18,9 +21,16 @@ export default function Home() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // ★ ニブイチ関連
+  // ★ 今日のニブイチ
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
+
+  // ★ 全体戦績（stats ドキュメント）
+  const [totalBattle, setTotalBattle] = useState(0);
+  const [totalWin, setTotalWin] = useState(0);
+  const [totalDraw, setTotalDraw] = useState(0);
+  const [totalLose, setTotalLose] = useState(0);
+  const [totalBakuado, setTotalBakuado] = useState(0);
 
   const router = useRouter();
 
@@ -58,7 +68,7 @@ export default function Home() {
         setSubscriber(false);
       }
 
-      // ★ 今日のニブイチ予想取得
+      // ★ 今日のニブイチ予想
       const today = new Date().toISOString().slice(0, 10);
       const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
       const predSnap = await getDoc(predRef);
@@ -67,12 +77,30 @@ export default function Home() {
         setTodayPrediction(predSnap.data().prediction);
       }
 
-      // ★ 今日の結果取得
+      // ★ 今日の結果
       const resultRef = doc(db, "nibuichi_global", "today");
       const resultSnap = await getDoc(resultRef);
 
       if (resultSnap.exists()) {
         setTodayResult(resultSnap.data().result);
+      }
+
+      // ★ 全体戦績（nibuichi_global_stats/stats）
+      const statsRef = doc(db, "nibuichi_global_stats", "stats");
+      const statsSnap = await getDoc(statsRef);
+
+      if (statsSnap.exists()) {
+        const s = statsSnap.data();
+        const win = s.win ?? 0;
+        const draw = s.draw ?? 0;
+        const lose = s.lose ?? 0;
+        const bakuado = s.bakuado ?? 0;
+
+        setTotalWin(win);
+        setTotalDraw(draw);
+        setTotalLose(lose);
+        setTotalBakuado(bakuado);
+        setTotalBattle(win + draw + lose + bakuado);
       }
 
       setLoading(false);
@@ -94,7 +122,7 @@ export default function Home() {
     );
   }
 
-  // ★ ニブイチ表示文言
+  // ★ 今日のニブイチ表示文言
   let nibuichiStatus = "未参加";
 
   if (todayPrediction && !todayResult) {
@@ -142,7 +170,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ★ 名前表示（ニックネーム + Xアカウント） */}
+      {/* ★ 名前表示 */}
       <h2 style={{ marginBottom: "10px" }}>
         {nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
@@ -168,6 +196,22 @@ export default function Home() {
           }}
         >
           {nibuichiStatus}
+        </div>
+
+        {/* ★ 全体戦績（A の位置） */}
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "12px",
+            background: "#fef3c7",
+            borderRadius: "8px",
+            fontSize: "16px",
+            textAlign: "center",
+            fontWeight: "bold",
+          }}
+        >
+          【現戦績】{totalBattle}戦
+          ({totalWin}勝/{totalDraw}分/{totalLose}負/{totalBakuado}爆アド)
         </div>
 
         <MenuButton href="/nibuichi" color="#eab308">
