@@ -143,7 +143,7 @@ export default function Home() {
   let nibuichiStatus = "未参加";
 
   if (todayPrediction && !todayResult) {
-    nibuichiStatus = `${todayPrediction}（確定済み）`;
+    nibuichiStatus = `${todayPrediction}（予想済）`;
   }
 
   if (todayPrediction && todayResult) {
