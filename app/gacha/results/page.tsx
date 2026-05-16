@@ -7,13 +7,16 @@ import { doc, getDoc } from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /* --------------------------------------------------
-   Timestamp → Date 安全変換
+   ユーザー名の整形（displayName + xAccount）
 -------------------------------------------------- */
-function toDateSafe(ts: any) {
-  if (!ts) return null;
-  if (ts.toDate) return ts.toDate();
-  if (ts._seconds) return new Date(ts._seconds * 1000);
-  return null;
+function formatUserName(u: any) {
+  const name = u.displayName || "";
+  const x = u.xAccount || "";
+
+  if (name && x) return `${name}（@${x}）`;
+  if (name) return name;
+  if (x) return `@${x}`;
+  return "名無し";
 }
 
 /* --------------------------------------------------
@@ -41,9 +44,9 @@ function ResultsContent() {
   const userCache = useRef<{ [uid: string]: string }>({});
 
   /* --------------------------------------------------
-     displayName + Xアカウント（キャッシュ付き）
+     Firestore からユーザー名取得（キャッシュ付き）
   -------------------------------------------------- */
-  const getUserInfo = async (uid: string) => {
+  const getUserName = async (uid: string) => {
     if (userCache.current[uid]) return userCache.current[uid];
 
     const snap = await getDoc(doc(db, "users", uid));
@@ -53,13 +56,13 @@ function ResultsContent() {
     }
 
     const u = snap.data();
-    const name = u.displayName || u.xAccount || "名無し";
+    const name = formatUserName(u);
     userCache.current[uid] = name;
     return name;
   };
 
   /* --------------------------------------------------
-     結果ロード
+     結果ロード（ここで userName を付与する）
   -------------------------------------------------- */
   const loadResults = async () => {
     setLoading(true);
@@ -68,10 +71,18 @@ function ResultsContent() {
     const res: any = await fn();
     const list = res.data || [];
 
+    // ★ ここで userName を付与する（重要）
+    const enriched = await Promise.all(
+      list.map(async (r: any) => {
+        const name = await getUserName(r.uid);
+        return { ...r, _userName: name.toLowerCase(), userName: name };
+      })
+    );
+
     // ★ ガチャコードで絞り込み
     let filtered = filterCode
-      ? list.filter((r: any) => r.code === filterCode)
-      : list;
+      ? enriched.filter((r: any) => r.code === filterCode)
+      : enriched;
 
     // ★ ガチャコードごとにグループ化
     const groupedData: any = {};
@@ -106,25 +117,6 @@ function ResultsContent() {
         mode: d.mode,
         thumbnail: d.thumbnail ?? "",
       };
-    }
-
-    /* --------------------------------------------------
-       ★ limited の場合は「自分が引いたか」を保持
-    -------------------------------------------------- */
-    if (!filterCode && currentUid) {
-      for (const code of Object.keys(groupedData)) {
-        const info = metaMap[code];
-        const flags = info.publicFlags;
-
-        const isLimited = flags.includes("limited");
-
-        if (isLimited) {
-          const hasMine = groupedData[code].some(
-            (r: any) => r.uid === currentUid
-          );
-          metaMap[code].hasMine = hasMine;
-        }
-      }
     }
 
     setGrouped(groupedData);
@@ -320,7 +312,6 @@ function ResultsContent() {
                     items={items}
                     framesMeta={info.frames}
                     mode={info.mode}
-                    getUserInfo={getUserInfo}
                     currentUid={currentUid}
                     filterMine={filterMine}
                     search={search}
@@ -342,34 +333,18 @@ function FrameList({
   items,
   framesMeta,
   mode,
-  getUserInfo,
   currentUid,
   filterMine,
   search,
   sortOrder,
 }: any) {
-  const [listWithNames, setListWithNames] = useState<any[]>([]);
-
-  useEffect(() => {
-    (async () => {
-      // ★ ユーザー名を付与
-      const enriched = await Promise.all(
-        items.map(async (r: any) => {
-          const name = await getUserInfo(r.uid);
-          return { ...r, _userName: name.toLowerCase() };
-        })
-      );
-      setListWithNames(enriched);
-    })();
-  }, [items]);
-
   return (
     <div>
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
-        // ★ 履歴ベースで抽出
-        let list = listWithNames.filter((r: any) => r.frameName === frameName);
+        // ★ 履歴ベースで抽出（すでに userName 付き）
+        let list = items.filter((r: any) => r.frameName === frameName);
 
         if (filterMine && currentUid) {
           list = list.filter((r: any) => r.uid === currentUid);
@@ -431,7 +406,7 @@ function UserResultItem({ result, highlight }: any) {
         color: highlight ? "#2563eb" : "black",
       }}
     >
-      {result._userName}：{result.reward} pt
+      {result.userName}：{result.reward} pt
       {highlight && " ← あなた"}
     </li>
   );

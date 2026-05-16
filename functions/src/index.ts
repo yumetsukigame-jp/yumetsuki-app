@@ -648,7 +648,7 @@ export const getNibuichiUserStats = onCall(
 ============================================================ */
 export const processNibuichiDaily = onSchedule(
   {
-    schedule: "5 6 * * *", // ← JST 6:05 に確実に実行される
+    schedule: "5 6 * * *",
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
@@ -670,6 +670,7 @@ export const processNibuichiDaily = onSchedule(
     const result = dailyData.result;
     const rewardPoints = dailyData.rewardPoints ?? 0;
 
+    // ★ 全予想を取得
     const predSnap = await db
       .collection("nibuichi_user_predictions")
       .where("date", "==", targetDate)
@@ -681,6 +682,24 @@ export const processNibuichiDaily = onSchedule(
       console.log("予想0件のため終了");
       return;
     }
+
+    /* ============================================================
+       ① 的中者数をカウント
+    ============================================================ */
+    let hitCount = 0;
+    for (const docSnap of predSnap.docs) {
+      const data = docSnap.data();
+      if (data.prediction === result) hitCount++;
+    }
+
+    /* ============================================================
+       ② 山分けポイント（切り捨て）
+    ============================================================ */
+    const perUserReward =
+      hitCount > 0 ? Math.floor(rewardPoints / hitCount) : 0;
+
+    console.log("hitCount:", hitCount);
+    console.log("perUserReward:", perUserReward);
 
     const statsBatch = db.batch();
     const userBatch = db.batch();
@@ -697,14 +716,16 @@ export const processNibuichiDaily = onSchedule(
       const uid = data.uid;
       const prediction = data.prediction;
 
+      const isHit = prediction === result;
+
+      /* ============================================================
+         個人戦績更新
+      ============================================================ */
       const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
       const userStatsSnap = await userStatsRef.get();
-
       const userStats = userStatsSnap.exists
         ? userStatsSnap.data()!
         : { total: 0, hit: 0 };
-
-      const isHit = prediction === result;
 
       statsBatch.set(
         userStatsRef,
@@ -716,18 +737,19 @@ export const processNibuichiDaily = onSchedule(
         { merge: true }
       );
 
-      if (isHit && rewardPoints > 0) {
+      /* ============================================================
+         ③ 的中者に山分けポイントを付与
+      ============================================================ */
+      if (isHit && perUserReward > 0) {
         const userRef = db.collection("users").doc(uid);
         userBatch.update(userRef, {
-          points: FieldValue.increment(rewardPoints),
+          points: FieldValue.increment(perUserReward),
         });
       }
 
-      if (result === "nibuni") globalWin++;
-      if (result === "nibuichi") globalDraw++;
-      if (result === "nibuzero") globalLose++;
-      if (result === "bakuado") globalBakuado++;
-
+      /* ============================================================
+         ④ 日別履歴（predictions）に perUserReward を保存
+      ============================================================ */
       const historyRef = db
         .collection("nibuichi_daily")
         .doc(targetDate)
@@ -740,12 +762,24 @@ export const processNibuichiDaily = onSchedule(
           uid,
           prediction,
           result,
-          rewardPoints,
+          rewardPoints,      // 総配布ポイント
+          perUserReward,     // ★ 山分け後ポイント
           createdAt: Timestamp.now(),
         },
         { merge: true }
       );
 
+      /* ============================================================
+         グローバル戦績
+      ============================================================ */
+      if (result === "nibuni") globalWin++;
+      if (result === "nibuichi") globalDraw++;
+      if (result === "nibuzero") globalLose++;
+      if (result === "bakuado") globalBakuado++;
+
+      /* ============================================================
+         アーカイブ & 削除
+      ============================================================ */
       const archiveRef = db
         .collection("nibuichi_user_predictions_archive")
         .doc(docSnap.id);
@@ -763,6 +797,9 @@ export const processNibuichiDaily = onSchedule(
     await archiveBatch.commit();
     await deleteBatch.commit();
 
+    /* ============================================================
+       グローバル戦績更新
+    ============================================================ */
     const globalRef = db.collection("nibuichi_global_stats").doc("stats");
     await globalRef.set(
       {
@@ -775,20 +812,10 @@ export const processNibuichiDaily = onSchedule(
       { merge: true }
     );
 
-    try {
-      await db.collection("systemLogs").add({
-        type: "nibuichiDailyReset",
-        executedAt: Timestamp.now(),
-        targetDate,
-      });
-      console.log("systemLogs に記録しました");
-    } catch (err) {
-      console.error("systemLogs 書き込み失敗:", err);
-    }
-
     console.log("=== processNibuichiDaily END ===");
   }
 );
+
 
 
 /* ============================================================
@@ -816,6 +843,7 @@ export const manualResetNibuichiDaily = onCall(
     const result = dailyData.result;
     const rewardPoints = dailyData.rewardPoints ?? 0;
 
+    // ★ 全予想を取得
     const predSnap = await db
       .collection("nibuichi_user_predictions")
       .where("date", "==", targetDate)
@@ -824,6 +852,24 @@ export const manualResetNibuichiDaily = onCall(
     if (predSnap.size === 0) {
       return { message: "予想0件のため処理なし" };
     }
+
+    /* ============================================================
+       ① 的中者数をカウント
+    ============================================================ */
+    let hitCount = 0;
+    for (const docSnap of predSnap.docs) {
+      const data = docSnap.data();
+      if (data.prediction === result) hitCount++;
+    }
+
+    /* ============================================================
+       ② 山分けポイント（切り捨て）
+    ============================================================ */
+    const perUserReward =
+      hitCount > 0 ? Math.floor(rewardPoints / hitCount) : 0;
+
+    console.log("hitCount:", hitCount);
+    console.log("perUserReward:", perUserReward);
 
     const statsBatch = db.batch();
     const userBatch = db.batch();
@@ -840,14 +886,17 @@ export const manualResetNibuichiDaily = onCall(
       const uid = data.uid;
       const prediction = data.prediction;
 
+      const isHit = prediction === result;
+
+      /* ============================================================
+         個人戦績更新
+      ============================================================ */
       const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
       const userStatsSnap = await userStatsRef.get();
 
       const userStats = userStatsSnap.exists
         ? userStatsSnap.data()!
         : { total: 0, hit: 0 };
-
-      const isHit = prediction === result;
 
       statsBatch.set(
         userStatsRef,
@@ -859,18 +908,19 @@ export const manualResetNibuichiDaily = onCall(
         { merge: true }
       );
 
-      if (isHit && rewardPoints > 0) {
+      /* ============================================================
+         ③ 的中者に山分けポイントを付与
+      ============================================================ */
+      if (isHit && perUserReward > 0) {
         const userRef = db.collection("users").doc(uid);
         userBatch.update(userRef, {
-          points: FieldValue.increment(rewardPoints),
+          points: FieldValue.increment(perUserReward),
         });
       }
 
-      if (result === "nibuni") globalWin++;
-      if (result === "nibuichi") globalDraw++;
-      if (result === "nibuzero") globalLose++;
-      if (result === "bakuado") globalBakuado++;
-
+      /* ============================================================
+         ④ 日別履歴（predictions）に perUserReward を保存
+      ============================================================ */
       const historyRef = db
         .collection("nibuichi_daily")
         .doc(targetDate)
@@ -883,12 +933,24 @@ export const manualResetNibuichiDaily = onCall(
           uid,
           prediction,
           result,
-          rewardPoints,
+          rewardPoints,      // 総配布ポイント
+          perUserReward,     // ★ 山分け後ポイント
           createdAt: Timestamp.now(),
         },
         { merge: true }
       );
 
+      /* ============================================================
+         グローバル戦績
+      ============================================================ */
+      if (result === "nibuni") globalWin++;
+      if (result === "nibuichi") globalDraw++;
+      if (result === "nibuzero") globalLose++;
+      if (result === "bakuado") globalBakuado++;
+
+      /* ============================================================
+         アーカイブ & 削除
+      ============================================================ */
       const archiveRef = db
         .collection("nibuichi_user_predictions_archive")
         .doc(docSnap.id);
@@ -906,6 +968,9 @@ export const manualResetNibuichiDaily = onCall(
     await archiveBatch.commit();
     await deleteBatch.commit();
 
+    /* ============================================================
+       グローバル戦績更新
+    ============================================================ */
     const globalRef = db.collection("nibuichi_global_stats").doc("stats");
     await globalRef.set(
       {
@@ -930,6 +995,7 @@ export const manualResetNibuichiDaily = onCall(
     return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
   }
 );
+
 
 /* ============================================================
    ★ ニブイチ：週次リセット（変更なし）

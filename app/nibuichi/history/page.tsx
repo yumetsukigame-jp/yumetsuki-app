@@ -5,12 +5,12 @@ import { auth, db } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   query,
   where,
   orderBy,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 
 export default function NibuichiHistoryPage() {
@@ -40,35 +40,39 @@ export default function NibuichiHistoryPage() {
   }, []);
 
   /* ============================================================
-     ニブイチ履歴取得（新仕様：nibuichi_daily を読む）
+     ★ 修正版：予想はアーカイブ + 当日分の両方から取得
   ============================================================ */
   const fetchHistory = async (uid: string) => {
     try {
-      const dailyCol = collection(db, "nibuichi_daily");
-      const dailySnap = await getDocs(dailyCol);
-
       const list: any[] = [];
 
-      for (const dayDoc of dailySnap.docs) {
-        const date = dayDoc.id;
+      /* -----------------------------
+         ① 過去の予想（アーカイブ）
+      ----------------------------- */
+      const arcCol = collection(db, "nibuichi_user_predictions_archive");
+      const qArc = query(arcCol, where("uid", "==", uid));
+      const arcSnap = await getDocs(qArc);
 
-        // 各日の predictions/{uid} を読む
-        const predRef = doc(db, "nibuichi_daily", date, "predictions", uid);
-        const predSnap = await getDoc(predRef);
-
-        if (!predSnap.exists()) continue; // その日は予想していない
-
-        const data = predSnap.data();
-
-        list.push({
-          date,
-          prediction: data.prediction,
-          result: data.result,
-          hit: data.prediction === data.result,
-        });
+      for (const docSnap of arcSnap.docs) {
+        const data = docSnap.data();
+        await pushHistoryItem(list, data, uid);
       }
 
-      // 日付降順に並べる
+      /* -----------------------------
+         ② 今日の予想（まだアーカイブされていない）
+      ----------------------------- */
+      const predCol = collection(db, "nibuichi_user_predictions");
+      const qPred = query(predCol, where("uid", "==", uid));
+      const predSnap = await getDocs(qPred);
+
+      for (const docSnap of predSnap.docs) {
+        const data = docSnap.data();
+        await pushHistoryItem(list, data, uid);
+      }
+
+      /* -----------------------------
+         日付降順にソート
+      ----------------------------- */
       list.sort((a, b) => (a.date < b.date ? 1 : -1));
 
       setHistory(list);
@@ -79,7 +83,41 @@ export default function NibuichiHistoryPage() {
   };
 
   /* ============================================================
-     ニブイチ獲得ポイント履歴（そのままでOK）
+     ★ 予想1件分の情報をまとめて history に push する関数
+  ============================================================ */
+  const pushHistoryItem = async (list: any[], data: any, uid: string) => {
+    const date = data.date;
+
+    /* 結果 */
+    const resultRef = doc(db, "nibuichi_global", date);
+    const resultSnap = await getDoc(resultRef);
+    const resultData = resultSnap.exists() ? resultSnap.data() : null;
+
+    /* 山分けポイント */
+    let perUserReward = 0;
+    const dailyRef = collection(db, "nibuichi_daily", date, "predictions");
+    const dailySnap = await getDocs(dailyRef);
+
+    dailySnap.forEach((d) => {
+      const h = d.data();
+      if (h.uid === uid) {
+        perUserReward = h.perUserReward ?? 0;
+      }
+    });
+
+    list.push({
+      date,
+      prediction: data.prediction,
+      result: resultData?.result ?? null,
+      perUserReward,
+      createdAt: data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : null,
+    });
+  };
+
+  /* ============================================================
+     ニブイチ獲得ポイント履歴（pointHistory）
   ============================================================ */
   const fetchPointHistory = async (uid: string) => {
     try {
@@ -132,12 +170,20 @@ export default function NibuichiHistoryPage() {
           {history.map((item, i) => (
             <div key={i} className="border p-3 rounded-lg bg-gray-50">
               <div className="font-bold">{item.date}</div>
+
               <div>予想：{item.prediction}</div>
               <div>結果：{item.result ?? "未確定"}</div>
 
+              <div>
+                獲得ポイント：
+                <span className={item.perUserReward > 0 ? "text-green-600" : "text-gray-600"}>
+                  {item.perUserReward} pt
+                </span>
+              </div>
+
               {item.result && (
-                <div className={item.hit ? "text-green-600" : "text-red-600"}>
-                  {item.hit ? "的中！" : "ハズレ"}
+                <div className={item.perUserReward > 0 ? "text-green-600" : "text-red-600"}>
+                  {item.perUserReward > 0 ? "的中！" : "ハズレ"}
                 </div>
               )}
             </div>

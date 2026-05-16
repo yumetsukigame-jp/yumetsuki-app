@@ -18,15 +18,9 @@ export default function NibuichiHistoryPage() {
 
   const [selectedDate, setSelectedDate] = useState<string>("");
 
-  // 結果（nibuichi_global）
   const [daily, setDaily] = useState<any>(null);
-
-  // 投票状況（nibuichi_user_predictions）
   const [predictions, setPredictions] = useState<any[]>([]);
-
-  // 集計後履歴（nibuichi_daily）
   const [history, setHistory] = useState<any[]>([]);
-
   const [winners, setWinners] = useState<any[]>([]);
   const [perUserReward, setPerUserReward] = useState<number>(0);
 
@@ -118,13 +112,17 @@ export default function NibuichiHistoryPage() {
       const wins = preds.filter((p) => p.prediction === dailyData.result);
       setWinners(wins);
 
-      if (wins.length > 0 && dailyData.rewardPoints > 0) {
-        setPerUserReward(Math.floor(dailyData.rewardPoints / wins.length));
+      // ★ perUserReward は history から取得する
+      if (histList.length > 0) {
+        const anyHit = histList.find((h) => h.perUserReward !== undefined);
+        if (anyHit) {
+          setPerUserReward(anyHit.perUserReward ?? 0);
+        }
       }
     }
 
     /* -----------------------------
-       ⑤ ユーザー情報取得（predictions + history 両方）
+       ⑤ ユーザー情報取得
     ----------------------------- */
     const map: Record<string, any> = {};
 
@@ -200,7 +198,7 @@ export default function NibuichiHistoryPage() {
         )}
       </div>
 
-      {/* 集計後履歴（nibuichi_daily） */}
+      {/* 集計後履歴 */}
       {history.length > 0 && (
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-2">集計後履歴（nibuichi_daily）</h2>
@@ -211,7 +209,7 @@ export default function NibuichiHistoryPage() {
                 <li key={i} className="border-b py-1">
                   {info.nickname ?? "不明ユーザー"}（{info.xAccount ?? ""}）
                   <span className="text-gray-500">
-                    {" "} / 予想：{h.prediction} / 結果：{h.result} / {perUserReward}pt
+                    {" "} / 予想：{h.prediction} / 結果：{h.result} / {h.perUserReward ?? 0}pt
                   </span>
                 </li>
               );

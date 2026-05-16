@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { auth, functions, db } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export default function AdminNibuichiPage() {
   const router = useRouter();
@@ -51,12 +51,10 @@ export default function AdminNibuichiPage() {
   }, []);
 
   // -----------------------------
-  // 今日の結果を Firestore から直接取得
+  // 今日の結果を Firestore から取得
   // -----------------------------
   const fetchTodayResult = async () => {
     const today = new Date().toISOString().slice(0, 10);
-
-    // ★ ここが今回の核心
     const ref = doc(db, "nibuichi_global", today);
     const snap = await getDoc(ref);
 
@@ -90,18 +88,46 @@ export default function AdminNibuichiPage() {
 
     setLoading(false);
   };
+
   // -----------------------------
-  // 今日の結果を確定 or 修正
+  // 今日の結果を確定 or 修正（＋総合戦績も更新）
   // -----------------------------
   const submitResult = async () => {
     if (!selected) return;
 
     setSending(true);
     try {
+      const today = new Date().toISOString().slice(0, 10);
+
+      // ① 今日の結果を保存（従来通り）
       const fn = httpsCallable(functions, "submitNibuichiResult");
       await fn({ result: selected, rewardPoints });
 
-      // Firestore の反映待ち
+      // ② 総合戦績を取得
+      const statsRef = doc(db, "nibuichi_global_stats", "stats");
+      const statsSnap = await getDoc(statsRef);
+      const stats = statsSnap.exists()
+        ? statsSnap.data()
+        : { win: 0, draw: 0, lose: 0, bakuado: 0 };
+
+      // ③ 前回の結果を減算
+      if (todayResult) {
+        if (todayResult === "nibuni") stats.win--;
+        if (todayResult === "nibuichi") stats.draw--;
+        if (todayResult === "nibuzero") stats.lose--;
+        if (todayResult === "bakuado") stats.bakuado--;
+      }
+
+      // ④ 今回の結果を加算
+      if (selected === "nibuni") stats.win++;
+      if (selected === "nibuichi") stats.draw++;
+      if (selected === "nibuzero") stats.lose++;
+      if (selected === "bakuado") stats.bakuado++;
+
+      // ⑤ Firestore に保存
+      await setDoc(statsRef, stats, { merge: true });
+
+      // 反映待ち
       await new Promise((resolve) => setTimeout(resolve, 400));
 
       await fetchStats();
@@ -128,19 +154,31 @@ export default function AdminNibuichiPage() {
     { key: "nibuzero", label: "ニブゼロ", img: "/nibuichi/nibuzero.webp" },
   ];
 
+  // ★ 仁行方式の戦績表示
+  const totalBattle =
+    (globalStats?.win ?? 0) +
+    (globalStats?.draw ?? 0) +
+    (globalStats?.lose ?? 0) +
+    (globalStats?.bakuado ?? 0);
+
   return (
     <div className="max-w-md mx-auto p-4 space-y-6">
 
       <h1 className="text-xl font-bold text-center">ニブイチ管理画面</h1>
 
-      {/* ゆめつき戦績 */}
-      <div className="bg-white shadow p-4 rounded-lg">
+      {/* ゆめつき戦績（仁行方式・中央揃え・フォント大きめ） */}
+      <div className="bg-white shadow p-4 rounded-lg text-center">
         <h2 className="text-lg font-bold mb-2">ゆめつきの戦績</h2>
-        <div className="space-y-1 text-sm">
-          <div>勝（ニブニ）：{globalStats?.win ?? 0}</div>
-          <div>分（ニブイチ）：{globalStats?.draw ?? 0}</div>
-          <div>敗（ニブゼロ）：{globalStats?.lose ?? 0}</div>
-          <div>爆アド：{globalStats?.bakuado ?? 0}</div>
+
+        <div className="text-xl font-bold mb-1">
+          【現戦績】{totalBattle}戦
+        </div>
+
+        <div className="text-xl font-bold">
+          {globalStats?.win ?? 0}勝/
+          {globalStats?.draw ?? 0}分/
+          {globalStats?.lose ?? 0}負/
+          {globalStats?.bakuado ?? 0}爆アド
         </div>
       </div>
 
