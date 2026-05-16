@@ -8,6 +8,27 @@ import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
+/* --------------------------------------------------
+   ★ JST 6時切り替えの今日の日付（完全修正版）
+   ※ 端末のローカル時刻はすでに JST なのでそのまま使う
+-------------------------------------------------- */
+function getTodayJST6() {
+  const jst = new Date(); // ← ここが重要（9時間足さない）
+
+  const cutoff = new Date(jst);
+  cutoff.setHours(6, 0, 0, 0);
+
+  // 6:00 より前なら前日扱い
+  if (jst < cutoff) {
+    jst.setDate(jst.getDate() - 1);
+  }
+
+  const y = jst.getFullYear();
+  const m = String(jst.getMonth() + 1).padStart(2, "0");
+  const d = String(jst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function Home() {
   const [points, setPoints] = useState<number | null>(null);
   const [nickname, setNickname] = useState<string | null>(null);
@@ -42,12 +63,8 @@ export default function Home() {
       setLoggedIn(true);
       const uid = user.uid;
 
-      // ★ JST 今日
-      const today = new Date(
-        new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
-      )
-        .toISOString()
-        .slice(0, 10);
+      // ★ JST 今日（6時切り替え）
+      const today = getTodayJST6();
 
       // 管理者判定
       const adminRef = doc(db, "admins", uid);
@@ -71,14 +88,14 @@ export default function Home() {
         setSubscriber(false);
       }
 
-      // ★ 今日のニブイチ予想（JST）
+      // ★ 今日のニブイチ予想
       const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
       const predSnap = await getDoc(predRef);
       if (predSnap.exists()) {
         setTodayPrediction(predSnap.data().prediction);
       }
 
-      // ★ 今日の結果（JST）
+      // ★ 今日の結果
       const resultRef = doc(db, "nibuichi_global", today);
       const resultSnap = await getDoc(resultRef);
       if (resultSnap.exists()) {
@@ -278,6 +295,32 @@ export default function Home() {
             管理者ログイン
           </a>
         )}
+      </div>
+
+      {/* 🟣 ゆめつき本舗リンク（追加） */}
+      <div style={{ marginTop: 40, textAlign: "center" }}>
+        <a
+          href="https://yumetsuki.base.shop"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-block" }}
+        >
+          <img
+            src="/honpo.webp"
+            alt="ゆめつき本舗HPはこちら"
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              cursor: "pointer",
+            }}
+          />
+        </a>
+
+        <p style={{ marginTop: 8, fontWeight: "bold" }}>
+          ゆめつき本舗HPはこちら
+        </p>
       </div>
     </div>
   );

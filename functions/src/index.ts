@@ -641,9 +641,14 @@ export const getNibuichiUserStats = onCall(
    ★ 自動：ニブイチ前日集計（毎朝6:05 JST）
    ※ 6時切り替えに合わせて getYesterdayJST6 を使用
 ============================================================ */
+/* ============================================================
+   ★ 自動：ニブイチ前日集計（毎朝6:05 JST）
+   ※ Cloud Scheduler が JST として cron を解釈するため
+   ※ cron を「5 6」に修正（6:05 JST）
+============================================================ */
 export const processNibuichiDaily = onSchedule(
   {
-    schedule: "5 21 * * *", // JST 6:05
+    schedule: "5 6 * * *", // ← JST 6:05 に確実に実行される
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
@@ -770,15 +775,21 @@ export const processNibuichiDaily = onSchedule(
       { merge: true }
     );
 
-    await db.collection("systemLogs").add({
-      type: "nibuichiDailyReset",
-      executedAt: Timestamp.now(),
-      targetDate,
-    });
+    try {
+      await db.collection("systemLogs").add({
+        type: "nibuichiDailyReset",
+        executedAt: Timestamp.now(),
+        targetDate,
+      });
+      console.log("systemLogs に記録しました");
+    } catch (err) {
+      console.error("systemLogs 書き込み失敗:", err);
+    }
 
     console.log("=== processNibuichiDaily END ===");
   }
 );
+
 
 /* ============================================================
    ★ 手動：ニブイチ前日集計（6時切り替え対応）
