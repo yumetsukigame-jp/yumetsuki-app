@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /* --------------------------------------------------
-   Timestamp を安全に Date に変換する関数
+   Timestamp → Date 安全変換
 -------------------------------------------------- */
 function toDateSafe(ts: any) {
   if (!ts) return null;
@@ -37,19 +37,25 @@ function ResultsContent() {
   const filterCode = searchParams.get("code") ?? null;
   const currentUid = auth.currentUser?.uid ?? null;
 
-  useEffect(() => {
-    loadResults();
-  }, []);
+  // ★ ユーザー名キャッシュ
+  const userCache = useRef<{ [uid: string]: string }>({});
 
   /* --------------------------------------------------
-     displayName + Xアカウント
+     displayName + Xアカウント（キャッシュ付き）
   -------------------------------------------------- */
   const getUserInfo = async (uid: string) => {
+    if (userCache.current[uid]) return userCache.current[uid];
+
     const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) return "名無し";
+    if (!snap.exists()) {
+      userCache.current[uid] = "名無し";
+      return "名無し";
+    }
 
     const u = snap.data();
-    return u.displayName || u.xAccount || "名無し";
+    const name = u.displayName || u.xAccount || "名無し";
+    userCache.current[uid] = name;
+    return name;
   };
 
   /* --------------------------------------------------
@@ -103,8 +109,7 @@ function ResultsContent() {
     }
 
     /* --------------------------------------------------
-       ★ B仕様：publicFlags によるアクセス制限はしない
-       → ただし limited の場合は「自分が引いたかどうか」を表示用に保持
+       ★ limited の場合は「自分が引いたか」を保持
     -------------------------------------------------- */
     if (!filterCode && currentUid) {
       for (const code of Object.keys(groupedData)) {
@@ -127,6 +132,10 @@ function ResultsContent() {
     setMeta(metaMap);
     setLoading(false);
   };
+
+  useEffect(() => {
+    loadResults();
+  }, []);
 
   /* --------------------------------------------------
      publicFlags 表示
@@ -339,13 +348,28 @@ function FrameList({
   search,
   sortOrder,
 }: any) {
+  const [listWithNames, setListWithNames] = useState<any[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      // ★ ユーザー名を付与
+      const enriched = await Promise.all(
+        items.map(async (r: any) => {
+          const name = await getUserInfo(r.uid);
+          return { ...r, _userName: name.toLowerCase() };
+        })
+      );
+      setListWithNames(enriched);
+    })();
+  }, [items]);
+
   return (
     <div>
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
         // ★ 履歴ベースで抽出
-        let list = items.filter((r: any) => r.frameName === frameName);
+        let list = listWithNames.filter((r: any) => r.frameName === frameName);
 
         if (filterMine && currentUid) {
           list = list.filter((r: any) => r.uid === currentUid);
@@ -356,15 +380,15 @@ function FrameList({
           list = list.filter(
             (r: any) =>
               r.frameName.toLowerCase().includes(s) ||
-              (r.userName ?? "").toLowerCase().includes(s)
+              r._userName.includes(s)
           );
         }
 
-        list = list.sort((a: any, b: any) =>
-          sortOrder === "new"
-            ? b.createdAt._seconds - a.createdAt._seconds
-            : a.createdAt._seconds - b.createdAt._seconds
-        );
+        list = list.sort((a: any, b: any) => {
+          const aSec = a.createdAt?._seconds ?? 0;
+          const bSec = b.createdAt?._seconds ?? 0;
+          return sortOrder === "new" ? bSec - aSec : aSec - bSec;
+        });
 
         return (
           <div key={frameName} style={{ marginBottom: 20 }}>
@@ -383,7 +407,6 @@ function FrameList({
                   <UserResultItem
                     key={r.id}
                     result={r}
-                    getUserInfo={getUserInfo}
                     highlight={currentUid === r.uid}
                   />
                 ))}
@@ -399,16 +422,7 @@ function FrameList({
 /* --------------------------------------------------
    ユーザー表示
 -------------------------------------------------- */
-function UserResultItem({ result, getUserInfo, highlight }: any) {
-  const [name, setName] = useState("読み込み中…");
-
-  useEffect(() => {
-    (async () => {
-      const n = await getUserInfo(result.uid);
-      setName(n);
-    })();
-  }, []);
-
+function UserResultItem({ result, highlight }: any) {
   return (
     <li
       style={{
@@ -417,7 +431,7 @@ function UserResultItem({ result, getUserInfo, highlight }: any) {
         color: highlight ? "#2563eb" : "black",
       }}
     >
-      {name}：{result.reward} pt
+      {result._userName}：{result.reward} pt
       {highlight && " ← あなた"}
     </li>
   );
