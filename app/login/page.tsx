@@ -46,6 +46,7 @@ export default function LoginPage() {
         maxWidth: "420px",
         margin: "0 auto",
         marginTop: "40px",
+        textAlign: "center",
       }}
     >
       {/* カード */}
@@ -123,7 +124,7 @@ export default function LoginPage() {
           パスワードを忘れた方はこちら
         </button>
 
-        {/* ★ 新規登録ボタン（追加） */}
+        {/* 新規登録 */}
         <button
           onClick={() => router.push("/signup")}
           style={{
@@ -151,6 +152,32 @@ export default function LoginPage() {
             {message}
           </p>
         )}
+      </div>
+
+      {/* ▼ ゆめつき本舗リンク（ログインしていなくても表示） */}
+      <div style={{ marginTop: 40, textAlign: "center" }}>
+        <a
+          href="https://yumetsuki.base.shop"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-block" }}
+        >
+          <img
+            src="/honpo.webp"
+            alt="ゆめつき本舗HPはこちら"
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              cursor: "pointer",
+            }}
+          />
+        </a>
+
+        <p style={{ marginTop: 8, fontWeight: "bold" }}>
+          ゆめつき本舗HPはこちら
+        </p>
       </div>
     </div>
   );
