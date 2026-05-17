@@ -90,7 +90,7 @@ export default function GachaDetailPage() {
     if (isWinnerOnly) {
       const winnerSnap = await getDoc(doc(db, "nibuichiWinners", currentUid!));
       if (!winnerSnap.exists()) {
-        setError("このガチャは前日のニブイチ的中者限定です");
+        setError("このガチャは前日のニブイチ的中者限定です(※更新は朝6:05)");
         setLoading(false);
         return;
       }
