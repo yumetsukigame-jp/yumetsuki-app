@@ -18,6 +18,7 @@ function toDateSafe(ts: any) {
 
 export default function PublicGachaListPage() {
   const [gachas, setGachas] = useState<any[]>([]);
+  const [allResults, setAllResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
@@ -30,9 +31,20 @@ export default function PublicGachaListPage() {
   const load = async () => {
     setLoading(true);
 
-    const fn = httpsCallable(functions, "getPublicGachaList");
-    const res: any = await fn();
-    const list = res.data || [];
+    /* --------------------------------------------------
+       ★ ① 公開ガチャ一覧を取得
+    -------------------------------------------------- */
+    const fnList = httpsCallable(functions, "getPublicGachaList");
+    const resList: any = await fnList();
+    const list = resList.data || [];
+
+    /* --------------------------------------------------
+       ★ ② 全ガチャの結果履歴を取得（重要）
+    -------------------------------------------------- */
+    const fnResults = httpsCallable(functions, "getGachaResults");
+    const resResults: any = await fnResults();
+    const results = resResults.data || [];
+    setAllResults(results);
 
     const uid = auth.currentUser?.uid ?? null;
     const now = new Date();
@@ -76,14 +88,14 @@ export default function PublicGachaListPage() {
         return null;
       });
 
-      const results = await Promise.all(checks);
-      filtered = [...filtered, ...results.filter((x) => x !== null)];
+      const resultsLimited = await Promise.all(checks);
+      filtered = [...filtered, ...resultsLimited.filter((x) => x !== null)];
     }
 
     filtered = filtered.filter((g) => g.createdAt);
 
     /* --------------------------------------------------
-       ソート
+       ★ ③ ソート（履歴件数ベースに変更）
     -------------------------------------------------- */
     let sorted = [...filtered];
 
@@ -95,14 +107,8 @@ export default function PublicGachaListPage() {
       );
     } else if (sort === "popular") {
       sorted.sort((a, b) => {
-        const aUsed = a.frames.reduce(
-          (sum: number, f: any) => sum + (f.usedCount ?? 0),
-          0
-        );
-        const bUsed = b.frames.reduce(
-          (sum: number, f: any) => sum + (f.usedCount ?? 0),
-          0
-        );
+        const aUsed = results.filter((r: any) => r.code === a.code).length;
+        const bUsed = results.filter((r: any) => r.code === b.code).length;
         return bUsed - aUsed;
       });
     }
@@ -165,12 +171,16 @@ export default function PublicGachaListPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
-          const totalUsed = g.frames.reduce(
-            (sum: number, f: any) => sum + (f.usedCount ?? 0),
-            0
+          /* --------------------------------------------------
+             ★ ④ このガチャの履歴件数を取得
+          -------------------------------------------------- */
+          const resultsForThis = allResults.filter(
+            (r: any) => r.code === g.code
           );
 
+          const totalUsed = resultsForThis.length;
           const totalMax = g.totalCount ?? 0;
+
           const percent =
             g.mode === "count" && totalMax > 0
               ? Math.round((totalUsed / totalMax) * 100)
