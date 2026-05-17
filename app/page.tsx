@@ -126,13 +126,35 @@ export default function Home() {
   }
 
   /* --------------------------------------------------
-     ★ ログインしていない時も本舗リンクを表示する
+     ★ ログインしていない時も本舗リンク＋yumeapp.webp を表示
   -------------------------------------------------- */
   if (!loggedIn) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
-        <p>ログインしていません。</p>
-        <a href="/login" style={{ color: "#2563eb" }}>ログインページへ</a>
+
+        {/* ★ 追加：アプリ案内バナー（クリックでログインへ） */}
+        <a href="/login" style={{ display: "inline-block" }}>
+          <img
+            src="/yumeapp.webp"
+            alt="ログインページへ"
+            style={{
+              width: "100%",
+              maxWidth: 360,
+              borderRadius: 12,
+              marginBottom: 20,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              cursor: "pointer",
+            }}
+          />
+        </a>
+
+        <p style={{ fontSize: "18px", marginBottom: "12px" }}>
+          ログインしていません。
+        </p>
+
+        <a href="/login" style={{ color: "#2563eb", fontSize: "18px" }}>
+          ログインページへ
+        </a>
 
         {/* 🟣 ゆめつき本舗リンク（ログイン前にも表示） */}
         <div style={{ marginTop: 40 }}>
