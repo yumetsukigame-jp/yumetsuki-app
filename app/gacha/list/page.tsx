@@ -310,7 +310,7 @@ export default function PublicGachaListPage() {
 
                   <p style={{ margin: "6px 0" }}>残数：{remaining}</p>
 
-                  {/* ★ 各枠の残数 + 当選者一覧 */}
+                  {/* ★ 各枠の残数 + 当選者一覧（×●回対応） */}
                   <div style={{ marginTop: 20 }}>
                     <h3 style={{ marginBottom: 10 }}>🎁 枠ごとの状況</h3>
 
@@ -324,6 +324,12 @@ export default function PublicGachaListPage() {
                         g.mode === "count"
                           ? f.maxCount - frameResults.length
                           : "∞";
+
+                      /* ★ uid ごとにまとめる */
+                      const grouped: Record<string, number> = {};
+                      frameResults.forEach((r: any) => {
+                        grouped[r.uid] = (grouped[r.uid] || 0) + 1;
+                      });
 
                       return (
                         <div
@@ -339,15 +345,21 @@ export default function PublicGachaListPage() {
                             {frameName}（残り：{frameRemaining}）
                           </p>
 
-                          {frameResults.length === 0 ? (
+                          {Object.keys(grouped).length === 0 ? (
                             <p style={{ marginLeft: 12, marginTop: 4 }}>
                               当選者なし
                             </p>
                           ) : (
                             <ul style={{ marginLeft: 20, marginTop: 4 }}>
-                              {frameResults.map((r: any) => (
-                                <FrameWinnerItem key={r.id} uid={r.uid} />
-                              ))}
+                              {Object.entries(grouped).map(
+                                ([uid, count]) => (
+                                  <FrameWinnerItem
+                                    key={uid}
+                                    uid={uid}
+                                    count={count as number}
+                                  />
+                                )
+                              )}
                             </ul>
                           )}
                         </div>
@@ -388,9 +400,15 @@ export default function PublicGachaListPage() {
 }
 
 /* --------------------------------------------------
-   ★ 当選者表示コンポーネント
+   ★ 当選者表示コンポーネント（×●回対応）
 -------------------------------------------------- */
-function FrameWinnerItem({ uid }: { uid: string }) {
+function FrameWinnerItem({
+  uid,
+  count,
+}: {
+  uid: string;
+  count: number;
+}) {
   const [name, setName] = useState("読み込み中…");
 
   useEffect(() => {
@@ -400,5 +418,5 @@ function FrameWinnerItem({ uid }: { uid: string }) {
     })();
   }, []);
 
-  return <li>{name}</li>;
+  return <li>{name} {count > 1 ? `×${count}回` : ""}</li>;
 }
