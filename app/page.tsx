@@ -139,7 +139,7 @@ export default function Home() {
         </p>
 
         {/* ★ yumeapp.webp（クリックでログイン） */}
-        <a href="/login" style={{ display: "inline-block" }}>
+        <a href="/login" style={{ display: "block", marginBottom: 20 }}>
           <img
             src="/yumeapp.webp"
             alt="ログインページへ"
@@ -147,14 +147,23 @@ export default function Home() {
               width: "100%",
               maxWidth: 320,
               borderRadius: 12,
-              marginBottom: 20,   // ← ここで確実に改行される
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               cursor: "pointer",
+              display: "block",
+              margin: "0 auto",
             }}
           />
         </a>
 
-        <a href="/login" style={{ color: "#2563eb", fontSize: "18px" }}>
+        <a
+          href="/login"
+          style={{
+            color: "#2563eb",
+            fontSize: "18px",
+            display: "block",
+            marginBottom: 20,
+          }}
+        >
           ログインページへ
         </a>
 
@@ -164,7 +173,7 @@ export default function Home() {
             href="https://yumetsuki.base.shop"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: "inline-block" }}
+            style={{ display: "block" }}
           >
             <img
               src="/honpo.webp"
@@ -175,6 +184,8 @@ export default function Home() {
                 borderRadius: 12,
                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                 cursor: "pointer",
+                display: "block",
+                margin: "0 auto",
               }}
             />
           </a>
@@ -351,7 +362,7 @@ export default function Home() {
           href="https://yumetsuki.base.shop"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ display: "inline-block" }}
+          style={{ display: "block" }}
         >
           <img
             src="/honpo.webp"
@@ -362,6 +373,8 @@ export default function Home() {
               borderRadius: 12,
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               cursor: "pointer",
+              display: "block",
+              margin: "0 auto",
             }}
           />
         </a>
