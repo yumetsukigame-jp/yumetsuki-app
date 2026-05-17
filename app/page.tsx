@@ -10,15 +10,13 @@ import { onAuthStateChanged } from "firebase/auth";
 
 /* --------------------------------------------------
    ★ JST 6時切り替えの今日の日付（完全修正版）
-   ※ 端末のローカル時刻はすでに JST なのでそのまま使う
 -------------------------------------------------- */
 function getTodayJST6() {
-  const jst = new Date(); // ← ここが重要（9時間足さない）
+  const jst = new Date(); // ← ローカルがJSTなのでそのまま
 
   const cutoff = new Date(jst);
   cutoff.setHours(6, 0, 0, 0);
 
-  // 6:00 より前なら前日扱い
   if (jst < cutoff) {
     jst.setDate(jst.getDate() - 1);
   }
@@ -39,11 +37,9 @@ export default function Home() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // ★ 今日のニブイチ
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
 
-  // ★ 全体戦績
   const [totalBattle, setTotalBattle] = useState(0);
   const [totalWin, setTotalWin] = useState(0);
   const [totalDraw, setTotalDraw] = useState(0);
@@ -63,7 +59,6 @@ export default function Home() {
       setLoggedIn(true);
       const uid = user.uid;
 
-      // ★ JST 今日（6時切り替え）
       const today = getTodayJST6();
 
       // 管理者判定
@@ -71,7 +66,7 @@ export default function Home() {
       const adminSnap = await getDoc(adminRef);
       setIsAdmin(adminSnap.exists());
 
-      // ユーザーデータ取得
+      // ユーザーデータ
       const ref = doc(db, "users", uid);
       const snap = await getDoc(ref);
 
@@ -88,21 +83,21 @@ export default function Home() {
         setSubscriber(false);
       }
 
-      // ★ 今日のニブイチ予想
+      // 今日の予想
       const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
       const predSnap = await getDoc(predRef);
       if (predSnap.exists()) {
         setTodayPrediction(predSnap.data().prediction);
       }
 
-      // ★ 今日の結果
+      // 今日の結果
       const resultRef = doc(db, "nibuichi_global", today);
       const resultSnap = await getDoc(resultRef);
       if (resultSnap.exists()) {
         setTodayResult(resultSnap.data().result);
       }
 
-      // ★ 全体戦績
+      // 全体戦績
       const statsRef = doc(db, "nibuichi_global_stats", "stats");
       const statsSnap = await getDoc(statsRef);
 
@@ -130,16 +125,48 @@ export default function Home() {
     return <div style={{ padding: 20 }}>読み込み中…</div>;
   }
 
+  /* --------------------------------------------------
+     ★ ログインしていない時も本舗リンクを表示する
+  -------------------------------------------------- */
   if (!loggedIn) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
         <p>ログインしていません。</p>
         <a href="/login" style={{ color: "#2563eb" }}>ログインページへ</a>
+
+        {/* 🟣 ゆめつき本舗リンク（ログイン前にも表示） */}
+        <div style={{ marginTop: 40 }}>
+          <a
+            href="https://yumetsuki.base.shop"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "inline-block" }}
+          >
+            <img
+              src="/honpo.webp"
+              alt="ゆめつき本舗HPはこちら"
+              style={{
+                width: "100%",
+                maxWidth: 320,
+                borderRadius: 12,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                cursor: "pointer",
+              }}
+            />
+          </a>
+
+          <p style={{ marginTop: 8, fontWeight: "bold" }}>
+            ゆめつき本舗HPはこちら
+          </p>
+        </div>
       </div>
     );
   }
 
-  // ★ 今日のニブイチ表示文言
+  /* --------------------------------------------------
+     ★ ログイン済みの通常画面
+  -------------------------------------------------- */
+
   let nibuichiStatus = "未参加";
 
   if (todayPrediction && !todayResult) {
@@ -170,7 +197,6 @@ export default function Home() {
         }}
       />
 
-      {/* ★ サブスクバッジ */}
       {subscriber && (
         <div
           style={{
@@ -187,7 +213,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ★ 名前表示 */}
       <h2 style={{ marginBottom: "10px" }}>
         {nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
@@ -215,7 +240,6 @@ export default function Home() {
           {nibuichiStatus}
         </div>
 
-        {/* ★ 全体戦績 */}
         <div
           style={{
             marginTop: "12px",
@@ -297,7 +321,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 🟣 ゆめつき本舗リンク（追加） */}
+      {/* 🟣 ゆめつき本舗リンク（ログイン後も表示） */}
       <div style={{ marginTop: 40, textAlign: "center" }}>
         <a
           href="https://yumetsuki.base.shop"

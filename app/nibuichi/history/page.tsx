@@ -181,9 +181,16 @@ export default function NibuichiHistoryPage() {
                 </span>
               </div>
 
+              {/* ★ 的中判定を prediction === result に変更 */}
               {item.result && (
-                <div className={item.perUserReward > 0 ? "text-green-600" : "text-red-600"}>
-                  {item.perUserReward > 0 ? "的中！" : "ハズレ"}
+                <div
+                  className={
+                    item.prediction === item.result
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }
+                >
+                  {item.prediction === item.result ? "的中！" : "ハズレ"}
                 </div>
               )}
             </div>
