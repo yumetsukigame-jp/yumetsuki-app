@@ -46,11 +46,10 @@ export default function PublicGachaListPage() {
     const results = resResults.data || [];
     setAllResults(results);
 
-    const uid = auth.currentUser?.uid ?? null;
     const now = new Date();
 
     /* --------------------------------------------------
-       公開ガチャ（publicFlags.includes("public")）
+       ★ 公開・限定すべて一覧に表示する
     -------------------------------------------------- */
     let filtered = list.filter((g: any) => {
       if (!g.title || g.title.trim() === "") return false;
@@ -58,44 +57,13 @@ export default function PublicGachaListPage() {
       const exp = toDateSafe(g.expiresAt);
       if (exp && exp < now) return false;
 
-      return (
-        Array.isArray(g.publicFlags) &&
-        g.publicFlags.includes("public")
-      );
+      return true; // ← 公開・限定すべて表示
     });
-
-    /* --------------------------------------------------
-       限定ガチャ（publicFlags に public が無いもの）
-       → B仕様：履歴があるものだけ一覧に追加
-    -------------------------------------------------- */
-    if (uid) {
-      const limited = list.filter(
-        (g: any) =>
-          Array.isArray(g.publicFlags) &&
-          !g.publicFlags.includes("public")
-      );
-
-      const checks = limited.map(async (g: any) => {
-        const historyRef = doc(db, "userGachaHistory", `${uid}_${g.code}`);
-        const snap = await getDoc(historyRef);
-
-        if (snap.exists()) {
-          return {
-            ...g,
-            myCount: snap.data().count ?? 0,
-          };
-        }
-        return null;
-      });
-
-      const resultsLimited = await Promise.all(checks);
-      filtered = [...filtered, ...resultsLimited.filter((x) => x !== null)];
-    }
 
     filtered = filtered.filter((g) => g.createdAt);
 
     /* --------------------------------------------------
-       ★ ③ ソート（履歴件数ベースに変更）
+       ★ ③ ソート（履歴件数ベース）
     -------------------------------------------------- */
     let sorted = [...filtered];
 
@@ -218,10 +186,35 @@ export default function PublicGachaListPage() {
                 </div>
               )}
 
-              {/* タイトル */}
+              {/* タイトル（限定ガチャは履歴がないと遷移不可） */}
               <h2
                 style={{ margin: 0, color: "#2563eb", cursor: "pointer" }}
-                onClick={() => router.push(`/gacha/${g.code}`)}
+                onClick={async () => {
+                  const flags = g.publicFlags ?? [];
+                  const isLimited = flags.includes("limited");
+
+                  if (isLimited) {
+                    const uid = auth.currentUser?.uid;
+                    if (!uid) {
+                      alert("このガチャは限定公開です（コード入力が必要です）");
+                      return;
+                    }
+
+                    const historyRef = doc(
+                      db,
+                      "userGachaHistory",
+                      `${uid}_${g.code}`
+                    );
+                    const snap = await getDoc(historyRef);
+
+                    if (!snap.exists()) {
+                      alert("このガチャは限定公開です（コード入力が必要です）");
+                      return;
+                    }
+                  }
+
+                  router.push(`/gacha/${g.code}`);
+                }}
               >
                 {g.title}
               </h2>
@@ -268,12 +261,6 @@ export default function PublicGachaListPage() {
 
               {isOpen && (
                 <div style={{ marginTop: 16 }}>
-                  {g.myCount !== undefined && (
-                    <p style={{ margin: "6px 0", color: "#2563eb" }}>
-                      あなたのプレイ回数：{g.myCount} 回
-                    </p>
-                  )}
-
                   {g.mode === "count" && (
                     <div style={{ margin: "10px 0" }}>
                       <div
