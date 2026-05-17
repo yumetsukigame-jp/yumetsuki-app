@@ -126,9 +126,9 @@ export default function Home() {
   }
 
   /* --------------------------------------------------
-     ★ ログインしていない時も本舗リンク＋yumeapp.webp を表示
-     ★ yumeapp.webp は「ログインしていません。」と
-       「ログインページへ」の間に配置
+     ★ ログインしていない時の画面
+     ★ yumeapp.webp を「ログインしていません。」と
+       「ログインページへ」の間に配置（改行あり）
   -------------------------------------------------- */
   if (!loggedIn) {
     return (
@@ -145,9 +145,9 @@ export default function Home() {
             alt="ログインページへ"
             style={{
               width: "100%",
-              maxWidth: 320,   // ← ゆめつき本舗と同じ幅
+              maxWidth: 320,
               borderRadius: 12,
-              marginBottom: 20,
+              marginBottom: 20,   // ← ここで確実に改行される
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               cursor: "pointer",
             }}
@@ -158,7 +158,7 @@ export default function Home() {
           ログインページへ
         </a>
 
-        {/* 🟣 ゆめつき本舗リンク（ログイン前にも表示） */}
+        {/* 🟣 ゆめつき本舗リンク */}
         <div style={{ marginTop: 40 }}>
           <a
             href="https://yumetsuki.base.shop"
