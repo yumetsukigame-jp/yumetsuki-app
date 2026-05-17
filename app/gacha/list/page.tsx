@@ -16,6 +16,28 @@ function toDateSafe(ts: any) {
   return null;
 }
 
+/* --------------------------------------------------
+   ★ ユーザー情報キャッシュ付き取得
+-------------------------------------------------- */
+const userCache: Record<string, any> = {};
+
+async function getUserInfo(uid: string) {
+  if (userCache[uid]) return userCache[uid];
+
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) {
+    userCache[uid] = { name: "名無し" };
+    return userCache[uid];
+  }
+
+  const u = snap.data();
+  const name = u.displayName || "名無し";
+  const x = u.xAccount ? `（${u.xAccount}）` : "";
+
+  userCache[uid] = { name: `${name}${x}` };
+  return userCache[uid];
+}
+
 export default function PublicGachaListPage() {
   const [gachas, setGachas] = useState<any[]>([]);
   const [allResults, setAllResults] = useState<any[]>([]);
@@ -39,7 +61,7 @@ export default function PublicGachaListPage() {
     const list = resList.data || [];
 
     /* --------------------------------------------------
-       ★ ② 全ガチャの結果履歴を取得（重要）
+       ★ ② 全ガチャの結果履歴を取得
     -------------------------------------------------- */
     const fnResults = httpsCallable(functions, "getGachaResults");
     const resResults: any = await fnResults();
@@ -57,7 +79,7 @@ export default function PublicGachaListPage() {
       const exp = toDateSafe(g.expiresAt);
       if (exp && exp < now) return false;
 
-      return true; // ← 公開・限定すべて表示
+      return true;
     });
 
     filtered = filtered.filter((g) => g.createdAt);
@@ -140,7 +162,7 @@ export default function PublicGachaListPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
           /* --------------------------------------------------
-             ★ ④ このガチャの履歴件数を取得
+             ★ このガチャの履歴件数
           -------------------------------------------------- */
           const resultsForThis = allResults.filter(
             (r: any) => r.code === g.code
@@ -261,6 +283,7 @@ export default function PublicGachaListPage() {
 
               {isOpen && (
                 <div style={{ marginTop: 16 }}>
+                  {/* 使用状況 */}
                   {g.mode === "count" && (
                     <div style={{ margin: "10px 0" }}>
                       <div
@@ -286,6 +309,51 @@ export default function PublicGachaListPage() {
                   )}
 
                   <p style={{ margin: "6px 0" }}>残数：{remaining}</p>
+
+                  {/* ★ 各枠の残数 + 当選者一覧 */}
+                  <div style={{ marginTop: 20 }}>
+                    <h3 style={{ marginBottom: 10 }}>🎁 枠ごとの状況</h3>
+
+                    {g.frames.map((f: any) => {
+                      const frameName = f.label;
+                      const frameResults = resultsForThis.filter(
+                        (r: any) => r.frameName === frameName
+                      );
+
+                      const frameRemaining =
+                        g.mode === "count"
+                          ? f.maxCount - frameResults.length
+                          : "∞";
+
+                      return (
+                        <div
+                          key={frameName}
+                          style={{
+                            marginBottom: 16,
+                            padding: 10,
+                            background: "#f9fafb",
+                            borderRadius: 8,
+                          }}
+                        >
+                          <p style={{ margin: 0, fontWeight: "bold" }}>
+                            {frameName}（残り：{frameRemaining}）
+                          </p>
+
+                          {frameResults.length === 0 ? (
+                            <p style={{ marginLeft: 12, marginTop: 4 }}>
+                              当選者なし
+                            </p>
+                          ) : (
+                            <ul style={{ marginLeft: 20, marginTop: 4 }}>
+                              {frameResults.map((r: any) => (
+                                <FrameWinnerItem key={r.id} uid={r.uid} />
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
 
                   <p style={{ margin: "6px 0", fontSize: 14, color: "#555" }}>
                     締切：
@@ -317,4 +385,20 @@ export default function PublicGachaListPage() {
       </div>
     </div>
   );
+}
+
+/* --------------------------------------------------
+   ★ 当選者表示コンポーネント
+-------------------------------------------------- */
+function FrameWinnerItem({ uid }: { uid: string }) {
+  const [name, setName] = useState("読み込み中…");
+
+  useEffect(() => {
+    (async () => {
+      const info = await getUserInfo(uid);
+      setName(info.name);
+    })();
+  }, []);
+
+  return <li>{name}</li>;
 }
