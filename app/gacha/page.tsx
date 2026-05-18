@@ -16,12 +16,10 @@ export default function GachaInner() {
 
   const [result, setResult] = useState<any>(null);
 
-  // ルーレット用
   const [spinning, setSpinning] = useState(false);
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
-  // URL から code を取得
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -30,9 +28,6 @@ export default function GachaInner() {
     }
   }, []);
 
-  /* --------------------------------------------------
-     publicFlags 表示
-  -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
@@ -45,7 +40,7 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     ★ JST 6:00 基準で「前日」を求める関数
+     JST 6:00 基準で前日を求める
   -------------------------------------------------- */
   function getPrevDayJST6() {
     const now = new Date();
@@ -67,7 +62,7 @@ export default function GachaInner() {
   }
 
   /* --------------------------------------------------
-     ガチャコード確認（publicFlags 判定）
+     ガチャコード確認
   -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
@@ -97,19 +92,14 @@ export default function GachaInner() {
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
 
-    /* --------------------------------------------------
-       publicFlags によるアクセス制御
-       ※ limited は「コードを知っていれば誰でも引ける」
-    -------------------------------------------------- */
-
-    // 🌐 公開でない場合はログイン必須
+    // 公開でない場合はログイン必須
     if (!isPublic && !uid) {
       setError("このガチャは限定公開です（ログインが必要です）");
       setLoading(false);
       return;
     }
 
-    // ⭐ subscriber → サブスク会員のみ
+    // サブスク限定
     if (isSubscriberOnly) {
       if (!uid) {
         setError("このガチャはサブスク会員限定です");
@@ -127,7 +117,7 @@ export default function GachaInner() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（確実版）
+    // 🎯 ニブイチ的中者限定（正しい判定）
     if (isWinnerOnly) {
       if (!uid) {
         setError("このガチャは前日のニブイチ的中者限定です");
@@ -137,8 +127,14 @@ export default function GachaInner() {
 
       const prevDay = getPrevDayJST6();
 
-      // ★ 前日の予想
-      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${prevDay}`);
+      // ★ 前日の予想（正しい保存先）
+      const predRef = doc(
+        db,
+        "nibuichi_daily",
+        prevDay,
+        "predictions",
+        uid
+      );
       const predSnap = await getDoc(predRef);
 
       if (!predSnap.exists()) {
@@ -148,20 +144,8 @@ export default function GachaInner() {
       }
 
       const prediction = predSnap.data().prediction;
+      const result = predSnap.data().result;
 
-      // ★ 前日の結果
-      const resultRef = doc(db, "nibuichi_global", prevDay);
-      const resultSnap = await getDoc(resultRef);
-
-      if (!resultSnap.exists()) {
-        setError("前日のニブイチ結果が未登録です");
-        setLoading(false);
-        return;
-      }
-
-      const result = resultSnap.data().result;
-
-      // ★ 的中判定
       if (prediction !== result) {
         setError("このガチャは前日のニブイチ的中者限定です（不的中）");
         setLoading(false);
@@ -169,7 +153,7 @@ export default function GachaInner() {
       }
     }
 
-    // ★ アクセスOK
+    // アクセスOK
     setGacha(data);
     setLoading(false);
   };
@@ -336,7 +320,6 @@ export default function GachaInner() {
             {gacha.title}
           </h2>
 
-          {/* 公開設定 */}
           <p style={{ textAlign: "center", marginBottom: 10 }}>
             {renderFlags(gacha.publicFlags)}
           </p>
@@ -358,12 +341,10 @@ export default function GachaInner() {
             ガチャを引く（演出あり）
           </button>
 
-          {/* 🎰 1リール × 縦3段スロット */}
           <div style={{ marginTop: 30 }}>
             <Reel frames={gacha.frames} />
           </div>
 
-          {/* 結果 */}
           {result && (
             <div
               style={{
