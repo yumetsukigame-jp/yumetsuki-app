@@ -41,12 +41,10 @@ export default function GachaDetailPage() {
     const cutoff = new Date(jst);
     cutoff.setHours(6, 0, 0, 0);
 
-    // 6:00 前なら前日に戻す
     if (jst < cutoff) {
       jst.setDate(jst.getDate() - 1);
     }
 
-    // さらに前日
     jst.setDate(jst.getDate() - 1);
 
     const y = jst.getFullYear();
@@ -109,13 +107,19 @@ export default function GachaDetailPage() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（確実版）
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（正しい判定）
     if (isWinnerOnly) {
       const uid = currentUid!;
       const prevDay = getPrevDayJST6();
 
-      // ★ 前日の予想
-      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${prevDay}`);
+      // ★ 前日の予想（正しい保存先）
+      const predRef = doc(
+        db,
+        "nibuichi_daily",
+        prevDay,
+        "predictions",
+        uid
+      );
       const predSnap = await getDoc(predRef);
 
       if (!predSnap.exists()) {
@@ -125,20 +129,8 @@ export default function GachaDetailPage() {
       }
 
       const prediction = predSnap.data().prediction;
+      const result = predSnap.data().result;
 
-      // ★ 前日の結果
-      const resultRef = doc(db, "nibuichi_global", prevDay);
-      const resultSnap = await getDoc(resultRef);
-
-      if (!resultSnap.exists()) {
-        setError("前日のニブイチ結果が未登録です");
-        setLoading(false);
-        return;
-      }
-
-      const result = resultSnap.data().result;
-
-      // ★ 的中判定
       if (prediction !== result) {
         setError("このガチャは前日のニブイチ的中者限定です（不的中）");
         setLoading(false);
