@@ -797,21 +797,6 @@ export const processNibuichiDaily = onSchedule(
     await archiveBatch.commit();
     await deleteBatch.commit();
 
-    /* ============================================================
-       グローバル戦績更新
-    ============================================================ */
-    const globalRef = db.collection("nibuichi_global_stats").doc("stats");
-    await globalRef.set(
-      {
-        win: FieldValue.increment(globalWin),
-        draw: FieldValue.increment(globalDraw),
-        lose: FieldValue.increment(globalLose),
-        bakuado: FieldValue.increment(globalBakuado),
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true }
-    );
-
     console.log("=== processNibuichiDaily END ===");
   }
 );

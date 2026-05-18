@@ -31,6 +31,30 @@ export default function GachaDetailPage() {
     return u.displayName || u.xAccount || "名無し";
   };
 
+  /* --------------------------------------------------
+     ★ JST 6:00 基準で「前日」を求める関数
+  -------------------------------------------------- */
+  function getPrevDayJST6() {
+    const now = new Date();
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+    const cutoff = new Date(jst);
+    cutoff.setHours(6, 0, 0, 0);
+
+    // 6:00 前なら前日に戻す
+    if (jst < cutoff) {
+      jst.setDate(jst.getDate() - 1);
+    }
+
+    // さらに前日
+    jst.setDate(jst.getDate() - 1);
+
+    const y = jst.getFullYear();
+    const m = String(jst.getMonth() + 1).padStart(2, "0");
+    const d = String(jst.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   const load = async () => {
     setLoading(true);
 
@@ -78,7 +102,6 @@ export default function GachaDetailPage() {
       const userSnap = await getDoc(doc(db, "users", currentUid!));
       const user = userSnap.data();
 
-      // ★ 修正：Firestore の構造に合わせて subscriber を参照
       if (!user?.subscriber) {
         setError("このガチャはサブスク会員限定です");
         setLoading(false);
@@ -86,11 +109,38 @@ export default function GachaDetailPage() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（確実版）
     if (isWinnerOnly) {
-      const winnerSnap = await getDoc(doc(db, "nibuichiWinners", currentUid!));
-      if (!winnerSnap.exists()) {
-        setError("このガチャは前日のニブイチ的中者限定です(※更新は朝6:05)");
+      const uid = currentUid!;
+      const prevDay = getPrevDayJST6();
+
+      // ★ 前日の予想
+      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${prevDay}`);
+      const predSnap = await getDoc(predRef);
+
+      if (!predSnap.exists()) {
+        setError("このガチャは前日のニブイチ的中者限定です（予想なし）");
+        setLoading(false);
+        return;
+      }
+
+      const prediction = predSnap.data().prediction;
+
+      // ★ 前日の結果
+      const resultRef = doc(db, "nibuichi_global", prevDay);
+      const resultSnap = await getDoc(resultRef);
+
+      if (!resultSnap.exists()) {
+        setError("前日のニブイチ結果が未登録です");
+        setLoading(false);
+        return;
+      }
+
+      const result = resultSnap.data().result;
+
+      // ★ 的中判定
+      if (prediction !== result) {
+        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
         setLoading(false);
         return;
       }

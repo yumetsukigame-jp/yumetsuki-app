@@ -45,6 +45,28 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
+     ★ JST 6:00 基準で「前日」を求める関数
+  -------------------------------------------------- */
+  function getPrevDayJST6() {
+    const now = new Date();
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+    const cutoff = new Date(jst);
+    cutoff.setHours(6, 0, 0, 0);
+
+    if (jst < cutoff) {
+      jst.setDate(jst.getDate() - 1);
+    }
+
+    jst.setDate(jst.getDate() - 1);
+
+    const y = jst.getFullYear();
+    const m = String(jst.getMonth() + 1).padStart(2, "0");
+    const d = String(jst.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  /* --------------------------------------------------
      ガチャコード確認（publicFlags 判定）
   -------------------------------------------------- */
   const checkCode = async () => {
@@ -77,16 +99,14 @@ export default function GachaInner() {
 
     /* --------------------------------------------------
        publicFlags によるアクセス制御
-       ※ limited は「コードを知っていれば誰でも引ける」ため制限しない
+       ※ limited は「コードを知っていれば誰でも引ける」
     -------------------------------------------------- */
 
     // 🌐 公開でない場合はログイン必須
-    if (!isPublic) {
-      if (!uid) {
-        setError("このガチャは限定公開です（ログインが必要です）");
-        setLoading(false);
-        return;
-      }
+    if (!isPublic && !uid) {
+      setError("このガチャは限定公開です（ログインが必要です）");
+      setLoading(false);
+      return;
     }
 
     // ⭐ subscriber → サブスク会員のみ
@@ -100,7 +120,6 @@ export default function GachaInner() {
       const userSnap = await getDoc(doc(db, "users", uid));
       const user = userSnap.data();
 
-      // ★ Firestore の構造に合わせて修正（subscriber を参照）
       if (!user?.subscriber) {
         setError("このガチャはサブスク会員限定です");
         setLoading(false);
@@ -108,16 +127,43 @@ export default function GachaInner() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（確実版）
     if (isWinnerOnly) {
       if (!uid) {
         setError("このガチャは前日のニブイチ的中者限定です");
         setLoading(false);
         return;
       }
-      const winnerSnap = await getDoc(doc(db, "nibuichiWinners", uid));
-      if (!winnerSnap.exists()) {
-        setError("このガチャは前日のニブイチ的中者限定です");
+
+      const prevDay = getPrevDayJST6();
+
+      // ★ 前日の予想
+      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${prevDay}`);
+      const predSnap = await getDoc(predRef);
+
+      if (!predSnap.exists()) {
+        setError("このガチャは前日のニブイチ的中者限定です（予想なし）");
+        setLoading(false);
+        return;
+      }
+
+      const prediction = predSnap.data().prediction;
+
+      // ★ 前日の結果
+      const resultRef = doc(db, "nibuichi_global", prevDay);
+      const resultSnap = await getDoc(resultRef);
+
+      if (!resultSnap.exists()) {
+        setError("前日のニブイチ結果が未登録です");
+        setLoading(false);
+        return;
+      }
+
+      const result = resultSnap.data().result;
+
+      // ★ 的中判定
+      if (prediction !== result) {
+        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
         setLoading(false);
         return;
       }
@@ -143,10 +189,8 @@ export default function GachaInner() {
       const frame = res.data.frame;
       setFinalFrame(frame);
 
-      // 回転開始
       setSpinning(true);
 
-      // 2秒後に停止
       setTimeout(() => {
         setSpinning(false);
         setStop(true);
