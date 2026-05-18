@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -15,9 +14,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/* --------------------------------------------------
+   ★ iOS / Android ホーム画面アイコン対応
+   Next.js の metadata に書くだけで OK
+-------------------------------------------------- */
 export const metadata: Metadata = {
   title: "ゆめつきの書斎",
   description: "ゆめつきの小さな書斎サイト",
+
+  // ▼ Android（Chrome）用
+  manifest: "/manifest.json",
+
+  // ▼ iOS（Safari）用
+  icons: {
+    icon: "/icon-192.png",              // Android 通常アイコン
+    apple: "/apple-touch-icon.png",     // iOS ホーム画面アイコン
+  },
+
+  // ▼ PWA 共通
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
