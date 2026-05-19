@@ -36,7 +36,7 @@ export default function AdminNibuichiPage() {
   const [loading, setLoading] = useState(true);
 
   const [globalStats, setGlobalStats] = useState<any>(null);
-  const [todayResult, setTodayResult] = useState<string | null>(null);
+  const [todayResult, setTodayResult] = useState<any>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [rewardPoints, setRewardPoints] = useState<number>(500);
@@ -75,7 +75,7 @@ export default function AdminNibuichiPage() {
 
   /* --------------------------------------------------
      今日の予想者数を取得（棒グラフ用）
-     ※ 日付を引数で受け取るように変更
+     ※ 日付を引数で受け取る
   -------------------------------------------------- */
   const fetchTodayPredictions = async (targetDate: string) => {
     const q = query(
@@ -102,7 +102,7 @@ export default function AdminNibuichiPage() {
   };
 
   /* --------------------------------------------------
-     今日の結果を Firestore から取得（6時切り替え）
+     今日の結果を Firestore から取得
   -------------------------------------------------- */
   const fetchTodayResult = async () => {
     const today = getTodayJST6();
@@ -111,7 +111,7 @@ export default function AdminNibuichiPage() {
 
     if (snap.exists()) {
       const data = snap.data();
-      setTodayResult(data.result ?? null);
+      setTodayResult(data);
       setSelected(data.result ?? null);
       setRewardPoints(data.rewardPoints ?? 500);
     } else {
@@ -149,7 +149,7 @@ export default function AdminNibuichiPage() {
   };
 
   /* --------------------------------------------------
-     今日の結果を確定 or 修正（＋総合戦績も更新）
+     今日の結果を確定 or 修正
   -------------------------------------------------- */
   const submitResult = async () => {
     if (!selected) return;
@@ -170,11 +170,11 @@ export default function AdminNibuichiPage() {
         : { win: 0, draw: 0, lose: 0, bakuado: 0 };
 
       // ③ 前回の結果を減算
-      if (todayResult) {
-        if (todayResult === "nibuni") stats.win--;
-        if (todayResult === "nibuichi") stats.draw--;
-        if (todayResult === "nibuzero") stats.lose--;
-        if (todayResult === "bakuado") stats.bakuado--;
+      if (todayResult?.result) {
+        if (todayResult.result === "nibuni") stats.win--;
+        if (todayResult.result === "nibuichi") stats.draw--;
+        if (todayResult.result === "nibuzero") stats.lose--;
+        if (todayResult.result === "bakuado") stats.bakuado--;
       }
 
       // ④ 今回の結果を加算
@@ -203,7 +203,12 @@ export default function AdminNibuichiPage() {
     return <div className="p-6 text-center">管理者のみアクセスできます</div>;
   }
 
-  const isFixed = todayResult != null;
+  /* --------------------------------------------------
+     ★ 正しい確定判定
+     todayResult が存在するだけではダメ
+     processed === true のときだけ確定扱い
+  -------------------------------------------------- */
+  const isFixed = todayResult?.processed === true;
 
   const options = [
     { key: "bakuado", label: "爆アド", img: "/nibuichi/bakuado.webp" },
@@ -291,7 +296,7 @@ export default function AdminNibuichiPage() {
 
         {isFixed && !editMode && (
           <div className="text-center text-green-600 font-bold mb-3">
-            本日は確定済み：{todayResult}
+            本日は確定済み：{todayResult?.result}
           </div>
         )}
 
