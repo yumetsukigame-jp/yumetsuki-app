@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { auth, functions, db } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 /* --------------------------------------------------
    ★ 今日の日付（6時切り替え）
@@ -36,6 +36,8 @@ export default function AdminNibuichiPage() {
 
   const [editMode, setEditMode] = useState(false);
 
+  const [predictionStats, setPredictionStats] = useState<any>(null);
+
   /* --------------------------------------------------
      管理者判定
   -------------------------------------------------- */
@@ -62,6 +64,35 @@ export default function AdminNibuichiPage() {
 
     return () => unsub();
   }, []);
+
+  /* --------------------------------------------------
+     今日の予想者数を取得
+  -------------------------------------------------- */
+  const fetchTodayPredictions = async () => {
+    const today = getTodayJST6();
+
+    const q = query(
+      collection(db, "nibuichi_user_predictions"),
+      where("date", "==", today)
+    );
+
+    const snap = await getDocs(q);
+
+    const counts = {
+      bakuado: 0,
+      nibuni: 0,
+      nibuichi: 0,
+      nibuzero: 0,
+      total: snap.size,
+    };
+
+    snap.forEach((doc) => {
+      const p = doc.data().prediction;
+      if (counts[p] !== undefined) counts[p]++;
+    });
+
+    setPredictionStats(counts);
+  };
 
   /* --------------------------------------------------
      今日の結果を Firestore から取得（6時切り替え）
@@ -94,6 +125,8 @@ export default function AdminNibuichiPage() {
       setGlobalStats(res.data.global ?? null);
 
       await fetchTodayResult();
+      await fetchTodayPredictions();
+
       setEditMode(false);
     } catch (err) {
       console.error(err);
@@ -193,7 +226,47 @@ export default function AdminNibuichiPage() {
         </div>
       </div>
 
-      {/* 今日の結果 */}
+      {/* 今日の予想状況（棒グラフ） */}
+      {predictionStats && (
+        <div className="bg-white shadow p-4 rounded-lg">
+          <h2 className="text-lg font-bold mb-3">今日の予想状況</h2>
+
+          <div className="text-center font-bold mb-4">
+            予想者総数：{predictionStats.total} 名
+          </div>
+
+          {[
+            { key: "bakuado", label: "爆アド", color: "bg-red-400" },
+            { key: "nibuni", label: "ニブニ", color: "bg-blue-400" },
+            { key: "nibuichi", label: "ニブイチ", color: "bg-green-400" },
+            { key: "nibuzero", label: "ニブゼロ", color: "bg-gray-400" },
+          ].map((item) => {
+            const count = predictionStats[item.key];
+            const percent =
+              predictionStats.total > 0
+                ? Math.round((count / predictionStats.total) * 100)
+                : 0;
+
+            return (
+              <div key={item.key} className="mb-3">
+                <div className="flex justify-between text-sm font-bold mb-1">
+                  <span className="w-20">{item.label}</span>
+                  <span>{count} 名（{percent}%）</span>
+                </div>
+
+                <div className="w-full bg-gray-200 h-3 rounded overflow-hidden">
+                  <div
+                    className={`${item.color} h-3`}
+                    style={{ width: `${percent}%` }}
+                  ></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 今日の結果入力 */}
       <div className="bg-white shadow p-4 rounded-lg">
         <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
 
