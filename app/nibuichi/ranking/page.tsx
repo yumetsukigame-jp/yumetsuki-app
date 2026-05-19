@@ -140,8 +140,15 @@ export default function NibuichiRankingPage() {
         <ul className="space-y-2">
           {(showMoreTotal ? totalRank : totalRank.slice(0, 20)).map((u) => {
             const info = userMap[u.uid] ?? {};
+
+            // ★ 色付け（同着対応）
+            let colorClass = "";
+            if (u.rank === 1) colorClass = "bg-yellow-100 border-yellow-400";
+            else if (u.rank === 2) colorClass = "bg-gray-100 border-gray-400";
+            else if (u.rank === 3) colorClass = "bg-orange-100 border-orange-400";
+
             return (
-              <li key={u.uid} className="border-b pb-1">
+              <li key={u.uid} className={`border-b pb-1 rounded ${colorClass}`}>
                 <div className="font-bold">
                   {u.rank}位：{info.nickname}（{info.xAccount}）
                 </div>
@@ -149,6 +156,9 @@ export default function NibuichiRankingPage() {
                   参加：{u.total} 回 / 的中：{u.hit} 回
                 </div>
                 <div className="text-sm">
+                  的中率：{(u.rate * 100).toFixed(1)}%
+                </div>
+                <div className="text-sm font-bold text-blue-600">
                   スコア：{u.score.toFixed(3)}
                 </div>
               </li>
@@ -179,8 +189,14 @@ export default function NibuichiRankingPage() {
         <ul className="space-y-2">
           {(showMoreWeekly ? weeklyRank : weeklyRank.slice(0, 20)).map((u) => {
             const info = userMap[u.uid] ?? {};
+
+            let colorClass = "";
+            if (u.rank === 1) colorClass = "bg-yellow-100 border-yellow-400";
+            else if (u.rank === 2) colorClass = "bg-gray-100 border-gray-400";
+            else if (u.rank === 3) colorClass = "bg-orange-100 border-orange-400";
+
             return (
-              <li key={u.uid} className="border-b pb-1">
+              <li key={u.uid} className={`border-b pb-1 rounded ${colorClass}`}>
                 <div className="font-bold">
                   {u.rank}位：{info.nickname}（{info.xAccount}）
                 </div>
@@ -188,6 +204,9 @@ export default function NibuichiRankingPage() {
                   参加：{u.weeklyTotal} 回 / 的中：{u.weeklyHit} 回
                 </div>
                 <div className="text-sm">
+                  的中率：{(u.weeklyRate * 100).toFixed(1)}%
+                </div>
+                <div className="text-sm font-bold text-blue-600">
                   スコア：{u.weeklyScore.toFixed(3)}
                 </div>
               </li>
