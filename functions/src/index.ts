@@ -460,7 +460,7 @@ export const cleanExpiredGacha = onSchedule(
 ============================================================ */
 export const resetDailyGacha = onSchedule(
   {
-    schedule: "0 21 * * *", // JST 6:00
+    schedule: "0 6 * * *", // JST 6:00
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
@@ -719,19 +719,24 @@ export const processNibuichiDaily = onSchedule(
       const isHit = prediction === result;
 
       /* ============================================================
-         個人戦績更新
+         個人戦績更新（★週間ランキング対応）
       ============================================================ */
       const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
       const userStatsSnap = await userStatsRef.get();
       const userStats = userStatsSnap.exists
         ? userStatsSnap.data()!
-        : { total: 0, hit: 0 };
+        : { total: 0, hit: 0, weeklyTotal: 0, weeklyHit: 0 };
 
       statsBatch.set(
         userStatsRef,
         {
           total: userStats.total + 1,
           hit: userStats.hit + (isHit ? 1 : 0),
+
+          // ★ 週間ランキング用カウンター
+          weeklyTotal: (userStats.weeklyTotal ?? 0) + 1,
+          weeklyHit: (userStats.weeklyHit ?? 0) + (isHit ? 1 : 0),
+
           updatedAt: Timestamp.now(),
         },
         { merge: true }
@@ -762,8 +767,8 @@ export const processNibuichiDaily = onSchedule(
           uid,
           prediction,
           result,
-          rewardPoints,      // 総配布ポイント
-          perUserReward,     // ★ 山分け後ポイント
+          rewardPoints,
+          perUserReward,
           createdAt: Timestamp.now(),
         },
         { merge: true }
@@ -798,9 +803,50 @@ export const processNibuichiDaily = onSchedule(
     await deleteBatch.commit();
 
     console.log("=== processNibuichiDaily END ===");
+
+    /* ============================================================
+       ★ systemLogs に記録（管理画面の最終更新用）
+    ============================================================ */
+    await db.collection("systemLogs").add({
+      type: "nibuichiDailyReset",
+      executedAt: Timestamp.now(),
+      targetDate,
+      hitCount,
+    });
   }
 );
 
+export const resetWeeklyNibuichiStats = onSchedule(
+  {
+    schedule: "0 6 * * 1", // ★ 毎週月曜 6:00 JST
+    timeZone: "Asia/Tokyo",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("=== resetWeeklyNibuichiStats START ===");
+
+    // 全ユーザーの週間戦績を取得
+    const snap = await db.collection("nibuichi_user_stats").get();
+    const batch = db.batch();
+
+    for (const docSnap of snap.docs) {
+      batch.update(docSnap.ref, {
+        weeklyTotal: 0,
+        weeklyHit: 0,
+      });
+    }
+
+    await batch.commit();
+
+    // ★ systemLogs に記録
+    await db.collection("systemLogs").add({
+      type: "weeklyNibuichiReset",
+      executedAt: Timestamp.now(),
+    });
+
+    console.log("=== resetWeeklyNibuichiStats END ===");
+  }
+);
 
 
 /* ============================================================

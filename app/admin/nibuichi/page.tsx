@@ -8,6 +8,19 @@ import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
+/* --------------------------------------------------
+   ★ 今日の日付（6時切り替え）
+-------------------------------------------------- */
+function getTodayJST6() {
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 1);
+  }
+  return now.toISOString().slice(0, 10);
+}
+
 export default function AdminNibuichiPage() {
   const router = useRouter();
 
@@ -23,9 +36,9 @@ export default function AdminNibuichiPage() {
 
   const [editMode, setEditMode] = useState(false);
 
-  // -----------------------------
-  // 管理者判定
-  // -----------------------------
+  /* --------------------------------------------------
+     管理者判定
+  -------------------------------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -50,11 +63,11 @@ export default function AdminNibuichiPage() {
     return () => unsub();
   }, []);
 
-  // -----------------------------
-  // 今日の結果を Firestore から取得
-  // -----------------------------
+  /* --------------------------------------------------
+     今日の結果を Firestore から取得（6時切り替え）
+  -------------------------------------------------- */
   const fetchTodayResult = async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayJST6();
     const ref = doc(db, "nibuichi_global", today);
     const snap = await getDoc(ref);
 
@@ -69,9 +82,9 @@ export default function AdminNibuichiPage() {
     }
   };
 
-  // -----------------------------
-  // 戦績 & 今日の結果取得
-  // -----------------------------
+  /* --------------------------------------------------
+     戦績 & 今日の結果取得
+  -------------------------------------------------- */
   const fetchStats = async () => {
     setLoading(true);
 
@@ -89,24 +102,24 @@ export default function AdminNibuichiPage() {
     setLoading(false);
   };
 
-  // -----------------------------
-  // 今日の結果を確定 or 修正（＋総合戦績も更新）
-  // -----------------------------
+  /* --------------------------------------------------
+     今日の結果を確定 or 修正（＋総合戦績も更新）
+  -------------------------------------------------- */
   const submitResult = async () => {
     if (!selected) return;
 
     setSending(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getTodayJST6();
 
-      // ① 今日の結果を保存（従来通り）
+      // ① 今日の結果を保存
       const fn = httpsCallable(functions, "submitNibuichiResult");
       await fn({ result: selected, rewardPoints });
 
       // ② 総合戦績を取得
       const statsRef = doc(db, "nibuichi_global_stats", "stats");
       const statsSnap = await getDoc(statsRef);
-      const stats = statsSnap.exists()
+      const stats = statsSnap.exists
         ? statsSnap.data()
         : { win: 0, draw: 0, lose: 0, bakuado: 0 };
 
@@ -127,7 +140,6 @@ export default function AdminNibuichiPage() {
       // ⑤ Firestore に保存
       await setDoc(statsRef, stats, { merge: true });
 
-      // 反映待ち
       await new Promise((resolve) => setTimeout(resolve, 400));
 
       await fetchStats();
@@ -154,7 +166,6 @@ export default function AdminNibuichiPage() {
     { key: "nibuzero", label: "ニブゼロ", img: "/nibuichi/nibuzero.webp" },
   ];
 
-  // ★ 仁行方式の戦績表示
   const totalBattle =
     (globalStats?.win ?? 0) +
     (globalStats?.draw ?? 0) +
@@ -166,7 +177,7 @@ export default function AdminNibuichiPage() {
 
       <h1 className="text-xl font-bold text-center">ニブイチ管理画面</h1>
 
-      {/* ゆめつき戦績（仁行方式・中央揃え・フォント大きめ） */}
+      {/* ゆめつき戦績 */}
       <div className="bg-white shadow p-4 rounded-lg text-center">
         <h2 className="text-lg font-bold mb-2">ゆめつきの戦績</h2>
 
