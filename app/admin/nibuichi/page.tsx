@@ -6,7 +6,15 @@ import { useRouter } from "next/navigation";
 import { auth, functions, db } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 /* --------------------------------------------------
    ★ 今日の日付（6時切り替え）
@@ -66,14 +74,13 @@ export default function AdminNibuichiPage() {
   }, []);
 
   /* --------------------------------------------------
-     今日の予想者数を取得
+     今日の予想者数を取得（棒グラフ用）
+     ※ 日付を引数で受け取るように変更
   -------------------------------------------------- */
-  const fetchTodayPredictions = async () => {
-    const today = getTodayJST6();
-
+  const fetchTodayPredictions = async (targetDate: string) => {
     const q = query(
       collection(db, "nibuichi_user_predictions"),
-      where("date", "==", today)
+      where("date", "==", targetDate)
     );
 
     const snap = await getDocs(q);
@@ -124,8 +131,14 @@ export default function AdminNibuichiPage() {
       const res: any = await fn({});
       setGlobalStats(res.data.global ?? null);
 
+      // 今日の結果を取得
       await fetchTodayResult();
-      await fetchTodayPredictions();
+
+      // 今日の日付を取得（JST6）
+      const today = getTodayJST6();
+
+      // 今日の予想状況（棒グラフ）を取得
+      await fetchTodayPredictions(today);
 
       setEditMode(false);
     } catch (err) {
