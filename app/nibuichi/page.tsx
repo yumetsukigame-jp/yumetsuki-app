@@ -46,13 +46,12 @@ export default function NibuichiPage() {
 
   // -----------------------------
   // 今日の予想者数を取得（棒グラフ用）
+  // ※ サーバーが保存した date を優先して使う
   // -----------------------------
-  const fetchTodayPredictions = async () => {
-    const today = getTodayJST6();
-
+  const fetchTodayPredictions = async (targetDate: string) => {
     const q = query(
       collection(db, "nibuichi_user_predictions"),
-      where("date", "==", today)
+      where("date", "==", targetDate)
     );
 
     const snap = await getDocs(q);
@@ -65,9 +64,11 @@ export default function NibuichiPage() {
       total: snap.size,
     };
 
-    snap.forEach((doc) => {
-      const p = doc.data().prediction;
-      if (counts[p] !== undefined) counts[p]++;
+    snap.forEach((d) => {
+      const p = d.data().prediction;
+      if (counts[p as keyof typeof counts] !== undefined) {
+        counts[p as keyof typeof counts]++;
+      }
     });
 
     setPredictionStats(counts);
@@ -84,18 +85,24 @@ export default function NibuichiPage() {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({ date: todayJST });
 
-      setStats(res.data.stats ?? null);
-      setTodayPrediction(res.data.todayPrediction ?? null);
-      setGlobalStats(res.data.global ?? null);
-      setTodayResult(res.data.todayResult ?? null);
+      const statsData = res.data.stats ?? null;
+      const todayPredData = res.data.todayPrediction ?? null;
+      const globalData = res.data.global ?? null;
+      const todayResultData = res.data.todayResult ?? null;
 
-      if (res.data.todayPrediction?.prediction) {
-        setSelected(res.data.todayPrediction.prediction);
-      }
+      setStats(statsData);
+      setTodayPrediction(todayPredData);
+      setGlobalStats(globalData);
+      setTodayResult(todayResultData);
 
-      // ★ 予想済みなら棒グラフ用データを取得
-      if (res.data.todayPrediction?.prediction) {
-        await fetchTodayPredictions();
+      if (todayPredData?.prediction) {
+        setSelected(todayPredData.prediction);
+
+        // ★ サーバーが保存した date を優先し、なければフロント計算の todayJST
+        const targetDate = todayPredData.date ?? todayJST;
+        await fetchTodayPredictions(targetDate);
+      } else {
+        setPredictionStats(null);
       }
     } catch (err) {
       console.error(err);
@@ -205,7 +212,9 @@ export default function NibuichiPage() {
               <div key={item.key} className="mb-3">
                 <div className="flex justify-between text-sm font-bold mb-1">
                   <span className="w-20">{item.label}</span>
-                  <span>{count} 名（{percent}%）</span>
+                  <span>
+                    {count} 名（{percent}%）
+                  </span>
                 </div>
 
                 <div className="w-full bg-gray-200 h-3 rounded overflow-hidden">
