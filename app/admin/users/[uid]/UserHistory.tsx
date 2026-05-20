@@ -17,7 +17,9 @@ export default function UserHistory({ uid }: { uid: string }) {
   const [history, setHistory] = useState<any[]>([]);
   const [totalPoints, setTotalPoints] = useState(0);
 
-  // ユーザー情報取得
+  /* --------------------------------------------------
+     ユーザー情報取得
+  -------------------------------------------------- */
   const fetchUser = async () => {
     const userRef = doc(db, "users", uid);
     const snap = await getDoc(userRef);
@@ -27,7 +29,9 @@ export default function UserHistory({ uid }: { uid: string }) {
     }
   };
 
-  // 履歴取得 + コードタイプ取得
+  /* --------------------------------------------------
+     ポイント履歴取得 + コードタイプ取得
+  -------------------------------------------------- */
   const fetchHistory = async () => {
     const q = query(
       collection(db, "pointHistory"),
@@ -73,7 +77,9 @@ export default function UserHistory({ uid }: { uid: string }) {
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>ユーザー履歴</h1>
 
-      {/* ユーザー情報 */}
+      {/* --------------------------------------------------
+          ユーザー情報
+      -------------------------------------------------- */}
       <div
         style={{
           padding: "12px",
@@ -85,8 +91,21 @@ export default function UserHistory({ uid }: { uid: string }) {
         <p><strong>UID：</strong> {user.id}</p>
         <p><strong>メール：</strong> {user.email || "不明"}</p>
         <p><strong>合計ポイント：</strong> {totalPoints} pt</p>
+
+        {/* ★ 追加：ログイン情報 */}
+        <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
+
+        <p>
+          <strong>最終ログイン：</strong>{" "}
+          {user.lastLogin?.toDate
+            ? user.lastLogin.toDate().toLocaleString()
+            : "不明"}
+        </p>
       </div>
 
+      {/* --------------------------------------------------
+          ポイント履歴
+      -------------------------------------------------- */}
       <h2>ポイント履歴</h2>
 
       {history.length === 0 && <p>履歴がありません。</p>}
@@ -104,6 +123,7 @@ export default function UserHistory({ uid }: { uid: string }) {
           <p><strong>付与ポイント：</strong> {item.added} pt</p>
           <p><strong>コード：</strong> {item.code}</p>
           <p><strong>タイプ：</strong> {item.type}</p>
+
           <p>
             <strong>日時：</strong>{" "}
             {item.createdAt?.toDate

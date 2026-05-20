@@ -20,6 +20,10 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
+  // ★ ページネーション
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 25;
+
   const fetchUsers = async () => {
     // ★ createdAt が無いユーザーを自動修正
     const allSnap = await getDocs(collection(db, "users"));
@@ -80,6 +84,7 @@ export default function UsersPage() {
 
     setUsers(sorted);
     setFiltered(sorted);
+    setCurrentPage(1); // ★ 検索や並び替え時にページをリセット
   };
 
   useEffect(() => {
@@ -92,24 +97,26 @@ export default function UsersPage() {
 
     if (!text) {
       setFiltered(users);
+      setCurrentPage(1);
       return;
     }
 
     const lower = text.toLowerCase();
 
-    setFiltered(
-      users.filter((u) => {
-        const email = (u.email || "").toLowerCase();
-        const name = (u.name || "").toLowerCase();
-        const x = (u.xAccount || "").toLowerCase();
+    const result = users.filter((u) => {
+      const email = (u.email || "").toLowerCase();
+      const name = (u.name || "").toLowerCase();
+      const x = (u.xAccount || "").toLowerCase();
 
-        return (
-          email.includes(lower) ||
-          name.includes(lower) ||
-          x.includes(lower)
-        );
-      })
-    );
+      return (
+        email.includes(lower) ||
+        name.includes(lower) ||
+        x.includes(lower)
+      );
+    });
+
+    setFiltered(result);
+    setCurrentPage(1);
   };
 
   // ポイント編集
@@ -167,6 +174,11 @@ export default function UsersPage() {
     fetchUsers();
   };
 
+  // ★ ページネーション計算
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const currentUsers = filtered.slice(startIndex, startIndex + pageSize);
+
   return (
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>ユーザー一覧</h1>
@@ -208,7 +220,8 @@ export default function UsersPage() {
 
       {filtered.length === 0 && <p>ユーザーがいません。</p>}
 
-      {filtered.map((user) => (
+      {/* ★ 25名ずつ表示 */}
+      {currentUsers.map((user) => (
         <div
           key={user.id}
           style={{
@@ -280,6 +293,16 @@ export default function UsersPage() {
           <p><strong>発送履歴：</strong> {user.shippingCount} 件</p>
           <p><strong>発送待ち：</strong> {user.waitingCount} 件</p>
 
+          {/* ★ ログイン情報 */}
+          <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
+
+          <p>
+            <strong>最終ログイン：</strong>{" "}
+            {user.lastLogin?.toDate
+              ? user.lastLogin.toDate().toLocaleString()
+              : "不明"}
+          </p>
+
           <p>
             <strong>登録日時：</strong>{" "}
             {user.createdAt?.toDate
@@ -331,6 +354,43 @@ export default function UsersPage() {
           </button>
         </div>
       ))}
+
+      {/* ★ ページネーション */}
+      {totalPages > 1 && (
+        <div style={{ marginTop: "20px", textAlign: "center" }}>
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+            style={{
+              padding: "6px 12px",
+              marginRight: "10px",
+              borderRadius: "6px",
+              border: "1px solid #ccc",
+              background: currentPage === 1 ? "#eee" : "white",
+            }}
+          >
+            前へ
+          </button>
+
+          <span>
+            {currentPage} / {totalPages}
+          </span>
+
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => p + 1)}
+            style={{
+              padding: "6px 12px",
+              marginLeft: "10px",
+              borderRadius: "6px",
+              border: "1px solid #ccc",
+              background: currentPage === totalPages ? "#eee" : "white",
+            }}
+          >
+            次へ
+          </button>
+        </div>
+      )}
     </div>
   );
 }
