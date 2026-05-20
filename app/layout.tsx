@@ -1,15 +1,9 @@
-"use client";
-
-import { useEffect } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import UserFooter from "@/components/UserFooter";
 import UserHeader from "@/components/UserHeader";
-
-import { auth, db } from "@/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, updateDoc, increment } from "firebase/firestore";
+import LoginTracker from "@/components/LoginTracker"; // ★ 追加
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,35 +27,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-
-  /* --------------------------------------------------
-     ★ ログイン時に lastLogin / loginCount を更新
-  -------------------------------------------------- */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        await updateDoc(doc(db, "users", u.uid), {
-          lastLogin: new Date(),
-          loginCount: increment(1),
-        });
-      }
-    });
-
-    return () => unsub();
-  }, []);
-
   return (
     <html
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+
+        {/* ★ ログイン更新処理（クライアント側） */}
+        <LoginTracker />
+
+        {/* 共通ヘッダー */}
         <UserHeader />
 
-        <div className="flex-1">
-          {children}
-        </div>
+        {/* ページ内容 */}
+        <div className="flex-1">{children}</div>
 
+        {/* 共通フッター */}
         <UserFooter />
       </body>
     </html>
