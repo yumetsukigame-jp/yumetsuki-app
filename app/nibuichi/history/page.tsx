@@ -84,6 +84,7 @@ export default function NibuichiHistoryPage() {
 
   /* ============================================================
      ★ 予想1件分の情報をまとめて history に push する関数
+     ★ dailyExists を追加して「未反映」を判定可能にする
   ============================================================ */
   const pushHistoryItem = async (list: any[], data: any, uid: string) => {
     const date = data.date;
@@ -93,10 +94,16 @@ export default function NibuichiHistoryPage() {
     const resultSnap = await getDoc(resultRef);
     const resultData = resultSnap.exists() ? resultSnap.data() : null;
 
-    /* 山分けポイント */
+    /* 山分けポイント（daily） */
     let perUserReward = 0;
+    let dailyExists = false;
+
     const dailyRef = collection(db, "nibuichi_daily", date, "predictions");
     const dailySnap = await getDocs(dailyRef);
+
+    if (!dailySnap.empty) {
+      dailyExists = true;
+    }
 
     dailySnap.forEach((d) => {
       const h = d.data();
@@ -110,9 +117,8 @@ export default function NibuichiHistoryPage() {
       prediction: data.prediction,
       result: resultData?.result ?? null,
       perUserReward,
-      createdAt: data.createdAt?.toDate
-        ? data.createdAt.toDate()
-        : null,
+      dailyExists, // ★ 追加
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : null,
     });
   };
 
@@ -174,14 +180,32 @@ export default function NibuichiHistoryPage() {
               <div>予想：{item.prediction}</div>
               <div>結果：{item.result ?? "未確定"}</div>
 
+              {/* -----------------------------
+                  ★ ポイント表示ロジック
+                  dailyExists = false → 未反映（6:05前）
+                  dailyExists = true → 通常表示
+              ----------------------------- */}
               <div>
                 獲得ポイント：
-                <span className={item.perUserReward > 0 ? "text-green-600" : "text-gray-600"}>
-                  {item.perUserReward} pt
-                </span>
+
+                {item.result && item.dailyExists === false ? (
+                  <span className="text-orange-600">
+                    （ポイント反映は6:05頃に行われます）
+                  </span>
+                ) : (
+                  <span
+                    className={
+                      item.perUserReward > 0
+                        ? "text-green-600"
+                        : "text-gray-600"
+                    }
+                  >
+                    {item.perUserReward} pt
+                  </span>
+                )}
               </div>
 
-              {/* ★ 的中判定を prediction === result に変更 */}
+              {/* 的中判定 */}
               {item.result && (
                 <div
                   className={
