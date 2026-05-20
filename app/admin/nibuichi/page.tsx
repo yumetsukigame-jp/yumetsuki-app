@@ -75,7 +75,6 @@ export default function AdminNibuichiPage() {
 
   /* --------------------------------------------------
      今日の予想者数を取得（棒グラフ用）
-     ※ 日付を引数で受け取る
   -------------------------------------------------- */
   const fetchTodayPredictions = async (targetDate: string) => {
     const q = query(
@@ -102,26 +101,8 @@ export default function AdminNibuichiPage() {
   };
 
   /* --------------------------------------------------
-     今日の結果を Firestore から取得
-  -------------------------------------------------- */
-  const fetchTodayResult = async () => {
-    const today = getTodayJST6();
-    const ref = doc(db, "nibuichi_global", today);
-    const snap = await getDoc(ref);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      setTodayResult(data);
-      setSelected(data.result ?? null);
-      setRewardPoints(data.rewardPoints ?? 500);
-    } else {
-      setTodayResult(null);
-      setSelected(null);
-    }
-  };
-
-  /* --------------------------------------------------
      戦績 & 今日の結果取得
+     ★ getNibuichiUserStats の todayResult を正しく使用
   -------------------------------------------------- */
   const fetchStats = async () => {
     setLoading(true);
@@ -129,15 +110,18 @@ export default function AdminNibuichiPage() {
     try {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
       const res: any = await fn({});
+
       setGlobalStats(res.data.global ?? null);
 
-      // 今日の結果を取得
-      await fetchTodayResult();
+      // ★ 今日の結果（サーバー側 JST6 ロジック）
+      const tr = res.data.todayResult ?? null;
+      setTodayResult(tr);
 
-      // 今日の日付を取得（JST6）
+      setSelected(tr?.result ?? null);
+      setRewardPoints(tr?.rewardPoints ?? 500);
+
+      // ★ 今日の日付で棒グラフ取得
       const today = getTodayJST6();
-
-      // 今日の予想状況（棒グラフ）を取得
       await fetchTodayPredictions(today);
 
       setEditMode(false);
@@ -205,7 +189,6 @@ export default function AdminNibuichiPage() {
 
   /* --------------------------------------------------
      ★ 正しい確定判定
-     todayResult が存在するだけではダメ
      processed === true のときだけ確定扱い
   -------------------------------------------------- */
   const isFixed = todayResult?.processed === true;
