@@ -68,13 +68,28 @@ export default function UsersPage() {
 
     if (sortOrder === "pointsDesc") {
       sorted.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+
     } else if (sortOrder === "pointsAsc") {
       sorted.sort((a, b) => (a.points ?? 0) - (b.points ?? 0));
+
+    } else if (sortOrder === "lastLoginDesc") {
+      sorted.sort(
+        (a, b) =>
+          (b.lastLogin?.seconds ?? 0) - (a.lastLogin?.seconds ?? 0)
+      );
+
+    } else if (sortOrder === "lastLoginAsc") {
+      sorted.sort(
+        (a, b) =>
+          (a.lastLogin?.seconds ?? 0) - (b.lastLogin?.seconds ?? 0)
+      );
+
     } else if (sortOrder === "createdAsc") {
       sorted.sort(
         (a, b) =>
           (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)
       );
+
     } else {
       sorted.sort(
         (a, b) =>
@@ -215,6 +230,10 @@ export default function UsersPage() {
           <option value="createdAsc">登録が古い順</option>
           <option value="pointsDesc">ポイントが多い順</option>
           <option value="pointsAsc">ポイントが少ない順</option>
+
+          {/* ★ 追加：ログイン順 */}
+          <option value="lastLoginDesc">ログインが新しい順</option>
+          <option value="lastLoginAsc">ログインが古い順</option>
         </select>
       </div>
 
