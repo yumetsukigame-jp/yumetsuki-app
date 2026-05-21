@@ -108,7 +108,10 @@ export default function NibuichiHistoryPage() {
     dailySnap.forEach((d) => {
       const h = d.data();
       if (h.uid === uid) {
-        perUserReward = h.perUserReward ?? 0;
+        // ★ 必ず number に落とす（undefined や null を潰す）
+        const raw = h.perUserReward;
+        perUserReward =
+          typeof raw === "number" && !Number.isNaN(raw) ? raw : 0;
       }
     });
 
@@ -117,7 +120,7 @@ export default function NibuichiHistoryPage() {
       prediction: data.prediction,
       result: resultData?.result ?? null,
       perUserReward,
-      dailyExists, // ★ 追加
+      dailyExists,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : null,
     });
   };
@@ -159,7 +162,6 @@ export default function NibuichiHistoryPage() {
 
   return (
     <div className="max-w-md mx-auto p-4 space-y-6">
-
       <h1 className="text-xl font-bold text-center mb-4">ニブイチ履歴</h1>
 
       {/* -----------------------------
@@ -173,52 +175,55 @@ export default function NibuichiHistoryPage() {
         )}
 
         <div className="space-y-3">
-          {history.map((item, i) => (
-            <div key={i} className="border p-3 rounded-lg bg-gray-50">
-              <div className="font-bold">{item.date}</div>
+          {history.map((item, i) => {
+            const reward = typeof item.perUserReward === "number"
+              ? item.perUserReward
+              : 0;
 
-              <div>予想：{item.prediction}</div>
-              <div>結果：{item.result ?? "未確定"}</div>
+            return (
+              <div key={i} className="border p-3 rounded-lg bg-gray-50">
+                <div className="font-bold">{item.date}</div>
 
-              {/* -----------------------------
-                  ★ ポイント表示ロジック
-                  dailyExists = false → 未反映（6:05前）
-                  dailyExists = true → 通常表示
-              ----------------------------- */}
-              <div>
-                獲得ポイント：
+                <div>予想：{item.prediction}</div>
+                <div>結果：{item.result ?? "未確定"}</div>
 
-                {item.result && item.dailyExists === false ? (
-                  <span className="text-orange-600">
-                    （ポイント反映は6:05頃に行われます）
-                  </span>
-                ) : (
-                  <span
+                {/* -----------------------------
+                    ★ ポイント表示ロジック
+                    dailyExists = false → 未反映（6:05前）
+                    dailyExists = true → perUserReward をそのまま表示
+                ----------------------------- */}
+                <div>
+                  獲得ポイント：
+                  {item.result && item.dailyExists === false ? (
+                    <span className="text-orange-600">
+                      （ポイント反映は6:05頃に行われます）
+                    </span>
+                  ) : (
+                    <span
+                      className={
+                        reward > 0 ? "text-green-600" : "text-gray-600"
+                      }
+                    >
+                      {reward} pt
+                    </span>
+                  )}
+                </div>
+
+                {/* 的中判定 */}
+                {item.result && (
+                  <div
                     className={
-                      item.perUserReward > 0
+                      item.prediction === item.result
                         ? "text-green-600"
-                        : "text-gray-600"
+                        : "text-red-600"
                     }
                   >
-                    {item.perUserReward} pt
-                  </span>
+                    {item.prediction === item.result ? "的中！" : "ハズレ"}
+                  </div>
                 )}
               </div>
-
-              {/* 的中判定 */}
-              {item.result && (
-                <div
-                  className={
-                    item.prediction === item.result
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
-                >
-                  {item.prediction === item.result ? "的中！" : "ハズレ"}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
