@@ -98,6 +98,10 @@ export const createGachaCode = onCall(
           cost: point.cost,
           maxPerUser: point.maxPerUser,
         },
+
+        /* --------------------------------------------------
+           ★ shippingEnabled を Firestore に保存する
+        -------------------------------------------------- */
         frames: frames.map((f: any) => ({
           label: f.label,
           maxCount: f.maxCount ?? null,
@@ -105,7 +109,9 @@ export const createGachaCode = onCall(
           probability: f.probability ?? null,
           rewardMin: f.rewardMin,
           rewardMax: f.rewardMax,
+          shippingEnabled: f.shippingEnabled ?? false, // ← ★ 追加
         })),
+
         totalCount: totalCount ?? null,
         createdAt: Timestamp.now(),
         expiresAt: expiresAt ? Timestamp.fromDate(new Date(expiresAt)) : null,
@@ -121,6 +127,7 @@ export const createGachaCode = onCall(
     }
   }
 );
+
 
 export const getPublicGachaList = onCall(
   { region: "us-central1" },

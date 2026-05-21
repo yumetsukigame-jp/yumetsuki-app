@@ -184,15 +184,20 @@ export default function PublicGachaListPage() {
           const isOpen = open[g.code] ?? false;
 
           /* --------------------------------------------------
-             ★ グレーアウト判定
-             最下位枠以外の枠がすべて 0 なら true
+             ★ グレーアウト判定（frames ベース）
+             最下位枠以外の枠がすべて残数 0 なら true
           -------------------------------------------------- */
-          const items = g.items || [];
-          const lastIndex = items.length - 1;
-          const upperItems = items.slice(0, lastIndex);
+          const frames = g.frames || [];
+          const lastIndex = frames.length - 1;
+          const upperFrames = frames.slice(0, lastIndex);
+
           const isGrayOut =
-            upperItems.length > 0 &&
-            upperItems.every((it) => (it.count ?? 0) <= 0);
+            upperFrames.length > 0 &&
+            upperFrames.every((f) => {
+              const max = f.maxCount ?? 0;
+              const used = f.usedCount ?? 0;
+              return max - used <= 0;
+            });
 
           return (
             <div
