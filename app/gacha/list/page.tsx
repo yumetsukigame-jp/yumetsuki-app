@@ -183,13 +183,25 @@ export default function PublicGachaListPage() {
 
           const isOpen = open[g.code] ?? false;
 
+          /* --------------------------------------------------
+             ★ グレーアウト判定
+             最下位枠以外の枠がすべて 0 なら true
+          -------------------------------------------------- */
+          const items = g.items || [];
+          const lastIndex = items.length - 1;
+          const upperItems = items.slice(0, lastIndex);
+          const isGrayOut =
+            upperItems.length > 0 &&
+            upperItems.every((it) => (it.count ?? 0) <= 0);
+
           return (
             <div
               key={g.code}
               style={{
                 padding: 16,
                 borderRadius: 12,
-                background: "white",
+                background: isGrayOut ? "#e5e7eb" : "white",
+                opacity: isGrayOut ? 0.6 : 1,
                 boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
               }}
             >
@@ -310,7 +322,7 @@ export default function PublicGachaListPage() {
 
                   <p style={{ margin: "6px 0" }}>残数：{remaining}</p>
 
-                  {/* ★ 各枠の残数 + 当選者一覧（×●回対応） */}
+                  {/* ★ 各枠の残数 + 当選者一覧 */}
                   <div style={{ marginTop: 20 }}>
                     <h3 style={{ marginBottom: 10 }}>🎁 枠ごとの状況</h3>
 

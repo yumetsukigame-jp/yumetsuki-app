@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  increment,
+  setDoc,
+  collection,
+} from "firebase/firestore";
 
 export default function GachaInner() {
   const router = useRouter();
@@ -20,12 +27,31 @@ export default function GachaInner() {
   const [stop, setStop] = useState(false);
   const [finalFrame, setFinalFrame] = useState("");
 
+  const [userPoints, setUserPoints] = useState<number>(0);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const c = params.get("code") ?? "";
       setCode(c);
     }
+  }, []);
+
+  /* --------------------------------------------------
+     ユーザーポイント取得
+  -------------------------------------------------- */
+  const loadUserPoints = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const snap = await getDoc(doc(db, "users", uid));
+    if (snap.exists()) {
+      setUserPoints(snap.data().points ?? 0);
+    }
+  };
+
+  useEffect(() => {
+    loadUserPoints();
   }, []);
 
   const renderFlags = (flags: string[] = []) => {
@@ -117,7 +143,7 @@ export default function GachaInner() {
       }
     }
 
-    // 🎯 ニブイチ的中者限定（正しい判定）
+    // 🎯 ニブイチ的中者限定
     if (isWinnerOnly) {
       if (!uid) {
         setError("このガチャは前日のニブイチ的中者限定です");
@@ -127,7 +153,6 @@ export default function GachaInner() {
 
       const prevDay = getPrevDayJST6();
 
-      // ★ 前日の予想（正しい保存先）
       const predRef = doc(
         db,
         "nibuichi_daily",
@@ -153,7 +178,6 @@ export default function GachaInner() {
       }
     }
 
-    // アクセスOK
     setGacha(data);
     setLoading(false);
   };
@@ -179,12 +203,66 @@ export default function GachaInner() {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
+        loadUserPoints(); // ポイント更新
       }, 2000);
 
     } catch (e: any) {
       setSpinning(false);
       setError(e.message);
     }
+  };
+
+  /* --------------------------------------------------
+     発送処理（従来フロー完全統合版）
+  -------------------------------------------------- */
+  const handleShipping = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      alert("ログインが必要です");
+      return;
+    }
+
+    if (!result) {
+      alert("結果がありません");
+      return;
+    }
+
+    const frameName = result.frame;
+    const rewardPoints = result.reward;
+
+    // ★ ガチャ発送物の基本情報（従来の selectedRewards と同じ構造）
+    const rewardData = {
+      rewardId: `gacha_${code}_${Date.now()}`,
+      name: `${frameName}（ガチャ）`,
+      cost: rewardPoints,
+      image: "/rewards/gacha.webp",
+      timestamp: new Date(),
+      shipped: false,
+    };
+
+    /* -----------------------------------------
+       ① selectedRewards/{uid} に保存（従来と同じ）
+    ----------------------------------------- */
+    await setDoc(doc(db, "selectedRewards", uid), rewardData);
+
+    /* -----------------------------------------
+       ② shippingHistory にも保存（従来と同じ）
+    ----------------------------------------- */
+    await setDoc(doc(collection(db, "shippingHistory")), {
+      uid,
+      ...rewardData,
+      requestedAt: new Date(),
+    });
+
+    /* -----------------------------------------
+       ③ ポイントを減らす（今回得たポイントを消費）
+    ----------------------------------------- */
+    await updateDoc(doc(db, "users", uid), {
+      points: increment(-rewardPoints),
+    });
+
+    alert("発送物を作成しました！");
+    router.push("/reward/complete"); // ← 従来の完了ページ
   };
 
   /* --------------------------------------------------
@@ -363,6 +441,36 @@ export default function GachaInner() {
               <p style={{ fontSize: 20 }}>
                 <strong>報酬：</strong> {result.reward} pt
               </p>
+
+              {/* ★ 発送ボタン（shippingEnabled の枠だけ表示） */}
+              {(() => {
+                const frameInfo = gacha.frames.find(
+                  (f: any) => f.label === result.frame
+                );
+
+                if (frameInfo?.shippingEnabled) {
+                  return (
+                    <button
+                      onClick={handleShipping}
+                      style={{
+                        marginTop: 20,
+                        padding: "12px 20px",
+                        background: "#ef4444",
+                        color: "white",
+                        borderRadius: 8,
+                        border: "none",
+                        cursor: "pointer",
+                        width: "100%",
+                        fontSize: 16,
+                      }}
+                    >
+                      📦 この商品を発送する
+                    </button>
+                  );
+                }
+
+                return null;
+              })()}
 
               <button
                 onClick={() => router.push(`/gacha/results?code=${code}`)}

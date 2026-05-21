@@ -14,12 +14,14 @@ type PublicFlag =
   | "subscriber"
   | "nibuichi_winner";
 
+// ★ 発送ON/OFFを追加
 type FrameInput = {
   label: string;
   maxCount: number | "";
   probability: number | "";
   rewardMin: number | "";
   rewardMax: number | "";
+  shippingEnabled: boolean; // ★ 追加
 };
 
 export default function GachaCreatePage() {
@@ -28,9 +30,11 @@ export default function GachaCreatePage() {
   const [resetType, setResetType] = useState<ResetType>("none");
 
   const [totalCount, setTotalCount] = useState<number | "">("");
+
+  // ★ 初期枠にも shippingEnabled を追加
   const [frames, setFrames] = useState<FrameInput[]>([
-    { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
-    { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "" },
+    { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
+    { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
   ]);
 
   const [cost, setCost] = useState<number | "">(0);
@@ -70,11 +74,13 @@ export default function GachaCreatePage() {
         probability: "",
         rewardMin: "",
         rewardMax: "",
+        shippingEnabled: false, // ★ 追加
       },
     ]);
   };
 
-  const updateFrame = (index: number, key: keyof FrameInput, value: string) => {
+  // ★ shippingEnabled にも対応
+  const updateFrame = (index: number, key: keyof FrameInput, value: any) => {
     setFrames((prev) =>
       prev.map((f, i) =>
         i === index
@@ -88,7 +94,7 @@ export default function GachaCreatePage() {
                   ? value === ""
                     ? ""
                     : Number(value)
-                  : value,
+                  : value, // shippingEnabled は boolean のまま
             }
           : f
       )
@@ -156,13 +162,15 @@ export default function GachaCreatePage() {
         title,
         mode: mode === "prob" ? "probability" : "count",
         resetType,
-        publicFlags, // ★ 配列で送信
+        publicFlags,
         thumbnail,
         point: {
           cost: Number(cost),
           maxPerUser: Number(maxPerUser),
         },
         totalCount: mode === "count" ? Number(totalCount) : null,
+
+        // ★ shippingEnabled を送信
         frames: frames.map((f) => ({
           label: f.label,
           maxCount:
@@ -175,7 +183,9 @@ export default function GachaCreatePage() {
               : null,
           rewardMin: Number(f.rewardMin),
           rewardMax: Number(f.rewardMax),
+          shippingEnabled: f.shippingEnabled, // ★ 追加
         })),
+
         expiresAt,
       });
 
@@ -430,6 +440,18 @@ export default function GachaCreatePage() {
                 onChange={(e) => updateFrame(i, "rewardMax", e.target.value)}
                 style={{ ...inputStyle, flex: 1 }}
               />
+
+              {/* ★ 発送ON/OFF */}
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={f.shippingEnabled}
+                  onChange={(e) =>
+                    updateFrame(i, "shippingEnabled", e.target.checked)
+                  }
+                />
+                発送
+              </label>
             </div>
           ))}
 
