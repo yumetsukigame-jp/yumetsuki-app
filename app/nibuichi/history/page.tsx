@@ -108,7 +108,6 @@ export default function NibuichiHistoryPage() {
     dailySnap.forEach((d) => {
       const h = d.data();
       if (h.uid === uid) {
-        // ★ 必ず number に落とす（undefined や null を潰す）
         const raw = h.perUserReward;
         perUserReward =
           typeof raw === "number" && !Number.isNaN(raw) ? raw : 0;
@@ -162,6 +161,7 @@ export default function NibuichiHistoryPage() {
 
   return (
     <div className="max-w-md mx-auto p-4 space-y-6">
+
       <h1 className="text-xl font-bold text-center mb-4">ニブイチ履歴</h1>
 
       {/* -----------------------------
@@ -176,9 +176,10 @@ export default function NibuichiHistoryPage() {
 
         <div className="space-y-3">
           {history.map((item, i) => {
-            const reward = typeof item.perUserReward === "number"
-              ? item.perUserReward
-              : 0;
+            const reward =
+              item.prediction === item.result
+                ? item.perUserReward ?? 0
+                : 0;
 
             return (
               <div key={i} className="border p-3 rounded-lg bg-gray-50">
@@ -188,12 +189,11 @@ export default function NibuichiHistoryPage() {
                 <div>結果：{item.result ?? "未確定"}</div>
 
                 {/* -----------------------------
-                    ★ ポイント表示ロジック
-                    dailyExists = false → 未反映（6:05前）
-                    dailyExists = true → perUserReward をそのまま表示
+                    ★ ポイント表示ロジック（修正版）
                 ----------------------------- */}
                 <div>
                   獲得ポイント：
+
                   {item.result && item.dailyExists === false ? (
                     <span className="text-orange-600">
                       （ポイント反映は6:05頃に行われます）

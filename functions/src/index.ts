@@ -726,7 +726,7 @@ export const processNibuichiDaily = onSchedule(
       const isHit = prediction === result;
 
       /* ============================================================
-         個人戦績更新（★週間ランキング対応）
+         個人戦績更新（週間ランキング対応）
       ============================================================ */
       const userStatsRef = db.collection("nibuichi_user_stats").doc(uid);
       const userStatsSnap = await userStatsRef.get();
@@ -740,7 +740,6 @@ export const processNibuichiDaily = onSchedule(
           total: userStats.total + 1,
           hit: userStats.hit + (isHit ? 1 : 0),
 
-          // ★ 週間ランキング用カウンター
           weeklyTotal: (userStats.weeklyTotal ?? 0) + 1,
           weeklyHit: (userStats.weeklyHit ?? 0) + (isHit ? 1 : 0),
 
@@ -761,6 +760,7 @@ export const processNibuichiDaily = onSchedule(
 
       /* ============================================================
          ④ 日別履歴（predictions）に perUserReward を保存
+         ★ 修正：ハズレは 0 を保存する
       ============================================================ */
       const historyRef = db
         .collection("nibuichi_daily")
@@ -775,7 +775,7 @@ export const processNibuichiDaily = onSchedule(
           prediction,
           result,
           rewardPoints,
-          perUserReward,
+          perUserReward: isHit ? perUserReward : 0, // ← ★ 修正ポイント
           createdAt: Timestamp.now(),
         },
         { merge: true }
@@ -812,7 +812,7 @@ export const processNibuichiDaily = onSchedule(
     console.log("=== processNibuichiDaily END ===");
 
     /* ============================================================
-       ★ systemLogs に記録（管理画面の最終更新用）
+       ★ systemLogs に記録
     ============================================================ */
     await db.collection("systemLogs").add({
       type: "nibuichiDailyReset",
@@ -822,6 +822,7 @@ export const processNibuichiDaily = onSchedule(
     });
   }
 );
+
 
 export const resetWeeklyNibuichiStats = onSchedule(
   {
