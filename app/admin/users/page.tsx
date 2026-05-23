@@ -20,11 +20,15 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
+  const [loading, setLoading] = useState(true); // ← ★ 追加：読み込み中フラグ
+
   // ★ ページネーション
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
 
   const fetchUsers = async () => {
+    setLoading(true); // ← ★ 読み込み開始
+
     // ★ createdAt が無いユーザーを自動修正
     const allSnap = await getDocs(collection(db, "users"));
     for (const d of allSnap.docs) {
@@ -99,7 +103,9 @@ export default function UsersPage() {
 
     setUsers(sorted);
     setFiltered(sorted);
-    setCurrentPage(1); // ★ 検索や並び替え時にページをリセット
+    setCurrentPage(1);
+
+    setLoading(false); // ← ★ 読み込み完了
   };
 
   useEffect(() => {
@@ -230,152 +236,155 @@ export default function UsersPage() {
           <option value="createdAsc">登録が古い順</option>
           <option value="pointsDesc">ポイントが多い順</option>
           <option value="pointsAsc">ポイントが少ない順</option>
-
-          {/* ★ 追加：ログイン順 */}
           <option value="lastLoginDesc">ログインが新しい順</option>
           <option value="lastLoginAsc">ログインが古い順</option>
         </select>
       </div>
 
-      {filtered.length === 0 && <p>ユーザーがいません。</p>}
+      {/* ★ 読み込み中は「ユーザーがいません」を出さない */}
+      {!loading && filtered.length === 0 && (
+        <p>ユーザーがいません。</p>
+      )}
+
+      {/* ★ 読み込み中 */}
+      {loading && <p>読み込み中…</p>}
 
       {/* ★ 25名ずつ表示 */}
-      {currentUsers.map((user) => (
-        <div
-          key={user.id}
-          style={{
-            padding: "12px",
-            marginTop: "12px",
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-          }}
-        >
-          <p><strong>メール：</strong> {user.email || "不明"}</p>
-          <p><strong>名前：</strong> {user.name || "未登録"}</p>
-          <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
-
-          {/* ★ サブスク状態 */}
-          <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
-
-          <button
-            onClick={async () => {
-              await updateDoc(doc(db, "users", user.id), {
-                subscriber: !user.subscriber,
-              });
-              alert("サブスク状態を更新しました");
-              fetchUsers();
-            }}
+      {!loading &&
+        currentUsers.map((user) => (
+          <div
+            key={user.id}
             style={{
-              padding: "6px 10px",
-              background: user.subscriber ? "#dc2626" : "#16a34a",
-              color: "white",
-              borderRadius: "6px",
-              border: "none",
-              marginBottom: "8px",
+              padding: "12px",
+              marginTop: "12px",
+              border: "1px solid #ccc",
+              borderRadius: "8px",
             }}
           >
-            {user.subscriber ? "サブスク解除" : "サブスク付与"}
-          </button>
+            <p><strong>メール：</strong> {user.email || "不明"}</p>
+            <p><strong>名前：</strong> {user.name || "未登録"}</p>
+            <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
 
-          {!user.xAccountConfirmed ? (
+            <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
+
             <button
-              onClick={() => confirmXAccount(user.id)}
+              onClick={async () => {
+                await updateDoc(doc(db, "users", user.id), {
+                  subscriber: !user.subscriber,
+                });
+                alert("サブスク状態を更新しました");
+                fetchUsers();
+              }}
               style={{
                 padding: "6px 10px",
-                background: "#16a34a",
+                background: user.subscriber ? "#dc2626" : "#16a34a",
                 color: "white",
                 borderRadius: "6px",
                 border: "none",
                 marginBottom: "8px",
               }}
             >
-              Xアカウントを確定
+              {user.subscriber ? "サブスク解除" : "サブスク付与"}
             </button>
-          ) : (
+
+            {!user.xAccountConfirmed ? (
+              <button
+                onClick={() => confirmXAccount(user.id)}
+                style={{
+                  padding: "6px 10px",
+                  background: "#16a34a",
+                  color: "white",
+                  borderRadius: "6px",
+                  border: "none",
+                  marginBottom: "8px",
+                }}
+              >
+                Xアカウントを確定
+              </button>
+            ) : (
+              <button
+                onClick={() => editXAccount(user.id, user.xAccount)}
+                style={{
+                  padding: "6px 10px",
+                  background: "#2563eb",
+                  color: "white",
+                  borderRadius: "6px",
+                  border: "none",
+                  marginBottom: "8px",
+                }}
+              >
+                編集
+              </button>
+            )}
+
+            <p><strong>UID：</strong> {user.id}</p>
+            <p><strong>ポイント：</strong> {user.points ?? 0} pt</p>
+            <p><strong>発送履歴：</strong> {user.shippingCount} 件</p>
+            <p><strong>発送待ち：</strong> {user.waitingCount} 件</p>
+
+            <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
+
+            <p>
+              <strong>最終ログイン：</strong>{" "}
+              {user.lastLogin?.toDate
+                ? user.lastLogin.toDate().toLocaleString()
+                : "不明"}
+            </p>
+
+            <p>
+              <strong>登録日時：</strong>{" "}
+              {user.createdAt?.toDate
+                ? user.createdAt.toDate().toLocaleString()
+                : "不明"}
+            </p>
+
             <button
-              onClick={() => editXAccount(user.id, user.xAccount)}
+              onClick={() => editPoints(user.id, user.points ?? 0)}
               style={{
-                padding: "6px 10px",
-                background: "#2563eb",
-                color: "white",
-                borderRadius: "6px",
-                border: "none",
-                marginBottom: "8px",
-              }}
-            >
-              編集
-            </button>
-          )}
-
-          <p><strong>UID：</strong> {user.id}</p>
-          <p><strong>ポイント：</strong> {user.points ?? 0} pt</p>
-          <p><strong>発送履歴：</strong> {user.shippingCount} 件</p>
-          <p><strong>発送待ち：</strong> {user.waitingCount} 件</p>
-
-          {/* ★ ログイン情報 */}
-          <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
-
-          <p>
-            <strong>最終ログイン：</strong>{" "}
-            {user.lastLogin?.toDate
-              ? user.lastLogin.toDate().toLocaleString()
-              : "不明"}
-          </p>
-
-          <p>
-            <strong>登録日時：</strong>{" "}
-            {user.createdAt?.toDate
-              ? user.createdAt.toDate().toLocaleString()
-              : "不明"}
-          </p>
-
-          <button
-            onClick={() => editPoints(user.id, user.points ?? 0)}
-            style={{
-              marginTop: "10px",
-              padding: "8px 12px",
-              background: "#4f46e5",
-              color: "white",
-              borderRadius: "6px",
-              border: "none",
-              marginRight: "10px",
-            }}
-          >
-            ポイント編集
-          </button>
-
-          <Link href={`/admin/users/${user.id}`}>
-            <button
-              style={{
+                marginTop: "10px",
                 padding: "8px 12px",
-                background: "#2563eb",
+                background: "#4f46e5",
                 color: "white",
                 borderRadius: "6px",
                 border: "none",
                 marginRight: "10px",
               }}
             >
-              履歴を見る
+              ポイント編集
             </button>
-          </Link>
 
-          <button
-            onClick={() => deleteUser(user.id)}
-            style={{
-              padding: "8px 12px",
-              background: "#dc2626",
-              color: "white",
-              borderRadius: "6px",
-              border: "none",
-            }}
-          >
-            削除
-          </button>
-        </div>
-      ))}
+            <Link href={`/admin/users/${user.id}`}>
+              <button
+                style={{
+                  padding: "8px 12px",
+                  background: "#2563eb",
+                  color: "white",
+                  borderRadius: "6px",
+                  border: "none",
+                  marginRight: "10px",
+                }}
+              >
+                履歴を見る
+              </button>
+            </Link>
+
+            <button
+              onClick={() => deleteUser(user.id)}
+              style={{
+                padding: "8px 12px",
+                background: "#dc2626",
+                color: "white",
+                borderRadius: "6px",
+                border: "none",
+              }}
+            >
+              削除
+            </button>
+          </div>
+        ))}
 
       {/* ★ ページネーション */}
-      {totalPages > 1 && (
+      {!loading && totalPages > 1 && (
         <div style={{ marginTop: "20px", textAlign: "center" }}>
           <button
             disabled={currentPage === 1}
