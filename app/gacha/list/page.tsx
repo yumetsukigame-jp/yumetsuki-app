@@ -46,6 +46,9 @@ export default function PublicGachaListPage() {
   // ★ 遅延読み込み用：各ガチャの結果を個別に保持
   const [resultsMap, setResultsMap] = useState<Record<string, any[]>>({});
 
+  // ★ 人気順用：全件取得キャッシュ
+  const [allResultsCache, setAllResultsCache] = useState<any[] | null>(null);
+
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const router = useRouter();
 
@@ -80,7 +83,7 @@ export default function PublicGachaListPage() {
     filtered = filtered.filter((g) => g.createdAt);
 
     /* --------------------------------------------------
-       ★ ② ソート（人気順は遅延読み込み後に対応）
+       ★ ② ソート
     -------------------------------------------------- */
     let sorted = [...filtered];
 
@@ -90,6 +93,23 @@ export default function PublicGachaListPage() {
           toDateSafe(b.createdAt).getTime() -
           toDateSafe(a.createdAt).getTime()
       );
+    }
+
+    if (sort === "popular") {
+      // ★ 初回だけ全件取得
+      let all = allResultsCache;
+      if (!all) {
+        const fn = httpsCallable(functions, "getGachaResults");
+        const res: any = await fn();
+        all = res.data || [];
+        setAllResultsCache(all);
+      }
+
+      sorted.sort((a, b) => {
+        const aUsed = all.filter((r: any) => r.code === a.code).length;
+        const bUsed = all.filter((r: any) => r.code === b.code).length;
+        return bUsed - aUsed;
+      });
     }
 
     setGachas(sorted);
@@ -171,7 +191,12 @@ export default function PublicGachaListPage() {
           const isOpen = open[g.code] ?? false;
 
           /* --------------------------------------------------
-             ★ グレーアウト判定（frames ベース）
+             ★ 遅延読み込みされた結果
+          -------------------------------------------------- */
+          const resultsForThis = resultsMap[g.code] ?? [];
+
+          /* --------------------------------------------------
+             ★ グレーアウト判定（最新 resultsMap ベース）
           -------------------------------------------------- */
           const frames = g.frames || [];
           const lastIndex = frames.length - 1;
@@ -180,15 +205,12 @@ export default function PublicGachaListPage() {
           const isGrayOut =
             upperFrames.length > 0 &&
             upperFrames.every((f) => {
+              const used = resultsForThis.filter(
+                (r: any) => r.frameName === f.label
+              ).length;
               const max = f.maxCount ?? 0;
-              const used = f.usedCount ?? 0;
               return max - used <= 0;
             });
-
-          /* --------------------------------------------------
-             ★ 遅延読み込みされた結果
-          -------------------------------------------------- */
-          const resultsForThis = resultsMap[g.code] ?? [];
 
           const totalUsed = resultsForThis.length;
           const totalMax = g.totalCount ?? 0;
@@ -307,7 +329,12 @@ export default function PublicGachaListPage() {
                 {isOpen ? "▲ 詳細を閉じる" : "▼ 詳細を見る"}
               </button>
 
-              {isOpen && (
+              {/* ★ ロード中表示 */}
+              {isOpen && !resultsMap[g.code] && (
+                <p style={{ marginTop: 12 }}>読み込み中…</p>
+              )}
+
+              {isOpen && resultsMap[g.code] && (
                 <div style={{ marginTop: 16 }}>
                   {/* 使用状況 */}
                   {g.mode === "count" && (

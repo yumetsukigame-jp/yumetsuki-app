@@ -31,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ colorScheme: "light" }}   // ★ 追加：iPhone の色反転を防ぐ
     >
       <body className="min-h-full flex flex-col">
 
