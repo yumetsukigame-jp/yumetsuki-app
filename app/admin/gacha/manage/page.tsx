@@ -65,13 +65,11 @@ export default function GachaManagePage() {
 
     const data = snap.data();
 
-    // ① アーカイブへコピー
     await setDoc(doc(db, "gachaCodesArchive", id), {
       ...data,
       archivedAt: new Date(),
     });
 
-    // ② 元データ削除
     await deleteDoc(ref);
 
     alert("アーカイブへ移動しました");
@@ -216,6 +214,8 @@ function GachaItem({
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [showX, setShowX] = useState(false); // ← ★ 追加：折りたたみ
+
   const toggle = async () => {
     setOpen(!open);
     if (!open) {
@@ -297,6 +297,7 @@ function GachaItem({
 
       <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 
+      {/* ★ Xアカウント折りたたみ */}
       {codeData.publicFlags?.includes("x_account_match") && (
         <div
           style={{
@@ -308,22 +309,42 @@ function GachaItem({
           }}
         >
           <strong>対象Xアカウント</strong>
-          <pre
+
+          <button
+            onClick={() => setShowX((prev) => !prev)}
             style={{
-              whiteSpace: "pre-wrap",
               marginTop: 6,
-              fontSize: 13,
-              background: "#fff",
-              padding: 8,
+              padding: "4px 8px",
+              background: "#2563eb",
+              color: "white",
               borderRadius: 4,
-              border: "1px solid #ddd",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
             }}
           >
-            {(codeData.xAccountList ?? []).join("\n")}
-          </pre>
+            {showX ? "▲ 閉じる" : "▼ 表示する"}
+          </button>
+
+          {showX && (
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                marginTop: 6,
+                fontSize: 13,
+                background: "#fff",
+                padding: 8,
+                borderRadius: 4,
+                border: "1px solid #ddd",
+              }}
+            >
+              {(codeData.xAccountList ?? []).join("\n")}
+            </pre>
+          )}
         </div>
       )}
 
+      {/* 公開設定の編集 */}
       <div style={{ marginBottom: 12 }}>
         {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
           <label key={flag} style={{ marginRight: 12 }}>
