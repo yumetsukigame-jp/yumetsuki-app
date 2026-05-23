@@ -231,7 +231,7 @@ export default function GachaDetailPage() {
           cursor: "pointer",
         }}
       >
-        ガチャを引く（演出あり）
+        ガチャを引く
       </button>
 
       <h2 style={{ marginTop: 32 }}>📜 このガチャの当選状況</h2>

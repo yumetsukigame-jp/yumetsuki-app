@@ -92,7 +92,7 @@ export default function GachaInner() {
   }
 
   /* --------------------------------------------------
-     ガチャコード確認（Xアカウント一致対応）
+     ガチャコード確認
   -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
@@ -148,7 +148,7 @@ export default function GachaInner() {
       }
     }
 
-    // 🎯 ニブイチ的中者限定
+    // ニブイチ的中者限定
     if (isWinnerOnly) {
       if (!uid) {
         setError("このガチャは前日のニブイチ的中者限定です");
@@ -183,9 +183,7 @@ export default function GachaInner() {
       }
     }
 
-    /* --------------------------------------------------
-       ★ Xアカウント一致条件
-    -------------------------------------------------- */
+    // Xアカウント一致
     if (isXAccountMatch) {
       if (!uid) {
         setError("このガチャはXアカウント登録者のみ引けます");
@@ -221,7 +219,7 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     ★ ガチャ実行（GIF 演出対応版）
+     ★ ガチャ実行（GIF → リール停止の順）
   -------------------------------------------------- */
   const play = async () => {
     setError("");
@@ -249,16 +247,14 @@ export default function GachaInner() {
       // ④ リール開始
       setSpinning(true);
 
-      // ⑤ リール停止（2秒後）
+      // ⑤ GIF が終わる 10 秒後にリール停止
       setTimeout(() => {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
         loadUserPoints();
-      }, 2000);
 
-      // ⑥ GIF を 10 秒後に消す
-      setTimeout(() => {
+        // GIF を消す
         setGif(null);
       }, 10000);
 
@@ -486,7 +482,7 @@ export default function GachaInner() {
               cursor: "pointer",
             }}
           >
-            ガチャを引く（演出あり）
+            ガチャを引く
           </button>
 
           <div style={{ marginTop: 30 }}>
@@ -512,7 +508,7 @@ export default function GachaInner() {
                 <strong>報酬：</strong> {result.reward} pt
               </p>
 
-              {/* ★ 発送ボタン（shippingEnabled の枠だけ表示） */}
+              {/* 発送ボタン */}
               {(() => {
                 const frameInfo = gacha.frames.find(
                   (f: any) => f.label === result.frame
