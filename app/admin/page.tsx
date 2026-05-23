@@ -253,6 +253,7 @@ export default function AdminTopPage() {
       <Section title="🎰 ガチャ管理">
         <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
         <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
+        <MenuLink href="/admin/gacha/list">ガチャアーカイブ</MenuLink>
         <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
       </Section>
 
@@ -267,20 +268,7 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
-      {/* ============================
-          戻る
-      ============================ */}
-      <div
-        style={{
-          marginTop: "40px",
-          textAlign: "center",
-          paddingTop: "20px",
-          borderTop: "1px solid #ddd",
-        }}
-      >
-        <a href="/" style={{ color: "#2563eb", textDecoration: "none" }}>
-          ユーザートップへ戻る
-        </a>
+
       </div>
     </div>
   );
