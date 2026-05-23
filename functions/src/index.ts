@@ -64,6 +64,7 @@ export const createGachaCode = onCall(
         totalCount,
         frames,
         expiresAt,
+        xAccountList, // ★ 追加
       } = request.data;
 
       if (!title || !mode || !resetType || !point || !frames) {
@@ -74,7 +75,13 @@ export const createGachaCode = onCall(
         throw new HttpsError("invalid-argument", "publicFlags は配列である必要があります");
       }
 
-      const validFlags = ["public", "limited", "subscriber", "nibuichi_winner"];
+      const validFlags = [
+        "public",
+        "limited",
+        "subscriber",
+        "nibuichi_winner",
+        "x_account_match", // ★ 追加
+      ];
 
       for (const flag of publicFlags) {
         if (!validFlags.includes(flag)) {
@@ -99,9 +106,6 @@ export const createGachaCode = onCall(
           maxPerUser: point.maxPerUser,
         },
 
-        /* --------------------------------------------------
-           ★ shippingEnabled を Firestore に保存する
-        -------------------------------------------------- */
         frames: frames.map((f: any) => ({
           label: f.label,
           maxCount: f.maxCount ?? null,
@@ -109,13 +113,16 @@ export const createGachaCode = onCall(
           probability: f.probability ?? null,
           rewardMin: f.rewardMin,
           rewardMax: f.rewardMax,
-          shippingEnabled: f.shippingEnabled ?? false, // ← ★ 追加
+          shippingEnabled: f.shippingEnabled ?? false,
         })),
 
         totalCount: totalCount ?? null,
         createdAt: Timestamp.now(),
         expiresAt: expiresAt ? Timestamp.fromDate(new Date(expiresAt)) : null,
         owner: uid,
+
+        // ★ Xアカウントリストを保存
+        xAccountList: Array.isArray(xAccountList) ? xAccountList : [],
       };
 
       await gachaRef.set(gachaData);
@@ -226,6 +233,38 @@ export const useGachaCode = onCall(
           throw new HttpsError(
             "permission-denied",
             "前日のニブイチ的中者のみ引けるガチャです"
+          );
+        }
+      }
+
+      /* ============================================================
+         ★ Xアカウント一致条件（今回追加）
+         ※ ユーザーの X アカウントが、貼り付けテキストの中に含まれていれば一致
+      ============================================================ */
+      if (flags.includes("x_account_match")) {
+        const userRef = db.collection("users").doc(uid);
+        const userSnap = await userRef.get();
+        const userData = userSnap.data();
+
+        const userX = (userData?.xAccount ?? "").toLowerCase();
+        if (!userX) {
+          throw new HttpsError(
+            "permission-denied",
+            "このガチャはXアカウント登録者のみ引けます"
+          );
+        }
+
+        const list = (gacha.xAccountList ?? []).map((s: string) =>
+          s.toLowerCase()
+        );
+
+        // ★ 要望どおり：貼り付けテキストの中にユーザー名が含まれていれば一致
+        const matched = list.some((entry: string) => entry.includes(userX));
+
+        if (!matched) {
+          throw new HttpsError(
+            "permission-denied",
+            "このガチャは指定されたXアカウントのみ引けます"
           );
         }
       }
@@ -361,6 +400,7 @@ export const useGachaCode = onCall(
     }
   }
 );
+
 
 /* ============================================================
    ガチャ結果一覧（変更なし）
@@ -750,17 +790,33 @@ export const processNibuichiDaily = onSchedule(
 
       /* ============================================================
          ③ 的中者に山分けポイントを付与
+         ★ ここで pointHistory にも記録する
       ============================================================ */
       if (isHit && perUserReward > 0) {
         const userRef = db.collection("users").doc(uid);
+
+        // ポイント付与
         userBatch.update(userRef, {
           points: FieldValue.increment(perUserReward),
+        });
+
+        // ★ pointHistory に記録
+        const phRef = db.collection("pointHistory").doc();
+        userBatch.set(phRef, {
+          id: phRef.id,
+          user: uid,
+          type: "nibuichi",
+          added: perUserReward,
+          prediction,
+          result,
+          date: targetDate,
+          createdAt: Timestamp.now(),
         });
       }
 
       /* ============================================================
          ④ 日別履歴（predictions）に perUserReward を保存
-         ★ 修正：ハズレは 0 を保存する
+         ★ ハズレは 0 を保存
       ============================================================ */
       const historyRef = db
         .collection("nibuichi_daily")
@@ -775,7 +831,7 @@ export const processNibuichiDaily = onSchedule(
           prediction,
           result,
           rewardPoints,
-          perUserReward: isHit ? perUserReward : 0, // ← ★ 修正ポイント
+          perUserReward: isHit ? perUserReward : 0,
           createdAt: Timestamp.now(),
         },
         { merge: true }
@@ -824,37 +880,71 @@ export const processNibuichiDaily = onSchedule(
 );
 
 
+
 export const resetWeeklyNibuichiStats = onSchedule(
   {
-    schedule: "0 6 * * 1", // ★ 毎週月曜 6:00 JST
+    schedule: "0 6 * * 1", // 毎週月曜 6:00 JST
     timeZone: "Asia/Tokyo",
     region: "us-central1",
   },
   async () => {
     console.log("=== resetWeeklyNibuichiStats START ===");
 
+    // ★ 今週の識別子（例：2026-Week21）
+    const now = nowJST();
+    const year = now.getFullYear();
+    const week = Math.ceil(
+      ((now.getTime() - new Date(year, 0, 1).getTime()) / 86400000 + new Date(year, 0, 1).getDay() + 1) / 7
+    );
+    const archiveId = `${year}-Week${week}`;
+
     // 全ユーザーの週間戦績を取得
     const snap = await db.collection("nibuichi_user_stats").get();
+
     const batch = db.batch();
+    const archiveBatch = db.batch();
 
     for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      const uid = docSnap.id;
+
+      // ★ アーカイブ保存
+      const archiveRef = db
+        .collection("nibuichi_weekly_archive")
+        .doc(archiveId)
+        .collection("users")
+        .doc(uid);
+
+      archiveBatch.set(archiveRef, {
+        uid,
+        weeklyTotal: data.weeklyTotal ?? 0,
+        weeklyHit: data.weeklyHit ?? 0,
+        total: data.total ?? 0,
+        hit: data.hit ?? 0,
+        archivedAt: Timestamp.now(),
+      });
+
+      // ★ リセット
       batch.update(docSnap.ref, {
         weeklyTotal: 0,
         weeklyHit: 0,
       });
     }
 
+    await archiveBatch.commit();
     await batch.commit();
 
     // ★ systemLogs に記録
     await db.collection("systemLogs").add({
       type: "weeklyNibuichiReset",
       executedAt: Timestamp.now(),
+      archiveId,
     });
 
     console.log("=== resetWeeklyNibuichiStats END ===");
   }
 );
+
 
 
 /* ============================================================
@@ -949,16 +1039,33 @@ export const manualResetNibuichiDaily = onCall(
 
       /* ============================================================
          ③ 的中者に山分けポイントを付与
+         ★ pointHistory にも記録
       ============================================================ */
       if (isHit && perUserReward > 0) {
         const userRef = db.collection("users").doc(uid);
+
+        // ポイント付与
         userBatch.update(userRef, {
           points: FieldValue.increment(perUserReward),
+        });
+
+        // ★ pointHistory に記録
+        const phRef = db.collection("pointHistory").doc();
+        userBatch.set(phRef, {
+          id: phRef.id,
+          user: uid,
+          type: "nibuichi",
+          added: perUserReward,
+          prediction,
+          result,
+          date: targetDate,
+          createdAt: Timestamp.now(),
         });
       }
 
       /* ============================================================
          ④ 日別履歴（predictions）に perUserReward を保存
+         ★ ハズレは 0 を保存
       ============================================================ */
       const historyRef = db
         .collection("nibuichi_daily")
@@ -972,8 +1079,8 @@ export const manualResetNibuichiDaily = onCall(
           uid,
           prediction,
           result,
-          rewardPoints,      // 総配布ポイント
-          perUserReward,     // ★ 山分け後ポイント
+          rewardPoints,
+          perUserReward: isHit ? perUserReward : 0,
           createdAt: Timestamp.now(),
         },
         { merge: true }
@@ -1007,33 +1114,22 @@ export const manualResetNibuichiDaily = onCall(
     await archiveBatch.commit();
     await deleteBatch.commit();
 
-    /* ============================================================
-       グローバル戦績更新
-    ============================================================ */
-    const globalRef = db.collection("nibuichi_global_stats").doc("stats");
-    await globalRef.set(
-      {
-        win: FieldValue.increment(globalWin),
-        draw: FieldValue.increment(globalDraw),
-        lose: FieldValue.increment(globalLose),
-        bakuado: FieldValue.increment(globalBakuado),
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true }
-    );
-
-    await db.collection("systemLogs").add({
-      type: "manualNibuichiDailyReset",
-      executedAt: Timestamp.now(),
-      executedBy: adminUid,
-      targetDate,
-    });
-
     console.log("=== manualResetNibuichiDaily END ===");
+
+    /* ============================================================
+       ★ systemLogs に記録
+    ============================================================ */
+    await db.collection("systemLogs").add({
+      type: "nibuichiDailyReset",
+      executedAt: Timestamp.now(),
+      targetDate,
+      hitCount,
+    });
 
     return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
   }
 );
+
 
 
 /* ============================================================

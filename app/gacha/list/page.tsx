@@ -40,9 +40,12 @@ async function getUserInfo(uid: string) {
 
 export default function PublicGachaListPage() {
   const [gachas, setGachas] = useState<any[]>([]);
-  const [allResults, setAllResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
+
+  // ★ 遅延読み込み用：各ガチャの結果を個別に保持
+  const [resultsMap, setResultsMap] = useState<Record<string, any[]>>({});
+
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const router = useRouter();
 
@@ -54,19 +57,11 @@ export default function PublicGachaListPage() {
     setLoading(true);
 
     /* --------------------------------------------------
-       ★ ① 公開ガチャ一覧を取得
+       ★ ① 公開ガチャ一覧を取得（軽い）
     -------------------------------------------------- */
     const fnList = httpsCallable(functions, "getPublicGachaList");
     const resList: any = await fnList();
     const list = resList.data || [];
-
-    /* --------------------------------------------------
-       ★ ② 全ガチャの結果履歴を取得
-    -------------------------------------------------- */
-    const fnResults = httpsCallable(functions, "getGachaResults");
-    const resResults: any = await fnResults();
-    const results = resResults.data || [];
-    setAllResults(results);
 
     const now = new Date();
 
@@ -85,7 +80,7 @@ export default function PublicGachaListPage() {
     filtered = filtered.filter((g) => g.createdAt);
 
     /* --------------------------------------------------
-       ★ ③ ソート（履歴件数ベース）
+       ★ ② ソート（人気順は遅延読み込み後に対応）
     -------------------------------------------------- */
     let sorted = [...filtered];
 
@@ -95,12 +90,6 @@ export default function PublicGachaListPage() {
           toDateSafe(b.createdAt).getTime() -
           toDateSafe(a.createdAt).getTime()
       );
-    } else if (sort === "popular") {
-      sorted.sort((a, b) => {
-        const aUsed = results.filter((r: any) => r.code === a.code).length;
-        const bUsed = results.filter((r: any) => r.code === b.code).length;
-        return bUsed - aUsed;
-      });
     }
 
     setGachas(sorted);
@@ -108,7 +97,24 @@ export default function PublicGachaListPage() {
   };
 
   /* --------------------------------------------------
-     publicFlags 表示
+     ★ 個別ガチャの結果を遅延読み込み
+  -------------------------------------------------- */
+  const loadResultsForCode = async (code: string) => {
+    if (resultsMap[code]) return; // 既に取得済みならスキップ
+
+    const fn = httpsCallable(functions, "getGachaResults");
+    const res: any = await fn();
+
+    const filtered = res.data.filter((r: any) => r.code === code);
+
+    setResultsMap((prev) => ({
+      ...prev,
+      [code]: filtered,
+    }));
+  };
+
+  /* --------------------------------------------------
+     publicFlags 表示（Xアカウント一致追加）
   -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
@@ -116,6 +122,7 @@ export default function PublicGachaListPage() {
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致",
     };
     if (!Array.isArray(flags)) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -161,12 +168,27 @@ export default function PublicGachaListPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
+          const isOpen = open[g.code] ?? false;
+
           /* --------------------------------------------------
-             ★ このガチャの履歴件数
+             ★ グレーアウト判定（frames ベース）
           -------------------------------------------------- */
-          const resultsForThis = allResults.filter(
-            (r: any) => r.code === g.code
-          );
+          const frames = g.frames || [];
+          const lastIndex = frames.length - 1;
+          const upperFrames = frames.slice(0, lastIndex);
+
+          const isGrayOut =
+            upperFrames.length > 0 &&
+            upperFrames.every((f) => {
+              const max = f.maxCount ?? 0;
+              const used = f.usedCount ?? 0;
+              return max - used <= 0;
+            });
+
+          /* --------------------------------------------------
+             ★ 遅延読み込みされた結果
+          -------------------------------------------------- */
+          const resultsForThis = resultsMap[g.code] ?? [];
 
           const totalUsed = resultsForThis.length;
           const totalMax = g.totalCount ?? 0;
@@ -180,24 +202,6 @@ export default function PublicGachaListPage() {
             g.mode === "count"
               ? totalMax - totalUsed
               : "∞";
-
-          const isOpen = open[g.code] ?? false;
-
-          /* --------------------------------------------------
-             ★ グレーアウト判定（frames ベース）
-             最下位枠以外の枠がすべて残数 0 なら true
-          -------------------------------------------------- */
-          const frames = g.frames || [];
-          const lastIndex = frames.length - 1;
-          const upperFrames = frames.slice(0, lastIndex);
-
-          const isGrayOut =
-            upperFrames.length > 0 &&
-            upperFrames.every((f) => {
-              const max = f.maxCount ?? 0;
-              const used = f.usedCount ?? 0;
-              return max - used <= 0;
-            });
 
           return (
             <div
@@ -225,7 +229,7 @@ export default function PublicGachaListPage() {
                 </div>
               )}
 
-              {/* タイトル（限定ガチャは履歴がないと遷移不可） */}
+              {/* タイトル */}
               <h2
                 style={{ margin: 0, color: "#2563eb", cursor: "pointer" }}
                 onClick={async () => {
@@ -281,9 +285,14 @@ export default function PublicGachaListPage() {
 
               {/* ▼ 詳細 */}
               <button
-                onClick={() =>
-                  setOpen((prev) => ({ ...prev, [g.code]: !isOpen }))
-                }
+                onClick={async () => {
+                  setOpen((prev) => ({ ...prev, [g.code]: !isOpen }));
+
+                  // ★ 初めて開くときだけ結果を読み込む
+                  if (!isOpen) {
+                    await loadResultsForCode(g.code);
+                  }
+                }}
                 style={{
                   width: "100%",
                   padding: "10px",
@@ -342,7 +351,6 @@ export default function PublicGachaListPage() {
                           ? f.maxCount - frameResults.length
                           : "∞";
 
-                      /* ★ uid ごとにまとめる */
                       const grouped: Record<string, number> = {};
                       frameResults.forEach((r: any) => {
                         grouped[r.uid] = (grouped[r.uid] || 0) + 1;

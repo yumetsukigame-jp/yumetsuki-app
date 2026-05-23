@@ -12,7 +12,8 @@ type PublicFlag =
   | "public"
   | "limited"
   | "subscriber"
-  | "nibuichi_winner";
+  | "nibuichi_winner"
+  | "x_account_match"; // ★ 追加
 
 // ★ 発送ON/OFFを追加
 type FrameInput = {
@@ -21,7 +22,7 @@ type FrameInput = {
   probability: number | "";
   rewardMin: number | "";
   rewardMax: number | "";
-  shippingEnabled: boolean; // ★ 追加
+  shippingEnabled: boolean;
 };
 
 export default function GachaCreatePage() {
@@ -31,7 +32,6 @@ export default function GachaCreatePage() {
 
   const [totalCount, setTotalCount] = useState<number | "">("");
 
-  // ★ 初期枠にも shippingEnabled を追加
   const [frames, setFrames] = useState<FrameInput[]>([
     { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
     { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
@@ -43,6 +43,9 @@ export default function GachaCreatePage() {
 
   // ★ publicFlags（複数選択）
   const [publicFlags, setPublicFlags] = useState<PublicFlag[]>(["public"]);
+
+  // ★ Xアカウント貼り付けテキスト（長文OK）
+  const [xAccountText, setXAccountText] = useState("");
 
   const [thumbnail, setThumbnail] = useState<string>("");
   const [gachaImages, setGachaImages] = useState<string[]>([]);
@@ -74,12 +77,11 @@ export default function GachaCreatePage() {
         probability: "",
         rewardMin: "",
         rewardMax: "",
-        shippingEnabled: false, // ★ 追加
+        shippingEnabled: false,
       },
     ]);
   };
 
-  // ★ shippingEnabled にも対応
   const updateFrame = (index: number, key: keyof FrameInput, value: any) => {
     setFrames((prev) =>
       prev.map((f, i) =>
@@ -94,7 +96,7 @@ export default function GachaCreatePage() {
                   ? value === ""
                     ? ""
                     : Number(value)
-                  : value, // shippingEnabled は boolean のまま
+                  : value,
             }
           : f
       )
@@ -170,7 +172,6 @@ export default function GachaCreatePage() {
         },
         totalCount: mode === "count" ? Number(totalCount) : null,
 
-        // ★ shippingEnabled を送信
         frames: frames.map((f) => ({
           label: f.label,
           maxCount:
@@ -183,10 +184,16 @@ export default function GachaCreatePage() {
               : null,
           rewardMin: Number(f.rewardMin),
           rewardMax: Number(f.rewardMax),
-          shippingEnabled: f.shippingEnabled, // ★ 追加
+          shippingEnabled: f.shippingEnabled,
         })),
 
         expiresAt,
+
+        // ★ Xアカウント貼り付けテキスト → 配列化して送信
+        xAccountList: xAccountText
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
       });
 
       setCreatedCode(res.data.code);
@@ -221,7 +228,7 @@ export default function GachaCreatePage() {
           style={inputStyle}
         />
 
-        {/* ★ 公開設定（複数選択） */}
+        {/* ★ 公開設定 */}
         <div style={boxStyle}>
           <div style={labelStyle}>公開設定（複数選択可）</div>
 
@@ -260,7 +267,34 @@ export default function GachaCreatePage() {
             />{" "}
             前日のニブイチ的中者限定
           </label>
+
+          {/* ★ Xアカウント一致 */}
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("x_account_match")}
+              onChange={() => toggleFlag("x_account_match")}
+            />{" "}
+            Xアカウント一致
+          </label>
         </div>
+
+        {/* ★ Xアカウント貼り付け欄 */}
+        {publicFlags.includes("x_account_match") && (
+          <div style={boxStyle}>
+            <div style={labelStyle}>Xアカウント一覧（長文貼り付けOK）</div>
+            <textarea
+              placeholder={`長文貼り付けOK（貼り付けテキストの中にユーザーのXアカウントが含まれていれば一致）
+例：
+123aaa546
+bbb_xyz
+ccc-999`}
+              value={xAccountText}
+              onChange={(e) => setXAccountText(e.target.value)}
+              style={{ ...inputStyle, height: 160, whiteSpace: "pre-wrap" }}
+            />
+          </div>
+        )}
 
         {/* 抽選方式 */}
         <div style={boxStyle}>

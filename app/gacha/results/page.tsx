@@ -71,7 +71,7 @@ function ResultsContent() {
     const res: any = await fn();
     const list = res.data || [];
 
-    // ★ ここで userName を付与する（重要）
+    // ★ userName を付与
     const enriched = await Promise.all(
       list.map(async (r: any) => {
         const name = await getUserName(r.uid);
@@ -91,7 +91,7 @@ function ResultsContent() {
       groupedData[r.code].push(r);
     }
 
-    // ★ Firestore からタイトル・publicFlags・枠情報・サムネを取得
+    // ★ Firestore からタイトル・publicFlags・枠情報・サムネ・xAccountList を取得
     const titleMap: any = {};
     const metaMap: any = {};
 
@@ -116,6 +116,7 @@ function ResultsContent() {
         frames: d.frames ?? [],
         mode: d.mode,
         thumbnail: d.thumbnail ?? "",
+        xAccountList: d.xAccountList ?? [], // ★ 追加
       };
     }
 
@@ -130,7 +131,7 @@ function ResultsContent() {
   }, []);
 
   /* --------------------------------------------------
-     publicFlags 表示
+     publicFlags 表示（Xアカウント一致追加）
   -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
@@ -138,6 +139,7 @@ function ResultsContent() {
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致", // ★ 追加
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -284,7 +286,36 @@ function ResultsContent() {
                   <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
                     {renderFlags(flags)}
                   </p>
+
+                  {/* ★ Xアカウント一致ガチャなら貼り付けリストを表示 */}
+                  {flags.includes("x_account_match") && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        padding: 8,
+                        background: "#f9fafb",
+                        border: "1px solid #eee",
+                        borderRadius: 6,
+                        fontSize: 13,
+                      }}
+                    >
+                      <strong>対象Xアカウント（貼り付けテキスト）</strong>
+                      <pre
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 6,
+                          background: "#fff",
+                          padding: 8,
+                          borderRadius: 4,
+                          border: "1px solid #ddd",
+                        }}
+                      >
+                        {info.xAccountList.join("\n")}
+                      </pre>
+                    </div>
+                  )}
                 </div>
+
                 <span style={{ fontSize: 24 }}>
                   {open[code] ? "▲" : "▼"}
                 </span>

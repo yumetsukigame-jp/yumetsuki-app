@@ -50,6 +50,7 @@ export default function GachaManagePage() {
 
   /* -----------------------------------------
      ★ 再発行＝内容変更（updateDoc）
+     ※ xAccountList も更新対象に含める
   ----------------------------------------- */
   const updateGacha = async (codeData: any) => {
     if (!confirm("このガチャの内容を更新しますか？")) return;
@@ -64,6 +65,9 @@ export default function GachaManagePage() {
       point: codeData.point,
       thumbnail: codeData.thumbnail,
       expiresAt: codeData.expiresAt,
+
+      // ★ 追加：Xアカウントリストも更新
+      xAccountList: codeData.xAccountList ?? [],
     });
 
     alert("ガチャ内容を更新しました");
@@ -83,6 +87,7 @@ export default function GachaManagePage() {
 
   /* -----------------------------------------
      ★ publicFlags 更新
+     ※ x_account_match も扱えるようにする
   ----------------------------------------- */
   const updatePublicFlags = async (id: string, newFlags: string[]) => {
     await updateDoc(doc(db, "gachaCodes", id), {
@@ -225,6 +230,7 @@ function GachaItem({
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致", // ★ 追加
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -268,9 +274,37 @@ function GachaItem({
       {/* 公開設定 */}
       <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 
+      {/* ★ Xアカウントリスト（存在する場合のみ表示） */}
+      {codeData.publicFlags?.includes("x_account_match") && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: 8,
+            background: "#f9fafb",
+            border: "1px solid #eee",
+            borderRadius: 6,
+          }}
+        >
+          <strong>対象Xアカウント（貼り付けテキスト）</strong>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              marginTop: 6,
+              fontSize: 13,
+              background: "#fff",
+              padding: 8,
+              borderRadius: 4,
+              border: "1px solid #ddd",
+            }}
+          >
+            {(codeData.xAccountList ?? []).join("\n")}
+          </pre>
+        </div>
+      )}
+
       {/* 公開設定の編集 */}
       <div style={{ marginBottom: 12 }}>
-        {["public", "limited", "subscriber", "nibuichi_winner"].map((flag) => (
+        {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
           <label key={flag} style={{ marginRight: 12 }}>
             <input
               type="checkbox"

@@ -60,6 +60,7 @@ export default function GachaInner() {
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致",
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -88,7 +89,7 @@ export default function GachaInner() {
   }
 
   /* --------------------------------------------------
-     ガチャコード確認
+     ガチャコード確認（Xアカウント一致対応）
   -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
@@ -117,6 +118,7 @@ export default function GachaInner() {
     const isPublic = flags.includes("public");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
+    const isXAccountMatch = flags.includes("x_account_match");
 
     // 公開でない場合はログイン必須
     if (!isPublic && !uid) {
@@ -178,6 +180,40 @@ export default function GachaInner() {
       }
     }
 
+    /* --------------------------------------------------
+       ★ Xアカウント一致条件（ユーザー側チェック）
+       ※ 貼り付けテキストの中にユーザーの X アカウントが含まれていればOK
+    -------------------------------------------------- */
+    if (isXAccountMatch) {
+      if (!uid) {
+        setError("このガチャはXアカウント登録者のみ引けます");
+        setLoading(false);
+        return;
+      }
+
+      const userSnap = await getDoc(doc(db, "users", uid));
+      const user = userSnap.data();
+      const userX = (user?.xAccount ?? "").toLowerCase();
+
+      if (!userX) {
+        setError("Xアカウントを登録していないため、このガチャは引けません");
+        setLoading(false);
+        return;
+      }
+
+      const list = (data.xAccountList ?? []).map((s: string) =>
+        s.toLowerCase()
+      );
+
+      const matched = list.some((entry: string) => entry.includes(userX));
+
+      if (!matched) {
+        setError("このガチャは指定されたXアカウントのみ引けます");
+        setLoading(false);
+        return;
+      }
+    }
+
     setGacha(data);
     setLoading(false);
   };
@@ -203,7 +239,7 @@ export default function GachaInner() {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
-        loadUserPoints(); // ポイント更新
+        loadUserPoints();
       }, 2000);
 
     } catch (e: any) {
@@ -213,7 +249,7 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     発送処理（従来フロー完全統合版）
+     発送処理
   -------------------------------------------------- */
   const handleShipping = async () => {
     const uid = auth.currentUser?.uid;
@@ -230,7 +266,6 @@ export default function GachaInner() {
     const frameName = result.frame;
     const rewardPoints = result.reward;
 
-    // ★ ガチャ発送物の基本情報（従来の selectedRewards と同じ構造）
     const rewardData = {
       rewardId: `gacha_${code}_${Date.now()}`,
       name: `${frameName}（ガチャ）`,
@@ -240,29 +275,20 @@ export default function GachaInner() {
       shipped: false,
     };
 
-    /* -----------------------------------------
-       ① selectedRewards/{uid} に保存（従来と同じ）
-    ----------------------------------------- */
     await setDoc(doc(db, "selectedRewards", uid), rewardData);
 
-    /* -----------------------------------------
-       ② shippingHistory にも保存（従来と同じ）
-    ----------------------------------------- */
     await setDoc(doc(collection(db, "shippingHistory")), {
       uid,
       ...rewardData,
       requestedAt: new Date(),
     });
 
-    /* -----------------------------------------
-       ③ ポイントを減らす（今回得たポイントを消費）
-    ----------------------------------------- */
     await updateDoc(doc(db, "users", uid), {
       points: increment(-rewardPoints),
     });
 
     alert("発送物を作成しました！");
-    router.push("/reward/complete"); // ← 従来の完了ページ
+    router.push("/reward/complete");
   };
 
   /* --------------------------------------------------

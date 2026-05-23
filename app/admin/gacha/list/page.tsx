@@ -40,6 +40,7 @@ export default function AdminGachaListPage() {
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致", // ★ 追加
     };
 
     if (flags.length === 0) return "（未設定）";
@@ -93,6 +94,34 @@ export default function AdminGachaListPage() {
             種類：{renderFlags(c.publicFlags)}
           </p>
 
+          {/* ★ Xアカウントリスト（存在する場合のみ表示） */}
+          {c.publicFlags?.includes("x_account_match") && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 8,
+                background: "#f9fafb",
+                border: "1px solid #eee",
+                borderRadius: 6,
+              }}
+            >
+              <strong>対象Xアカウント（貼り付けテキスト）</strong>
+              <pre
+                style={{
+                  whiteSpace: "pre-wrap",
+                  marginTop: 6,
+                  fontSize: 13,
+                  background: "#fff",
+                  padding: 8,
+                  borderRadius: 4,
+                  border: "1px solid #ddd",
+                }}
+              >
+                {(c.xAccountList ?? []).join("\n")}
+              </pre>
+            </div>
+          )}
+
           {/* 抽選方式 */}
           <p style={{ margin: "4px 0" }}>
             抽選方式：
@@ -141,6 +170,9 @@ export default function AdminGachaListPage() {
               <div>
                 報酬：{f.rewardMin} ～ {f.rewardMax}
               </div>
+
+              {/* 発送ON/OFF */}
+              <div>発送：{f.shippingEnabled ? "📦 あり" : "なし"}</div>
             </div>
           ))}
 

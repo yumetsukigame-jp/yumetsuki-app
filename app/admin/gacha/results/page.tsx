@@ -10,14 +10,14 @@ export default function AdminGachaResultsPage() {
   const [grouped, setGrouped] = useState<any>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const [gachaInfo, setGachaInfo] = useState<any>({});
-  const [loading, setLoading] = useState(true); // ★ 追加
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadResults();
   }, []);
 
   const loadResults = async () => {
-    setLoading(true); // ★ ロード開始
+    setLoading(true);
 
     const fn = httpsCallable(functions, "getGachaResults");
     const res: any = await fn();
@@ -34,7 +34,7 @@ export default function AdminGachaResultsPage() {
     setResults(list);
     setGrouped(groupedData);
 
-    // ★ gachaCodes も取得して publicFlags を紐づける
+    // ★ gachaCodes も取得して publicFlags / xAccountList を紐づける
     const snap = await getDocs(collection(db, "gachaCodes"));
     const info: any = {};
     snap.docs.forEach((d) => {
@@ -42,7 +42,7 @@ export default function AdminGachaResultsPage() {
     });
     setGachaInfo(info);
 
-    setLoading(false); // ★ ロード完了
+    setLoading(false);
   };
 
   // ★ ユーザー情報取得
@@ -54,13 +54,14 @@ export default function AdminGachaResultsPage() {
     return u.displayName || u.xAccount || "名無し";
   };
 
-  // ★ publicFlags を人間向けに変換
+  // ★ publicFlags を人間向けに変換（Xアカウント一致追加）
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致", // ★ 追加
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -86,6 +87,7 @@ export default function AdminGachaResultsPage() {
           const title = items[0]?.title ?? "（タイトルなし）";
           const info = gachaInfo[code] ?? {};
           const flags = info.publicFlags ?? [];
+          const xList = info.xAccountList ?? [];
 
           return (
             <div
@@ -115,6 +117,34 @@ export default function AdminGachaResultsPage() {
                   <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
                     公開設定：{renderFlags(flags)}
                   </p>
+
+                  {/* ★ Xアカウント一致ガチャの場合、貼り付けテキストを表示 */}
+                  {flags.includes("x_account_match") && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        padding: 8,
+                        background: "#f9fafb",
+                        border: "1px solid #eee",
+                        borderRadius: 6,
+                        fontSize: 13,
+                      }}
+                    >
+                      <strong>対象Xアカウント（貼り付けテキスト）</strong>
+                      <pre
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 6,
+                          background: "#fff",
+                          padding: 8,
+                          borderRadius: 4,
+                          border: "1px solid #ddd",
+                        }}
+                      >
+                        {xList.join("\n")}
+                      </pre>
+                    </div>
+                  )}
                 </div>
 
                 <span style={{ fontSize: 24 }}>

@@ -75,6 +75,7 @@ export default function GachaDetailPage() {
     const isLimited = flags.includes("limited");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
+    const isXAccountMatch = flags.includes("x_account_match"); // ★ 追加
 
     // ★ 公開でない場合はログイン必須
     if (!isPublic && !currentUid) {
@@ -107,12 +108,11 @@ export default function GachaDetailPage() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ（正しい判定）
+    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
     if (isWinnerOnly) {
       const uid = currentUid!;
       const prevDay = getPrevDayJST6();
 
-      // ★ 前日の予想（正しい保存先）
       const predRef = doc(
         db,
         "nibuichi_daily",
@@ -133,6 +133,39 @@ export default function GachaDetailPage() {
 
       if (prediction !== result) {
         setError("このガチャは前日のニブイチ的中者限定です（不的中）");
+        setLoading(false);
+        return;
+      }
+    }
+
+    /* --------------------------------------------------
+       ★ Xアカウント一致チェック（新規追加）
+    -------------------------------------------------- */
+    if (isXAccountMatch) {
+      if (!currentUid) {
+        setError("このガチャはXアカウント登録者のみ引けます");
+        setLoading(false);
+        return;
+      }
+
+      const userSnap = await getDoc(doc(db, "users", currentUid));
+      const user = userSnap.data();
+      const userX = (user?.xAccount ?? "").toLowerCase();
+
+      if (!userX) {
+        setError("Xアカウントを登録していないため、このガチャは引けません");
+        setLoading(false);
+        return;
+      }
+
+      const list = (data.xAccountList ?? []).map((s: string) =>
+        s.toLowerCase()
+      );
+
+      const matched = list.some((entry: string) => entry.includes(userX));
+
+      if (!matched) {
+        setError("このガチャは指定されたXアカウントのみ引けます");
         setLoading(false);
         return;
       }
