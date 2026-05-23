@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import UserFooter from "@/components/UserFooter";
 import UserHeader from "@/components/UserHeader";
-import LoginTracker from "@/components/LoginTracker"; // ★ 追加
+import LoginTracker from "@/components/LoginTracker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,20 +31,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      style={{ colorScheme: "light" }}   // ★ 追加：iPhone の色反転を防ぐ
+      style={{ colorScheme: "light" }}  // ← これは残してOK
     >
+      <head>
+        {/* ★ iPhone Safari の強制ダークモードを完全に無効化 */}
+        <meta name="color-scheme" content="light" />
+        <meta name="supported-color-schemes" content="light" />
+      </head>
+
       <body className="min-h-full flex flex-col">
-
-        {/* ★ ログイン更新処理（クライアント側） */}
         <LoginTracker />
-
-        {/* 共通ヘッダー */}
         <UserHeader />
-
-        {/* ページ内容 */}
         <div className="flex-1">{children}</div>
-
-        {/* 共通フッター */}
         <UserFooter />
       </body>
     </html>
