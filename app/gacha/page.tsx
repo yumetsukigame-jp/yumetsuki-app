@@ -29,6 +29,9 @@ export default function GachaInner() {
 
   const [userPoints, setUserPoints] = useState<number>(0);
 
+  // ★ GIF（win / lose / null）
+  const [gif, setGif] = useState<"win" | "lose" | null>(null);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -181,8 +184,7 @@ export default function GachaInner() {
     }
 
     /* --------------------------------------------------
-       ★ Xアカウント一致条件（ユーザー側チェック）
-       ※ 貼り付けテキストの中にユーザーの X アカウントが含まれていればOK
+       ★ Xアカウント一致条件
     -------------------------------------------------- */
     if (isXAccountMatch) {
       if (!uid) {
@@ -219,7 +221,7 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     ガチャ実行
+     ★ ガチャ実行（GIF 演出対応版）
   -------------------------------------------------- */
   const play = async () => {
     setError("");
@@ -227,14 +229,27 @@ export default function GachaInner() {
     setStop(false);
 
     try {
+      // ① 結果を先に取得
       const fn = httpsCallable(functions, "useGachaCode");
       const res: any = await fn({ code });
 
       const frame = res.data.frame;
+      const reward = res.data.reward;
+
       setFinalFrame(frame);
 
+      // ② ハズレ判定（最後の枠）
+      const frames = gacha.frames.map((f: any) => f.label);
+      const lastFrame = frames[frames.length - 1];
+      const isLose = frame === lastFrame;
+
+      // ③ GIF 再生（10秒）
+      setGif(isLose ? "lose" : "win");
+
+      // ④ リール開始
       setSpinning(true);
 
+      // ⑤ リール停止（2秒後）
       setTimeout(() => {
         setSpinning(false);
         setStop(true);
@@ -242,8 +257,14 @@ export default function GachaInner() {
         loadUserPoints();
       }, 2000);
 
+      // ⑥ GIF を 10 秒後に消す
+      setTimeout(() => {
+        setGif(null);
+      }, 10000);
+
     } catch (e: any) {
       setSpinning(false);
+      setGif(null);
       setError(e.message);
     }
   };
@@ -363,6 +384,29 @@ export default function GachaInner() {
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
+      {/* ★ GIF オーバーレイ */}
+      {gif && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <img
+            src={gif === "win" ? "/gacha/win.gif" : "/gacha/lose.gif"}
+            style={{ width: "70%", maxWidth: 500 }}
+          />
+        </div>
+      )}
+
       <h1 style={{ textAlign: "center", marginBottom: 20 }}>🎰 ガチャを引く</h1>
 
       {/* コード入力 */}
