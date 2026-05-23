@@ -21,21 +21,14 @@ export default function AdminTopPage() {
   const [loading, setLoading] = useState(true);
 
   const [dailyGachaTime, setDailyGachaTime] = useState<string | null>(null);
-  const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(
-    null
-  );
+  const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(null);
 
   const [running, setRunning] = useState(false);
 
-  // ★ 発送待ち件数
   const [pendingShipping, setPendingShipping] = useState<number>(0);
 
-  // ★ 折りたたみ（自動更新ステータス）
   const [openAuto, setOpenAuto] = useState(false);
 
-  /* -----------------------------
-     最新ログ取得
-  ----------------------------- */
   const loadLogs = async () => {
     try {
       const q = query(
@@ -50,7 +43,6 @@ export default function AdminTopPage() {
 
       snap.forEach((d) => {
         const data = d.data();
-
         const ts =
           data.executedAt?.toDate?.() instanceof Date
             ? data.executedAt.toDate()
@@ -71,9 +63,6 @@ export default function AdminTopPage() {
     }
   };
 
-  /* -----------------------------
-     発送待ち件数取得
-  ----------------------------- */
   const loadPendingShipping = async () => {
     try {
       const col = collection(db, "selectedRewards");
@@ -86,9 +75,6 @@ export default function AdminTopPage() {
     }
   };
 
-  /* -----------------------------
-     手動実行
-  ----------------------------- */
   const runManual = async (type: "gacha" | "nibuichi") => {
     if (running) return;
     setRunning(true);
@@ -113,9 +99,6 @@ export default function AdminTopPage() {
     setRunning(false);
   };
 
-  /* -----------------------------
-     認証チェック
-  ----------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -133,7 +116,7 @@ export default function AdminTopPage() {
       }
 
       await loadLogs();
-      await loadPendingShipping(); // ★ 発送待ち件数を読み込む
+      await loadPendingShipping();
 
       setLoading(false);
     });
@@ -153,24 +136,18 @@ export default function AdminTopPage() {
     >
       <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
 
-      {/* ============================
-          発送案内
-      ============================ */}
+      {/* 発送状況 */}
       <Section title="📦 発送状況">
         {pendingShipping > 0 ? (
           <div style={statusBox}>
             発送が必要なアイテムが <b>{pendingShipping}</b> 件あります
           </div>
         ) : (
-          <div style={statusBoxGreen}>
-            発送が必要なものはありません
-          </div>
+          <div style={statusBoxGreen}>発送が必要なものはありません</div>
         )}
       </Section>
 
-      {/* ============================
-          自動更新ステータス（折りたたみ）
-      ============================ */}
+      {/* 自動更新ステータス */}
       <div style={{ marginTop: "32px" }}>
         <h2
           onClick={() => setOpenAuto((v) => !v)}
@@ -190,31 +167,17 @@ export default function AdminTopPage() {
         </h2>
 
         {openAuto && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <div style={statusBox}>
               <p>ガチャ最終更新：{dailyGachaTime ?? "記録なし"}</p>
-              <button
-                onClick={() => runManual("gacha")}
-                disabled={running}
-                style={buttonStyle}
-              >
+              <button onClick={() => runManual("gacha")} disabled={running} style={buttonStyle}>
                 ガチャを手動リセット
               </button>
             </div>
 
             <div style={statusBox}>
               <p>ニブイチ最終更新：{dailyNibuichiTime ?? "記録なし"}</p>
-              <button
-                onClick={() => runManual("nibuichi")}
-                disabled={running}
-                style={buttonStyle}
-              >
+              <button onClick={() => runManual("nibuichi")} disabled={running} style={buttonStyle}>
                 ニブイチを手動リセット
               </button>
             </div>
@@ -222,34 +185,26 @@ export default function AdminTopPage() {
         )}
       </div>
 
-      {/* ============================
-          ユーザー管理カテゴリ
-      ============================ */}
+      {/* ユーザー管理 */}
       <Section title="👤 ユーザー管理">
         <MenuLink href="/admin/users">ユーザー管理</MenuLink>
         <MenuLink href="/admin/history">ポイント履歴</MenuLink>
       </Section>
 
-      {/* ============================
-          ニブイチ管理カテゴリ
-      ============================ */}
+      {/* ニブイチ管理 */}
       <Section title="🎯 ニブイチ管理">
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
         <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
         <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
-      {/* ============================
-          コード管理カテゴリ
-      ============================ */}
+      {/* コード管理 */}
       <Section title="🔑 コード管理">
         <MenuLink href="/admin/codes">コード一覧</MenuLink>
         <MenuLink href="/admin/create-code">新しいコードを発行</MenuLink>
       </Section>
 
-      {/* ============================
-          ガチャ管理カテゴリ
-      ============================ */}
+      {/* ガチャ管理 */}
       <Section title="🎰 ガチャ管理">
         <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
         <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
@@ -257,9 +212,7 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
       </Section>
 
-      {/* ============================
-          発送管理カテゴリ
-      ============================ */}
+      {/* 発送管理 */}
       <Section title="📦 発送管理">
         <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
         <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
@@ -267,15 +220,12 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/history">発送履歴</MenuLink>
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
-
-
-      </div>
     </div>
   );
 }
 
 /* ------------------------------
-   セクションコンポーネント
+   セクション
 ------------------------------ */
 function Section({ title, children }) {
   return (
@@ -289,13 +239,7 @@ function Section({ title, children }) {
       >
         {title}
       </h2>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {children}
       </div>
     </div>
