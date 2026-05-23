@@ -11,8 +11,18 @@ import {
 
 export default function AdminGachaListPage() {
   const [codes, setCodes] = useState<any[]>([]);
+  const [archiveCodes, setArchiveCodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ★ どちらを表示するか
+  const [view, setView] = useState<"active" | "archive">("active");
+
+  // ★ アーカイブは初回だけ読み込む
+  const [archiveLoaded, setArchiveLoaded] = useState(false);
+
+  /* -----------------------------------------
+     現役ガチャ読み込み
+  ----------------------------------------- */
   const loadCodes = async () => {
     setLoading(true);
     const snap = await getDocs(collection(db, "gachaCodes"));
@@ -21,6 +31,23 @@ export default function AdminGachaListPage() {
     setLoading(false);
   };
 
+  /* -----------------------------------------
+     アーカイブ読み込み（遅延）
+  ----------------------------------------- */
+  const loadArchive = async () => {
+    if (archiveLoaded) return; // 2回目以降は読み込まない
+
+    setLoading(true);
+    const snap = await getDocs(collection(db, "gachaCodesArchive"));
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setArchiveCodes(list);
+    setArchiveLoaded(true);
+    setLoading(false);
+  };
+
+  /* -----------------------------------------
+     削除（現役のみ）
+  ----------------------------------------- */
   const deleteCode = async (id: string) => {
     if (!confirm("本当に削除しますか？")) return;
     await deleteDoc(doc(db, "gachaCodes", id));
@@ -31,16 +58,16 @@ export default function AdminGachaListPage() {
     loadCodes();
   }, []);
 
-  if (loading) return <div style={{ padding: 24 }}>読み込み中…</div>;
-
-  // ★ publicFlags を人間向けに変換
+  /* -----------------------------------------
+     publicFlags を人間向けに変換
+  ----------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
-      x_account_match: "📝 Xアカウント一致", // ★ 追加
+      x_account_match: "📝 Xアカウント一致",
     };
 
     if (flags.length === 0) return "（未設定）";
@@ -48,13 +75,57 @@ export default function AdminGachaListPage() {
     return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
+  /* -----------------------------------------
+     表示するリストを決定
+  ----------------------------------------- */
+  const listToShow = view === "active" ? codes : archiveCodes;
+
   return (
     <div style={{ padding: 24 }}>
       <h1>🎛 ガチャ管理一覧</h1>
 
-      {codes.length === 0 && <p>ガチャがありません。</p>}
+      {/* ▼ 表示切り替えタブ */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={() => setView("active")}
+          style={{
+            flex: 1,
+            padding: 10,
+            background: view === "active" ? "#2563eb" : "#6b7280",
+            color: "white",
+            borderRadius: 8,
+            border: "none",
+          }}
+        >
+          現役ガチャ
+        </button>
 
-      {codes.map((c) => (
+        <button
+          onClick={async () => {
+            setView("archive");
+            await loadArchive(); // ★ 遅延読み込み
+          }}
+          style={{
+            flex: 1,
+            padding: 10,
+            background: view === "archive" ? "#2563eb" : "#6b7280",
+            color: "white",
+            borderRadius: 8,
+            border: "none",
+          }}
+        >
+          アーカイブ
+        </button>
+      </div>
+
+      {loading && <p>読み込み中…</p>}
+
+      {!loading && listToShow.length === 0 && (
+        <p>{view === "active" ? "ガチャがありません。" : "アーカイブは空です。"}</p>
+      )}
+
+      {/* ▼ ガチャ一覧（現役 or アーカイブ） */}
+      {listToShow.map((c) => (
         <div
           key={c.id}
           style={{
@@ -81,20 +152,21 @@ export default function AdminGachaListPage() {
             </div>
           )}
 
-          {/* タイトル */}
-          <h2 style={{ marginBottom: 8 }}>{c.title}</h2>
+          <h2 style={{ marginBottom: 8 }}>
+            {c.title}
+            {view === "archive" && (
+              <span style={{ marginLeft: 8, color: "#6b7280" }}>（アーカイブ）</span>
+            )}
+          </h2>
 
-          {/* コード */}
           <p style={{ margin: "4px 0" }}>
             コード：<strong>{c.code}</strong>
           </p>
 
-          {/* 公開設定（publicFlags） */}
           <p style={{ margin: "4px 0" }}>
             種類：{renderFlags(c.publicFlags)}
           </p>
 
-          {/* ★ Xアカウントリスト（存在する場合のみ表示） */}
           {c.publicFlags?.includes("x_account_match") && (
             <div
               style={{
@@ -105,7 +177,7 @@ export default function AdminGachaListPage() {
                 borderRadius: 6,
               }}
             >
-              <strong>対象Xアカウント（貼り付けテキスト）</strong>
+              <strong>対象Xアカウント</strong>
               <pre
                 style={{
                   whiteSpace: "pre-wrap",
@@ -122,19 +194,14 @@ export default function AdminGachaListPage() {
             </div>
           )}
 
-          {/* 抽選方式 */}
           <p style={{ margin: "4px 0" }}>
-            抽選方式：
-            {c.mode === "count" ? "枠数方式" : "確率方式"}
+            抽選方式：{c.mode === "count" ? "枠数方式" : "確率方式"}
           </p>
 
-          {/* リセット方式 */}
           <p style={{ margin: "4px 0" }}>
-            リセット：
-            {c.resetType === "daily" ? "デイリー（毎日6時）" : "なし"}
+            リセット：{c.resetType === "daily" ? "デイリー（毎日6時）" : "なし"}
           </p>
 
-          {/* 期限 */}
           <p style={{ margin: "4px 0" }}>
             期限：
             {c.expiresAt?.toDate
@@ -142,7 +209,6 @@ export default function AdminGachaListPage() {
               : "なし"}
           </p>
 
-          {/* 枠情報 */}
           <h3 style={{ marginTop: 12 }}>枠情報</h3>
 
           {c.frames.map((f: any, i: number) => (
@@ -171,7 +237,6 @@ export default function AdminGachaListPage() {
                 報酬：{f.rewardMin} ～ {f.rewardMax}
               </div>
 
-              {/* 発送ON/OFF */}
               <div>発送：{f.shippingEnabled ? "📦 あり" : "なし"}</div>
             </div>
           ))}
@@ -193,19 +258,21 @@ export default function AdminGachaListPage() {
               コードをコピー
             </button>
 
-            <button
-              onClick={() => deleteCode(c.id)}
-              style={{
-                padding: "6px 12px",
-                background: "#dc2626",
-                color: "white",
-                borderRadius: 6,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              削除
-            </button>
+            {view === "active" && (
+              <button
+                onClick={() => deleteCode(c.id)}
+                style={{
+                  padding: "6px 12px",
+                  background: "#dc2626",
+                  color: "white",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                削除
+              </button>
+            )}
           </div>
         </div>
       ))}

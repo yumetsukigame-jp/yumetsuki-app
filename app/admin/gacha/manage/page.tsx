@@ -12,6 +12,7 @@ import {
   updateDoc,
   where,
   getDoc,
+  setDoc,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
@@ -49,8 +50,36 @@ export default function GachaManagePage() {
   };
 
   /* -----------------------------------------
+     ★ アーカイブへ移動
+  ----------------------------------------- */
+  const archiveCode = async (id: string) => {
+    if (!confirm("このガチャをアーカイブへ移動しますか？")) return;
+
+    const ref = doc(db, "gachaCodes", id);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      alert("データが見つかりません");
+      return;
+    }
+
+    const data = snap.data();
+
+    // ① アーカイブへコピー
+    await setDoc(doc(db, "gachaCodesArchive", id), {
+      ...data,
+      archivedAt: new Date(),
+    });
+
+    // ② 元データ削除
+    await deleteDoc(ref);
+
+    alert("アーカイブへ移動しました");
+    await loadCodes();
+  };
+
+  /* -----------------------------------------
      ★ 再発行＝内容変更（updateDoc）
-     ※ xAccountList も更新対象に含める
   ----------------------------------------- */
   const updateGacha = async (codeData: any) => {
     if (!confirm("このガチャの内容を更新しますか？")) return;
@@ -65,8 +94,6 @@ export default function GachaManagePage() {
       point: codeData.point,
       thumbnail: codeData.thumbnail,
       expiresAt: codeData.expiresAt,
-
-      // ★ 追加：Xアカウントリストも更新
       xAccountList: codeData.xAccountList ?? [],
     });
 
@@ -85,10 +112,6 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
-  /* -----------------------------------------
-     ★ publicFlags 更新
-     ※ x_account_match も扱えるようにする
-  ----------------------------------------- */
   const updatePublicFlags = async (id: string, newFlags: string[]) => {
     await updateDoc(doc(db, "gachaCodes", id), {
       publicFlags: newFlags,
@@ -168,6 +191,7 @@ export default function GachaManagePage() {
             updatePublicFlags={updatePublicFlags}
             updateGacha={updateGacha}
             deleteCode={deleteCode}
+            archiveCode={archiveCode}
           />
         ))}
     </div>
@@ -186,6 +210,7 @@ function GachaItem({
   updatePublicFlags,
   updateGacha,
   deleteCode,
+  archiveCode,
 }) {
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<any[]>([]);
@@ -201,17 +226,11 @@ function GachaItem({
     }
   };
 
-  /* -----------------------------------------
-     ★ 残数＝履歴ベースで計算
-  ----------------------------------------- */
   const remaining =
     codeData.mode === "count"
       ? codeData.totalCount - results.length
       : "∞";
 
-  /* ------------------------------
-     ★ 使用回数リセット
-  ------------------------------ */
   const resetUsage = async () => {
     if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
 
@@ -221,16 +240,13 @@ function GachaItem({
     alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
   };
 
-  /* ------------------------------
-     ★ publicFlags 表示
-  ------------------------------ */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
-      x_account_match: "📝 Xアカウント一致", // ★ 追加
+      x_account_match: "📝 Xアカウント一致",
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -245,7 +261,7 @@ function GachaItem({
         marginBottom: 24,
       }}
     >
-      {/* タイトル + 削除 */}
+      {/* タイトル + 削除 + アーカイブ */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2
           onClick={toggle}
@@ -254,12 +270,21 @@ function GachaItem({
           {codeData.title}
         </h2>
 
-        <button
-          onClick={() => deleteCode(codeData.id)}
-          style={btnRedSmall}
-        >
-          削除
-        </button>
+        <div>
+          <button
+            onClick={() => archiveCode(codeData.id)}
+            style={btnGraySmall}
+          >
+            アーカイブ
+          </button>
+
+          <button
+            onClick={() => deleteCode(codeData.id)}
+            style={btnRedSmall}
+          >
+            削除
+          </button>
+        </div>
       </div>
 
       <p>コード：{codeData.code}</p>
@@ -268,13 +293,10 @@ function GachaItem({
         1回 {codeData.point.cost} pt（上限 {codeData.point.maxPerUser} 回）
       </p>
 
-      {/* ★ 履歴ベースの残数 */}
       <p>残数：{remaining}</p>
 
-      {/* 公開設定 */}
       <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 
-      {/* ★ Xアカウントリスト（存在する場合のみ表示） */}
       {codeData.publicFlags?.includes("x_account_match") && (
         <div
           style={{
@@ -285,7 +307,7 @@ function GachaItem({
             borderRadius: 6,
           }}
         >
-          <strong>対象Xアカウント（貼り付けテキスト）</strong>
+          <strong>対象Xアカウント</strong>
           <pre
             style={{
               whiteSpace: "pre-wrap",
@@ -302,7 +324,6 @@ function GachaItem({
         </div>
       )}
 
-      {/* 公開設定の編集 */}
       <div style={{ marginBottom: 12 }}>
         {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
           <label key={flag} style={{ marginRight: 12 }}>
@@ -320,7 +341,6 @@ function GachaItem({
         ))}
       </div>
 
-      {/* 使用回数リセット */}
       <button
         onClick={resetUsage}
         style={{
@@ -390,12 +410,18 @@ function GachaItem({
             コピー
           </button>
 
-          {/* ★ 再発行＝内容更新 */}
           <button
             onClick={() => updateGacha(codeData)}
             style={btnGreen}
           >
             内容を更新
+          </button>
+
+          <button
+            onClick={() => archiveCode(codeData.id)}
+            style={btnGray}
+          >
+            アーカイブへ移動
           </button>
 
           <button
@@ -509,6 +535,24 @@ const btnRed = {
 const btnRedSmall = {
   padding: "4px 10px",
   background: "#dc2626",
+  color: "white",
+  borderRadius: 6,
+  border: "none",
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const btnGray = {
+  padding: "6px 12px",
+  background: "#6b7280",
+  color: "white",
+  borderRadius: 6,
+  border: "none",
+};
+
+const btnGraySmall = {
+  padding: "4px 10px",
+  background: "#6b7280",
   color: "white",
   borderRadius: 6,
   border: "none",
