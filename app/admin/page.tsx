@@ -30,6 +30,9 @@ export default function AdminTopPage() {
   // ★ 発送待ち件数
   const [pendingShipping, setPendingShipping] = useState<number>(0);
 
+  // ★ 折りたたみ（自動更新ステータス）
+  const [openAuto, setOpenAuto] = useState(false);
+
   /* -----------------------------
      最新ログ取得
   ----------------------------- */
@@ -151,7 +154,7 @@ export default function AdminTopPage() {
       <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
 
       {/* ============================
-          発送案内（追加）
+          発送案内
       ============================ */}
       <Section title="📦 発送状況">
         {pendingShipping > 0 ? (
@@ -166,31 +169,58 @@ export default function AdminTopPage() {
       </Section>
 
       {/* ============================
-          自動更新ステータス
+          自動更新ステータス（折りたたみ）
       ============================ */}
-      <Section title="⏱ 自動更新ステータス">
-        <div style={statusBox}>
-          <p>ガチャ最終更新：{dailyGachaTime ?? "記録なし"}</p>
-          <button
-            onClick={() => runManual("gacha")}
-            disabled={running}
-            style={buttonStyle}
-          >
-            ガチャを手動リセット
-          </button>
-        </div>
+      <div style={{ marginTop: "32px" }}>
+        <h2
+          onClick={() => setOpenAuto((v) => !v)}
+          style={{
+            marginBottom: "12px",
+            borderLeft: "6px solid #2563eb",
+            paddingLeft: "10px",
+            cursor: "pointer",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            userSelect: "none",
+          }}
+        >
+          ⏱ 自動更新ステータス
+          <span style={{ fontSize: 20 }}>{openAuto ? "▲" : "▼"}</span>
+        </h2>
 
-        <div style={statusBox}>
-          <p>ニブイチ最終更新：{dailyNibuichiTime ?? "記録なし"}</p>
-          <button
-            onClick={() => runManual("nibuichi")}
-            disabled={running}
-            style={buttonStyle}
+        {openAuto && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
           >
-            ニブイチを手動リセット
-          </button>
-        </div>
-      </Section>
+            <div style={statusBox}>
+              <p>ガチャ最終更新：{dailyGachaTime ?? "記録なし"}</p>
+              <button
+                onClick={() => runManual("gacha")}
+                disabled={running}
+                style={buttonStyle}
+              >
+                ガチャを手動リセット
+              </button>
+            </div>
+
+            <div style={statusBox}>
+              <p>ニブイチ最終更新：{dailyNibuichiTime ?? "記録なし"}</p>
+              <button
+                onClick={() => runManual("nibuichi")}
+                disabled={running}
+                style={buttonStyle}
+              >
+                ニブイチを手動リセット
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ============================
           ユーザー管理カテゴリ
