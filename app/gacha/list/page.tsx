@@ -196,7 +196,7 @@ export default function PublicGachaListPage() {
           const resultsForThis = resultsMap[g.code] ?? [];
 
           /* --------------------------------------------------
-             ★ グレーアウト判定（最新 resultsMap ベース）
+             ★ グレーアウト判定
           -------------------------------------------------- */
           const frames = g.frames || [];
           const lastIndex = frames.length - 1;
@@ -329,11 +329,12 @@ export default function PublicGachaListPage() {
                 {isOpen ? "▲ 詳細を閉じる" : "▼ 詳細を見る"}
               </button>
 
-              {/* ★ ロード中表示 */}
+              {/* ★ 修正：読み込み前は必ず「読み込み中」 */}
               {isOpen && !resultsMap[g.code] && (
                 <p style={{ marginTop: 12 }}>読み込み中…</p>
               )}
 
+              {/* ★ 修正：読み込み後に当選者状況を表示 */}
               {isOpen && resultsMap[g.code] && (
                 <div style={{ marginTop: 16 }}>
                   {/* 使用状況 */}
