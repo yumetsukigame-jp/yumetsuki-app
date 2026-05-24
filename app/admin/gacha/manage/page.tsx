@@ -13,6 +13,7 @@ import {
   where,
   getDoc,
   setDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
@@ -43,18 +44,41 @@ export default function GachaManagePage() {
     setCodes(list);
   };
 
+  /* --------------------------------------------------
+     ★ ガチャ削除（結果も一緒に削除）
+  -------------------------------------------------- */
   const deleteCode = async (id: string) => {
     if (!confirm("本当に削除しますか？")) return;
+
+    // ① ガチャ本体削除
     await deleteDoc(doc(db, "gachaCodes", id));
+
+    // ② 結果削除
+    const q = query(
+      collection(db, "gachaResults"),
+      where("code", "==", id)
+    );
+    const snap = await getDocs(q);
+
+    const batch = writeBatch(db);
+
+    snap.forEach((docSnap) => {
+      batch.delete(doc(db, "gachaResults", docSnap.id));
+    });
+
+    await batch.commit();
+
+    alert("ガチャと結果を削除しました");
     await loadCodes();
   };
 
-  /* -----------------------------------------
-     ★ アーカイブへ移動
-  ----------------------------------------- */
+  /* --------------------------------------------------
+     ★ アーカイブへ移動（ガチャ本体 + 結果も移動）
+  -------------------------------------------------- */
   const archiveCode = async (id: string) => {
     if (!confirm("このガチャをアーカイブへ移動しますか？")) return;
 
+    // ① ガチャ本体取得
     const ref = doc(db, "gachaCodes", id);
     const snap = await getDoc(ref);
 
@@ -65,14 +89,43 @@ export default function GachaManagePage() {
 
     const data = snap.data();
 
+    // ② アーカイブへコピー
     await setDoc(doc(db, "gachaCodesArchive", id), {
       ...data,
       archivedAt: new Date(),
     });
 
+    // ③ 元データ削除
     await deleteDoc(ref);
 
-    alert("アーカイブへ移動しました");
+    /* --------------------------------------------------
+       ★ ④ 結果もアーカイブへ移動
+    -------------------------------------------------- */
+    const q = query(
+      collection(db, "gachaResults"),
+      where("code", "==", id)
+    );
+    const resultSnap = await getDocs(q);
+
+    const batch = writeBatch(db);
+
+    resultSnap.forEach((docSnap) => {
+      const resultData = docSnap.data();
+      const resultId = docSnap.id;
+
+      // アーカイブへコピー
+      batch.set(doc(db, "gachaResultsArchive", resultId), {
+        ...resultData,
+        archivedAt: new Date(),
+      });
+
+      // 元データ削除
+      batch.delete(doc(db, "gachaResults", resultId));
+    });
+
+    await batch.commit();
+
+    alert("ガチャと結果をアーカイブへ移動しました");
     await loadCodes();
   };
 
@@ -214,7 +267,7 @@ function GachaItem({
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [showX, setShowX] = useState(false); // ← ★ 追加：折りたたみ
+  const [showX, setShowX] = useState(false);
 
   const toggle = async () => {
     setOpen(!open);
