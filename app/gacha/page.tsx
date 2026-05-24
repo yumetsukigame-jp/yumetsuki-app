@@ -29,8 +29,10 @@ export default function GachaInner() {
 
   const [userPoints, setUserPoints] = useState<number>(0);
 
-  // ★ GIF（win / lose / null）
   const [gif, setGif] = useState<"win" | "lose" | null>(null);
+
+  // ★ 追加：ガチャ実行ロック
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -40,9 +42,6 @@ export default function GachaInner() {
     }
   }, []);
 
-  /* --------------------------------------------------
-     ユーザーポイント取得
-  -------------------------------------------------- */
   const loadUserPoints = async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -69,9 +68,6 @@ export default function GachaInner() {
     return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
-  /* --------------------------------------------------
-     JST 6:00 基準で前日を求める
-  -------------------------------------------------- */
   function getPrevDayJST6() {
     const now = new Date();
     const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -91,9 +87,6 @@ export default function GachaInner() {
     return `${y}-${m}-${d}`;
   }
 
-  /* --------------------------------------------------
-     ガチャコード確認
-  -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
     setGacha(null);
@@ -123,14 +116,12 @@ export default function GachaInner() {
     const isWinnerOnly = flags.includes("nibuichi_winner");
     const isXAccountMatch = flags.includes("x_account_match");
 
-    // 公開でない場合はログイン必須
     if (!isPublic && !uid) {
       setError("このガチャは限定公開です（ログインが必要です）");
       setLoading(false);
       return;
     }
 
-    // サブスク限定
     if (isSubscriberOnly) {
       if (!uid) {
         setError("このガチャはサブスク会員限定です");
@@ -148,7 +139,6 @@ export default function GachaInner() {
       }
     }
 
-    // ニブイチ的中者限定
     if (isWinnerOnly) {
       if (!uid) {
         setError("このガチャは前日のニブイチ的中者限定です");
@@ -183,7 +173,6 @@ export default function GachaInner() {
       }
     }
 
-    // Xアカウント一致
     if (isXAccountMatch) {
       if (!uid) {
         setError("このガチャはXアカウント登録者のみ引けます");
@@ -219,15 +208,17 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     ★ ガチャ実行（GIF → リール停止の順）
+     ★ ガチャ実行（連打防止付き）
   -------------------------------------------------- */
   const play = async () => {
+    if (isPlaying) return; // ★ 連打防止
+    setIsPlaying(true);
+
     setError("");
     setResult(null);
     setStop(false);
 
     try {
-      // ① 結果を先に取得
       const fn = httpsCallable(functions, "useGachaCode");
       const res: any = await fn({ code });
 
@@ -236,32 +227,30 @@ export default function GachaInner() {
 
       setFinalFrame(frame);
 
-      // ② ハズレ判定（最後の枠）
       const frames = gacha.frames.map((f: any) => f.label);
       const lastFrame = frames[frames.length - 1];
       const isLose = frame === lastFrame;
 
-      // ③ GIF 再生（10秒）
       setGif(isLose ? "lose" : "win");
 
-      // ④ リール開始
       setSpinning(true);
 
-      // ⑤ GIF が終わる 10 秒後にリール停止
       setTimeout(() => {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
         loadUserPoints();
 
-        // GIF を消す
         setGif(null);
+
+        setIsPlaying(false); // ★ ロック解除
       }, 10000);
 
     } catch (e: any) {
       setSpinning(false);
       setGif(null);
       setError(e.message);
+      setIsPlaying(false); // ★ エラー時も解除
     }
   };
 
@@ -470,19 +459,20 @@ export default function GachaInner() {
 
           <button
             onClick={play}
+            disabled={isPlaying} // ★ 連打防止
             style={{
               width: "100%",
               padding: "12px 0",
-              background: "#10b981",
+              background: isPlaying ? "#6b7280" : "#10b981",
               color: "white",
               borderRadius: 8,
               border: "none",
               fontSize: 18,
               fontWeight: "bold",
-              cursor: "pointer",
+              cursor: isPlaying ? "not-allowed" : "pointer",
             }}
           >
-            ガチャを引く
+            {isPlaying ? "実行中…" : "ガチャを引く"}
           </button>
 
           <div style={{ marginTop: 30 }}>
