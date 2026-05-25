@@ -274,8 +274,8 @@ export default function PublicGachaListPage() {
                 onClick={async () => {
                   const flags = g.publicFlags ?? [];
                   const isLimited = flags.includes("limited");
-                  const isXMatch = flags.includes("x_account_match");
 
+                  // ★ 限定公開だけは一覧でもチェック
                   if (isLimited) {
                     const uid = auth.currentUser?.uid;
                     if (!uid) {
@@ -296,37 +296,7 @@ export default function PublicGachaListPage() {
                     }
                   }
 
-                  // ★ Xアカウント一致チェック（entry.includes(userX)）
-                  if (isXMatch) {
-                    const uid = auth.currentUser?.uid;
-                    if (!uid) {
-                      alert("このガチャはXアカウント登録者のみ引けます");
-                      return;
-                    }
-
-                    const userSnap = await getDoc(doc(db, "users", uid));
-                    const user = userSnap.data();
-                    const userX = (user?.xAccount ?? "").toLowerCase();
-
-                    if (!userX) {
-                      alert("Xアカウントを登録していないため、このガチャは引けません");
-                      return;
-                    }
-
-                    const list = (g.xAccountList ?? []).map((s: string) =>
-                      s.toLowerCase()
-                    );
-
-                    const matched = list.some((entry: string) =>
-                      entry.includes(userX)
-                    );
-
-                    if (!matched) {
-                      alert("このガチャは指定されたXアカウントのみ引けます");
-                      return;
-                    }
-                  }
-
+                  // ★ Xアカウント一致チェックは一覧では行わない
                   router.push(`/gacha/${g.code}`);
                 }}
               >
