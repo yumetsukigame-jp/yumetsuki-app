@@ -84,6 +84,7 @@ export default function PublicGachaListPage() {
       return true;
     });
 
+    // createdAt が無いガチャを除外
     filtered = filtered.filter((g) => g.createdAt);
 
     let sorted = [...filtered];
@@ -140,10 +141,12 @@ export default function PublicGachaListPage() {
       )
     );
 
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const list = snap.docs
+      .map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }))
+      .filter((d) => d.createdAt); // ★ createdAt が無いデータを除外
 
     setResultsMap((prev) => ({
       ...prev,
