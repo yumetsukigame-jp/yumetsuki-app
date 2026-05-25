@@ -68,8 +68,7 @@ function ResultsContent() {
   };
 
   /* --------------------------------------------------
-     結果ロード（ここで userName を付与する）
-     ★ サブコレクション版：gachaResults/{code}/results
+     結果ロード（サブコレクション版）
   -------------------------------------------------- */
   const loadResults = async () => {
     setLoading(true);
@@ -85,11 +84,10 @@ function ResultsContent() {
     const titleMap: any = {};
     const metaMap: any = {};
 
-    // ② 各ガチャごとにサブコレクション results を取得
+    // ② 各ガチャごとに results を取得
     for (const g of gachaList) {
       const code = g.code as string;
 
-      // code 指定がある場合はそのガチャだけ
       if (filterCode && code !== filterCode) continue;
 
       const resultsSnap = await getDocs(
@@ -102,16 +100,20 @@ function ResultsContent() {
       if (resultsSnap.empty) continue;
 
       const results = await Promise.all(
-        resultsSnap.docs.map(async (d) => {
-          const data = d.data();
-          const name = await getUserName(data.uid);
-          return {
+        resultsSnap.docs
+          .map((d) => ({
             id: d.id,
-            ...data,
-            userName: name,
-            _userName: name.toLowerCase(),
-          };
-        })
+            ...d.data(),
+          }))
+          .filter((d) => d.createdAt) // ★ createdAt が無いデータを除外
+          .map(async (d) => {
+            const name = await getUserName(d.uid);
+            return {
+              ...d,
+              userName: name,
+              _userName: name.toLowerCase(),
+            };
+          })
       );
 
       groupedData[code] = results;
@@ -137,7 +139,7 @@ function ResultsContent() {
   }, []);
 
   /* --------------------------------------------------
-     publicFlags 表示（Xアカウント一致追加）
+     publicFlags 表示
   -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
@@ -145,7 +147,7 @@ function ResultsContent() {
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
-      x_account_match: "📝 Xアカウント一致", // ★ 追加
+      x_account_match: "📝 Xアカウント一致",
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -380,8 +382,8 @@ function FrameList({
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
-        // ★ 履歴ベースで抽出（すでに userName 付き）
-        let list = items.filter((r: any) => r.frameName === frameName);
+        // ★ frameName → frame に修正
+        let list = items.filter((r: any) => r.frame === frameName);
 
         if (filterMine && currentUid) {
           list = list.filter((r: any) => r.uid === currentUid);
@@ -391,7 +393,7 @@ function FrameList({
           const s = search.trim().toLowerCase();
           list = list.filter(
             (r: any) =>
-              r.frameName.toLowerCase().includes(s) ||
+              r.frame.toLowerCase().includes(s) ||
               r._userName.includes(s)
           );
         }

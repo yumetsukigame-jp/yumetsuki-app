@@ -211,10 +211,12 @@ export default function GachaDetailPage() {
       )
     );
 
-    const list = snapResults.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const list = snapResults.docs
+      .map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }))
+      .filter((d) => d.createdAt); // ★ createdAt が無いデータを除外
 
     setAllResults(list);
     setResultsLoading(false);
@@ -325,7 +327,9 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
     <div style={{ marginTop: 16 }}>
       {frames.map((f: any) => {
         const frameName = f.label;
-        const list = results.filter((r: any) => r.frameName === frameName);
+
+        // ★ frameName → frame に修正
+        const list = results.filter((r: any) => r.frame === frameName);
 
         return (
           <div key={frameName} style={{ marginBottom: 20 }}>
