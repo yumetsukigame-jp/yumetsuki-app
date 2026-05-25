@@ -213,7 +213,7 @@ export default function PublicGachaListPage() {
           const resultsForThis = resultsMap[g.code] ?? [];
 
           /* --------------------------------------------------
-             ★ グレーアウト判定（frameName → frame に修正）
+             ★ グレーアウト判定（frameName → frame）
           -------------------------------------------------- */
           const frames = g.frames || [];
           const lastIndex = frames.length - 1;
@@ -274,6 +274,7 @@ export default function PublicGachaListPage() {
                 onClick={async () => {
                   const flags = g.publicFlags ?? [];
                   const isLimited = flags.includes("limited");
+                  const isXMatch = flags.includes("x_account_match");
 
                   if (isLimited) {
                     const uid = auth.currentUser?.uid;
@@ -291,6 +292,37 @@ export default function PublicGachaListPage() {
 
                     if (!snap.exists()) {
                       alert("このガチャは限定公開です（コード入力が必要です）");
+                      return;
+                    }
+                  }
+
+                  // ★ Xアカウント一致チェック（entry.includes(userX)）
+                  if (isXMatch) {
+                    const uid = auth.currentUser?.uid;
+                    if (!uid) {
+                      alert("このガチャはXアカウント登録者のみ引けます");
+                      return;
+                    }
+
+                    const userSnap = await getDoc(doc(db, "users", uid));
+                    const user = userSnap.data();
+                    const userX = (user?.xAccount ?? "").toLowerCase();
+
+                    if (!userX) {
+                      alert("Xアカウントを登録していないため、このガチャは引けません");
+                      return;
+                    }
+
+                    const list = (g.xAccountList ?? []).map((s: string) =>
+                      s.toLowerCase()
+                    );
+
+                    const matched = list.some((entry: string) =>
+                      entry.includes(userX)
+                    );
+
+                    if (!matched) {
+                      alert("このガチャは指定されたXアカウントのみ引けます");
                       return;
                     }
                   }
@@ -384,8 +416,6 @@ export default function PublicGachaListPage() {
 
                     {g.frames.map((f: any) => {
                       const frameName = f.label;
-
-                      // ★ frameName → frame に修正
                       const frameResults = resultsForThis.filter(
                         (r: any) => r.frame === frameName
                       );

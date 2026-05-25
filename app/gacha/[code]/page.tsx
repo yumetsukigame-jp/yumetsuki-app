@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { db, functions, auth } from "@/firebase";
+import { db, auth } from "@/firebase";
 import {
   doc,
   getDoc,
@@ -186,6 +186,7 @@ export default function GachaDetailPage() {
         s.toLowerCase()
       );
 
+      // ★ 正しい一致条件：貼り付けテキストの中にユーザーXが含まれる
       const matched = list.some((entry: string) => entry.includes(userX));
 
       if (!matched) {
