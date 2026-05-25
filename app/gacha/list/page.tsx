@@ -213,7 +213,7 @@ export default function PublicGachaListPage() {
           const resultsForThis = resultsMap[g.code] ?? [];
 
           /* --------------------------------------------------
-             ★ グレーアウト判定
+             ★ グレーアウト判定（frameName → frame に修正）
           -------------------------------------------------- */
           const frames = g.frames || [];
           const lastIndex = frames.length - 1;
@@ -223,7 +223,7 @@ export default function PublicGachaListPage() {
             upperFrames.length > 0 &&
             upperFrames.every((f) => {
               const used = resultsForThis.filter(
-                (r: any) => r.frameName === f.label
+                (r: any) => r.frame === f.label
               ).length;
               const max = f.maxCount ?? 0;
               return max - used <= 0;
@@ -384,8 +384,10 @@ export default function PublicGachaListPage() {
 
                     {g.frames.map((f: any) => {
                       const frameName = f.label;
+
+                      // ★ frameName → frame に修正
                       const frameResults = resultsForThis.filter(
-                        (r: any) => r.frameName === frameName
+                        (r: any) => r.frame === frameName
                       );
 
                       const frameRemaining =
