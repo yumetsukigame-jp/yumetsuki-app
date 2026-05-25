@@ -124,7 +124,7 @@ function ResultsContent() {
         frames: g.frames ?? [],
         mode: g.mode,
         thumbnail: g.thumbnail ?? "",
-        xAccountList: g.xAccountList ?? [],
+        xAccountList: g.xAccountList ?? [], // ← 使わないが残してOK
       };
     }
 
@@ -294,34 +294,6 @@ function ResultsContent() {
                   <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
                     {renderFlags(flags)}
                   </p>
-
-                  {/* ★ Xアカウント一致ガチャなら貼り付けリストを表示 */}
-                  {flags.includes("x_account_match") && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        padding: 8,
-                        background: "#f9fafb",
-                        border: "1px solid #eee",
-                        borderRadius: 6,
-                        fontSize: 13,
-                      }}
-                    >
-                      <strong>対象Xアカウント（貼り付けテキスト）</strong>
-                      <pre
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          marginTop: 6,
-                          background: "#fff",
-                          padding: 8,
-                          borderRadius: 4,
-                          border: "1px solid #ddd",
-                        }}
-                      >
-                        {info.xAccountList.join("\n")}
-                      </pre>
-                    </div>
-                  )}
                 </div>
 
                 <span style={{ fontSize: 24 }}>

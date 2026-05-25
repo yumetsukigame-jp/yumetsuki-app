@@ -9,6 +9,7 @@ export default function AdminGachaResultsPage() {
   const [results, setResults] = useState<any[]>([]);
   const [grouped, setGrouped] = useState<any>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
+  const [xOpen, setXOpen] = useState<{ [key: string]: boolean }>({}); // ★ Xアカ用折りたたみ
   const [gachaInfo, setGachaInfo] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -19,13 +20,11 @@ export default function AdminGachaResultsPage() {
   const loadResults = async () => {
     setLoading(true);
 
-    // ★ サブコレクション対応済みの getGachaResults を呼ぶ
     const fn = httpsCallable(functions, "getGachaResults");
     const res: any = await fn();
 
     const list = res.data || [];
 
-    // ★ ガチャコードごとにグループ化
     const groupedData: any = {};
     for (const r of list) {
       if (!groupedData[r.code]) groupedData[r.code] = [];
@@ -35,7 +34,6 @@ export default function AdminGachaResultsPage() {
     setResults(list);
     setGrouped(groupedData);
 
-    // ★ gachaCodes を取得して publicFlags / xAccountList を紐づける
     const snap = await getDocs(collection(db, "gachaCodes"));
     const info: any = {};
     snap.docs.forEach((d) => {
@@ -46,7 +44,6 @@ export default function AdminGachaResultsPage() {
     setLoading(false);
   };
 
-  // ★ ユーザー情報取得
   const getUserInfo = async (uid: string) => {
     const snap = await getDoc(doc(db, "users", uid));
     if (!snap.exists()) return "不明なユーザー";
@@ -55,7 +52,6 @@ export default function AdminGachaResultsPage() {
     return u.displayName || u.xAccount || "名無し";
   };
 
-  // ★ publicFlags を人間向けに変換
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
@@ -115,34 +111,6 @@ export default function AdminGachaResultsPage() {
                   <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
                     公開設定：{renderFlags(flags)}
                   </p>
-
-                  {/* Xアカウント一致ガチャの場合 */}
-                  {flags.includes("x_account_match") && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        padding: 8,
-                        background: "#f9fafb",
-                        border: "1px solid #eee",
-                        borderRadius: 6,
-                        fontSize: 13,
-                      }}
-                    >
-                      <strong>対象Xアカウント（貼り付けテキスト）</strong>
-                      <pre
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          marginTop: 6,
-                          background: "#fff",
-                          padding: 8,
-                          borderRadius: 4,
-                          border: "1px solid #ddd",
-                        }}
-                      >
-                        {xList.join("\n")}
-                      </pre>
-                    </div>
-                  )}
                 </div>
 
                 <span style={{ fontSize: 24 }}>
@@ -153,6 +121,46 @@ export default function AdminGachaResultsPage() {
               {/* 折りたたみ内容 */}
               {open[code] && (
                 <div style={{ marginTop: 16 }}>
+                  {/* ★ Xアカウント一致ガチャなら折りたたみ表示 */}
+                  {flags.includes("x_account_match") && (
+                    <div style={{ marginBottom: 16 }}>
+                      <button
+                        onClick={() =>
+                          setXOpen((prev) => ({
+                            ...prev,
+                            [code]: !prev[code],
+                          }))
+                        }
+                        style={{
+                          padding: "8px 12px",
+                          background: "#f3f4f6",
+                          border: "1px solid #ddd",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          width: "100%",
+                          textAlign: "left",
+                        }}
+                      >
+                        対象Xアカウント一覧 {xOpen[code] ? "▲" : "▼"}
+                      </button>
+
+                      {xOpen[code] && (
+                        <pre
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            marginTop: 6,
+                            background: "#fff",
+                            padding: 12,
+                            borderRadius: 6,
+                            border: "1px solid #ddd",
+                          }}
+                        >
+                          {xList.join("\n")}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
                   {renderFrames(items, getUserInfo)}
                 </div>
               )}
