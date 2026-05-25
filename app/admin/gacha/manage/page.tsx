@@ -45,7 +45,7 @@ export default function GachaManagePage() {
   };
 
   /* --------------------------------------------------
-     ★ ガチャ削除（結果も一緒に削除）
+     ★ ガチャ削除（サブコレクションの結果も削除）
   -------------------------------------------------- */
   const deleteCode = async (id: string) => {
     if (!confirm("本当に削除しますか？")) return;
@@ -53,19 +53,12 @@ export default function GachaManagePage() {
     // ① ガチャ本体削除
     await deleteDoc(doc(db, "gachaCodes", id));
 
-    // ② 結果削除
-    const q = query(
-      collection(db, "gachaResults"),
-      where("code", "==", id)
-    );
-    const snap = await getDocs(q);
+    // ② サブコレクションの結果削除
+    const resultsRef = collection(db, "gachaResults", id, "results");
+    const snap = await getDocs(resultsRef);
 
     const batch = writeBatch(db);
-
-    snap.forEach((docSnap) => {
-      batch.delete(doc(db, "gachaResults", docSnap.id));
-    });
-
+    snap.forEach((d) => batch.delete(d.ref));
     await batch.commit();
 
     alert("ガチャと結果を削除しました");
@@ -99,28 +92,31 @@ export default function GachaManagePage() {
     await deleteDoc(ref);
 
     /* --------------------------------------------------
-       ★ ④ 結果もアーカイブへ移動
+       ★ ④ サブコレクションの結果もアーカイブへ移動
     -------------------------------------------------- */
-    const q = query(
-      collection(db, "gachaResults"),
-      where("code", "==", id)
-    );
-    const resultSnap = await getDocs(q);
+    const srcRef = collection(db, "gachaResults", id, "results");
+    const srcSnap = await getDocs(srcRef);
 
     const batch = writeBatch(db);
 
-    resultSnap.forEach((docSnap) => {
+    srcSnap.forEach((docSnap) => {
       const resultData = docSnap.data();
       const resultId = docSnap.id;
 
-      // アーカイブへコピー
-      batch.set(doc(db, "gachaResultsArchive", resultId), {
+      const dstRef = doc(
+        db,
+        "gachaResultsArchive",
+        id,
+        "results",
+        resultId
+      );
+
+      batch.set(dstRef, {
         ...resultData,
         archivedAt: new Date(),
       });
 
-      // 元データ削除
-      batch.delete(doc(db, "gachaResults", resultId));
+      batch.delete(docSnap.ref);
     });
 
     await batch.commit();
@@ -188,10 +184,17 @@ export default function GachaManagePage() {
     return { label };
   };
 
+  /* --------------------------------------------------
+     ★ ガチャ結果取得（サブコレクション版）
+  -------------------------------------------------- */
   const getResultsByCode = async (code: string) => {
-    const fn = httpsCallable(functions, "getGachaResults");
-    const res: any = await fn();
-    return res.data.filter((r: any) => r.code === code);
+    const snap = await getDocs(
+      collection(db, "gachaResults", code, "results")
+    );
+
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
   };
 
   useEffect(() => {

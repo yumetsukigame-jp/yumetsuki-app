@@ -2,9 +2,45 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { httpsCallable } from "firebase/functions";
 import { db, functions, auth } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+} from "firebase/firestore";
+
+/* --------------------------------------------------
+   Timestamp → Date 安全変換
+-------------------------------------------------- */
+function toDateSafe(ts: any) {
+  if (!ts) return null;
+  if (ts.toDate) return ts.toDate();
+  if (ts._seconds) return new Date(ts._seconds * 1000);
+  return null;
+}
+
+/* --------------------------------------------------
+   ユーザー名取得（キャッシュ付き）
+-------------------------------------------------- */
+const userCache: Record<string, string> = {};
+
+async function getUserInfo(uid: string) {
+  if (userCache[uid]) return userCache[uid];
+
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) {
+    userCache[uid] = "名無し";
+    return "名無し";
+  }
+
+  const u = snap.data();
+  const name = u.displayName || u.xAccount || "名無し";
+  userCache[uid] = name;
+  return name;
+}
 
 export default function GachaDetailPage() {
   const { code } = useParams();
@@ -22,17 +58,8 @@ export default function GachaDetailPage() {
     load();
   }, []);
 
-  // ★ displayName + Xアカウント取得
-  const getUserInfo = async (uid: string) => {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) return "名無し";
-
-    const u = snap.data();
-    return u.displayName || u.xAccount || "名無し";
-  };
-
   /* --------------------------------------------------
-     ★ JST 6:00 基準で「前日」を求める関数
+     JST 6:00 基準の前日
   -------------------------------------------------- */
   function getPrevDayJST6() {
     const now = new Date();
@@ -53,6 +80,9 @@ export default function GachaDetailPage() {
     return `${y}-${m}-${d}`;
   }
 
+  /* --------------------------------------------------
+     ガチャ情報 + アクセス制御 + 結果取得
+  -------------------------------------------------- */
   const load = async () => {
     setLoading(true);
 
@@ -67,24 +97,20 @@ export default function GachaDetailPage() {
     const data = snap.data();
     const flags: string[] = data.publicFlags ?? [];
 
-    /* --------------------------------------------------
-       ★ publicFlags によるアクセス制御
-    -------------------------------------------------- */
-
     const isPublic = flags.includes("public");
     const isLimited = flags.includes("limited");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
-    const isXAccountMatch = flags.includes("x_account_match"); // ★ 追加
+    const isXAccountMatch = flags.includes("x_account_match");
 
-    // ★ 公開でない場合はログイン必須
+    // 公開でない → ログイン必須
     if (!isPublic && !currentUid) {
       setError("このガチャは限定公開です");
       setLoading(false);
       return;
     }
 
-    // 🔒 limited → 過去に引いた人だけ
+    // limited → 過去に引いた人のみ
     if (isLimited) {
       const historyRef = doc(db, "userGachaHistory", `${currentUid}_${code}`);
       const historySnap = await getDoc(historyRef);
@@ -96,7 +122,7 @@ export default function GachaDetailPage() {
       }
     }
 
-    // ⭐ subscriber → サブスク会員のみ
+    // subscriber → サブスク限定
     if (isSubscriberOnly) {
       const userSnap = await getDoc(doc(db, "users", currentUid!));
       const user = userSnap.data();
@@ -108,7 +134,7 @@ export default function GachaDetailPage() {
       }
     }
 
-    // 🎯 nibuichi_winner → 前日のニブイチ的中者のみ
+    // nibuichi_winner → 前日的中者限定
     if (isWinnerOnly) {
       const uid = currentUid!;
       const prevDay = getPrevDayJST6();
@@ -138,9 +164,7 @@ export default function GachaDetailPage() {
       }
     }
 
-    /* --------------------------------------------------
-       ★ Xアカウント一致チェック（新規追加）
-    -------------------------------------------------- */
+    // Xアカウント一致
     if (isXAccountMatch) {
       if (!currentUid) {
         setError("このガチャはXアカウント登録者のみ引けます");
@@ -171,18 +195,26 @@ export default function GachaDetailPage() {
       }
     }
 
-    // ★ アクセスOK
+    // アクセスOK
     setGacha(data);
     setLoading(false);
 
     /* --------------------------------------------------
-       ★ このガチャの結果を取得
+       ★ サブコレクションから結果取得
     -------------------------------------------------- */
     setResultsLoading(true);
 
-    const fn = httpsCallable(functions, "getGachaResults");
-    const res: any = await fn();
-    const list = res.data.filter((r: any) => r.code === code);
+    const snapResults = await getDocs(
+      query(
+        collection(db, "gachaResults", code as string, "results"),
+        orderBy("createdAt", "desc")
+      )
+    );
+
+    const list = snapResults.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
 
     setAllResults(list);
     setResultsLoading(false);
@@ -286,7 +318,7 @@ export default function GachaDetailPage() {
 }
 
 /* ------------------------------------------
-   ★ 簡易版 FrameList
+   ★ 簡易 FrameList
 ------------------------------------------ */
 function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any) {
   return (

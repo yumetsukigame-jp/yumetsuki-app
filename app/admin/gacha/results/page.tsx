@@ -19,6 +19,7 @@ export default function AdminGachaResultsPage() {
   const loadResults = async () => {
     setLoading(true);
 
+    // ★ サブコレクション対応済みの getGachaResults を呼ぶ
     const fn = httpsCallable(functions, "getGachaResults");
     const res: any = await fn();
 
@@ -34,7 +35,7 @@ export default function AdminGachaResultsPage() {
     setResults(list);
     setGrouped(groupedData);
 
-    // ★ gachaCodes も取得して publicFlags / xAccountList を紐づける
+    // ★ gachaCodes を取得して publicFlags / xAccountList を紐づける
     const snap = await getDocs(collection(db, "gachaCodes"));
     const info: any = {};
     snap.docs.forEach((d) => {
@@ -54,14 +55,14 @@ export default function AdminGachaResultsPage() {
     return u.displayName || u.xAccount || "名無し";
   };
 
-  // ★ publicFlags を人間向けに変換（Xアカウント一致追加）
+  // ★ publicFlags を人間向けに変換
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
       limited: "🔒 限定",
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
-      x_account_match: "📝 Xアカウント一致", // ★ 追加
+      x_account_match: "📝 Xアカウント一致",
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -73,15 +74,12 @@ export default function AdminGachaResultsPage() {
         🗂 管理者用：ガチャ結果一覧
       </h1>
 
-      {/* ★ ロード中 */}
       {loading && <p>読み込み中…</p>}
 
-      {/* ★ ロード完了後に結果が空 */}
       {!loading && Object.keys(grouped).length === 0 && (
         <p>結果がありません。</p>
       )}
 
-      {/* ★ データ表示 */}
       {!loading &&
         Object.entries(grouped).map(([code, items]: any) => {
           const title = items[0]?.title ?? "（タイトルなし）";
@@ -118,7 +116,7 @@ export default function AdminGachaResultsPage() {
                     公開設定：{renderFlags(flags)}
                   </p>
 
-                  {/* ★ Xアカウント一致ガチャの場合、貼り付けテキストを表示 */}
+                  {/* Xアカウント一致ガチャの場合 */}
                   {flags.includes("x_account_match") && (
                     <div
                       style={{

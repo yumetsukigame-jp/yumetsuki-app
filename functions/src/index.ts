@@ -181,97 +181,58 @@ export const useGachaCode = onCall(
       }
 
       const gacha: any = gachaSnap.data();
-
-      // ★ publicFlags（複数条件）
       const flags: string[] = gacha.publicFlags ?? [];
 
-      // ★ 期限切れ判定（JST）
+      // 期限切れチェック
       const now = nowJST();
       if (gacha.expiresAt && gacha.expiresAt.toDate() < now) {
         throw new HttpsError("failed-precondition", "期限切れのガチャです");
       }
 
-      /* ============================================================
-         ★ サブスク限定
-      ============================================================ */
+      /* ======== 各種制限チェック（既存処理そのまま） ======== */
+
       if (flags.includes("subscriber")) {
         const userRef = db.collection("users").doc(uid);
         const userSnap = await userRef.get();
         const userData = userSnap.data();
-
         if (!userData?.subscriber) {
-          throw new HttpsError(
-            "permission-denied",
-            "このガチャはサブスクライバー限定です"
-          );
+          throw new HttpsError("permission-denied", "このガチャはサブスクライバー限定です");
         }
       }
 
-      /* ============================================================
-         ★ 前日のニブイチ的中者限定（6時切り替え対応）
-      ============================================================ */
       if (flags.includes("nibuichi_winner")) {
         const yesterday = getYesterdayJST6();
-
         const histRef = db
           .collection("nibuichi_daily")
           .doc(yesterday)
           .collection("predictions")
           .doc(uid);
-
         const histSnap = await histRef.get();
-
-        if (!histSnap.exists) {
-          throw new HttpsError(
-            "permission-denied",
-            "前日のニブイチ的中者のみ引けるガチャです"
-          );
+        if (!histSnap.data() || histSnap.data()?.prediction !== histSnap.data()?.result) {
+        throw new HttpsError(
+          "permission-denied",
+          "前日のニブイチ的中者のみ引けるガチャです"
+         );
         }
 
-        const hist = histSnap.data();
-        if (!hist || hist.prediction !== hist.result) {
-          throw new HttpsError(
-            "permission-denied",
-            "前日のニブイチ的中者のみ引けるガチャです"
-          );
-        }
       }
 
-      /* ============================================================
-         ★ Xアカウント一致条件（今回追加）
-         ※ ユーザーの X アカウントが、貼り付けテキストの中に含まれていれば一致
-      ============================================================ */
       if (flags.includes("x_account_match")) {
         const userRef = db.collection("users").doc(uid);
         const userSnap = await userRef.get();
         const userData = userSnap.data();
-
         const userX = (userData?.xAccount ?? "").toLowerCase();
         if (!userX) {
-          throw new HttpsError(
-            "permission-denied",
-            "このガチャはXアカウント登録者のみ引けます"
-          );
+          throw new HttpsError("permission-denied", "このガチャはXアカウント登録者のみ引けます");
         }
-
-        const list = (gacha.xAccountList ?? []).map((s: string) =>
-          s.toLowerCase()
-        );
-
-        // ★ 要望どおり：貼り付けテキストの中にユーザー名が含まれていれば一致
+        const list = (gacha.xAccountList ?? []).map((s: string) => s.toLowerCase());
         const matched = list.some((entry: string) => entry.includes(userX));
-
         if (!matched) {
-          throw new HttpsError(
-            "permission-denied",
-            "このガチャは指定されたXアカウントのみ引けます"
-          );
+          throw new HttpsError("permission-denied", "このガチャは指定されたXアカウントのみ引けます");
         }
       }
 
-      /* ============================================================
-         ★ ここから先は既存のガチャ処理（変更なし）
-      ============================================================ */
+      /* ======== ポイント・回数チェック ======== */
 
       const userRef = db.collection("users").doc(uid);
       const userSnap = await userRef.get();
@@ -285,23 +246,18 @@ export const useGachaCode = onCall(
         throw new HttpsError("failed-precondition", "ポイントが不足しています");
       }
 
-      const historyRef = db
-        .collection("userGachaHistory")
-        .doc(`${uid}_${code}`);
+      const historyRef = db.collection("userGachaHistory").doc(`${uid}_${code}`);
       const historySnap = await historyRef.get();
       const history = historySnap.exists ? historySnap.data()! : { count: 0 };
 
-      if (gacha.resetType === "daily") {
-        if (history.count >= maxPerUser) {
-          throw new HttpsError("failed-precondition", "今日の回数上限です");
-        }
+      if (gacha.resetType === "daily" && history.count >= maxPerUser) {
+        throw new HttpsError("failed-precondition", "今日の回数上限です");
+      }
+      if (gacha.resetType === "none" && history.count >= maxPerUser) {
+        throw new HttpsError("failed-precondition", "上限回数に達しています");
       }
 
-      if (gacha.resetType === "none") {
-        if (history.count >= maxPerUser) {
-          throw new HttpsError("failed-precondition", "上限回数に達しています");
-        }
-      }
+      /* ======== 抽選処理 ======== */
 
       const frames = gacha.frames;
       let selectedFrame: any = null;
@@ -311,11 +267,9 @@ export const useGachaCode = onCall(
           (f: any) => Math.max(0, (f.maxCount ?? 0) - (f.usedCount ?? 0))
         );
         const total = weights.reduce((a: number, b: number) => a + b, 0);
-
         if (total <= 0) {
           throw new HttpsError("failed-precondition", "すべての枠が終了しています");
         }
-
         let r = Math.random() * total;
         for (let i = 0; i < frames.length; i++) {
           if (r < weights[i]) {
@@ -327,7 +281,6 @@ export const useGachaCode = onCall(
       } else {
         const probs = frames.map((f: any) => f.probability ?? 0);
         const totalProb = probs.reduce((a: number, b: number) => a + b, 0);
-
         let r = Math.random() * totalProb;
         for (let i = 0; i < frames.length; i++) {
           if (r < probs[i]) {
@@ -348,6 +301,10 @@ export const useGachaCode = onCall(
             (selectedFrame.rewardMax - selectedFrame.rewardMin + 1)
         ) + selectedFrame.rewardMin;
 
+      /* ============================================================
+         ★★★ サブコレクション化した結果保存処理 ★★★
+      ============================================================ */
+
       await db.runTransaction(async (tx) => {
         const freshUser = (await tx.get(userRef)).data()!;
         const freshHistorySnap = await tx.get(historyRef);
@@ -356,7 +313,6 @@ export const useGachaCode = onCall(
           : { count: 0 };
 
         const freshPoints = Number(freshUser.points ?? 0);
-
         if (freshPoints < cost) {
           throw new HttpsError("failed-precondition", "ポイントが不足しています");
         }
@@ -378,7 +334,13 @@ export const useGachaCode = onCall(
           tx.update(gachaRef, { frames: updatedFrames });
         }
 
-        const resultRef = db.collection("gachaResults").doc();
+        // ★ サブコレクションに保存
+        const resultRef = db
+          .collection("gachaResults")
+          .doc(code)
+          .collection("results")
+          .doc();
+
         tx.set(resultRef, {
           id: resultRef.id,
           uid,
@@ -409,37 +371,45 @@ export const getGachaResults = onCall(
   { region: "us-central1" },
   async () => {
     try {
-      const snap = await db
-        .collection("gachaResults")
-        .orderBy("createdAt", "desc")
-        .limit(200)
-        .get();
-
       const results: any[] = [];
 
-      for (const d of snap.docs) {
-        const data = d.data();
+      // ① すべてのガチャコードを取得
+      const gachaSnap = await db.collection("gachaCodes").get();
 
-        const codeSnap = await db
-          .collection("gachaCodes")
-          .doc(data.code)
+      for (const gachaDoc of gachaSnap.docs) {
+        const code = gachaDoc.id;
+        const gachaData = gachaDoc.data();
+
+        // ② サブコレクションから結果を取得
+        const resultSnap = await db
+          .collection("gachaResults")
+          .doc(code)
+          .collection("results")
+          .orderBy("createdAt", "desc")
           .get();
-        const codeData = codeSnap.data();
 
-        if (!codeData || !codeData.title) continue;
+        for (const r of resultSnap.docs) {
+          const data = r.data();
 
-        const frameInfo = codeData.frames?.find(
-          (f: any) => f.label === data.frame
-        );
+          // frameName を取得
+          const frameInfo = gachaData.frames?.find(
+            (f: any) => f.label === data.frame
+          );
 
-        results.push({
-          id: d.id,
-          ...data,
-          title: codeData.title,
-          frameName: frameInfo?.label ?? data.frame,
-          thumbnail: codeData.thumbnail ?? "",
-        });
+          results.push({
+            id: r.id,
+            ...data,
+            title: gachaData.title ?? "",
+            frameName: frameInfo?.label ?? data.frame,
+            thumbnail: gachaData.thumbnail ?? "",
+          });
+        }
       }
+
+      // ③ 全結果を createdAt 降順に並べ替え
+      results.sort(
+        (a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()
+      );
 
       return results;
     } catch (err: any) {
@@ -448,6 +418,7 @@ export const getGachaResults = onCall(
     }
   }
 );
+
 
 /* ============================================================
    手動：ガチャ使用回数リセット（変更なし）

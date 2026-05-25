@@ -4,10 +4,18 @@ import { useEffect, useState } from "react";
 import { functions, db, auth } from "@/firebase";
 import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import { getCountFromServer } from "firebase/firestore";
 
 /* --------------------------------------------------
-   Timestamp を安全に Date に変換する関数
+   Timestamp を安全に Date に変換
 -------------------------------------------------- */
 function toDateSafe(ts: any) {
   if (!ts) return null;
@@ -43,50 +51,46 @@ export default function PublicGachaListPage() {
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
 
-  // ★ 遅延読み込み用：各ガチャの結果を個別に保持
+  // ★ 遅延読み込み：ガチャごとの結果
   const [resultsMap, setResultsMap] = useState<Record<string, any[]>>({});
 
-  // ★ 人気順用：全件取得キャッシュ
-  const [allResultsCache, setAllResultsCache] = useState<any[] | null>(null);
+  // ★ 人気順用：件数キャッシュ
+  const [countCache, setCountCache] = useState<Record<string, number>>({});
 
-  const [open, setOpen] = useState<{ [key: string]: boolean }>({});
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const router = useRouter();
 
   useEffect(() => {
     load();
   }, [sort]);
 
+  /* --------------------------------------------------
+     ★ 公開ガチャ一覧を取得
+  -------------------------------------------------- */
   const load = async () => {
     setLoading(true);
 
-    /* --------------------------------------------------
-       ★ ① 公開ガチャ一覧を取得（軽い）
-    -------------------------------------------------- */
     const fnList = httpsCallable(functions, "getPublicGachaList");
     const resList: any = await fnList();
     const list = resList.data || [];
 
     const now = new Date();
 
-    /* --------------------------------------------------
-       ★ 公開・限定すべて一覧に表示する
-    -------------------------------------------------- */
+    // 期限切れ除外
     let filtered = list.filter((g: any) => {
-      if (!g.title || g.title.trim() === "") return false;
-
+      if (!g.title?.trim()) return false;
       const exp = toDateSafe(g.expiresAt);
       if (exp && exp < now) return false;
-
       return true;
     });
 
     filtered = filtered.filter((g) => g.createdAt);
 
-    /* --------------------------------------------------
-       ★ ② ソート
-    -------------------------------------------------- */
     let sorted = [...filtered];
 
+    /* --------------------------------------------------
+       ★ 新着順
+    -------------------------------------------------- */
     if (sort === "new") {
       sorted.sort(
         (a, b) =>
@@ -95,19 +99,26 @@ export default function PublicGachaListPage() {
       );
     }
 
+    /* --------------------------------------------------
+       ★ 人気順（count() API 使用）
+    -------------------------------------------------- */
     if (sort === "popular") {
-      // ★ 初回だけ全件取得
-      let all = allResultsCache;
-      if (!all) {
-        const fn = httpsCallable(functions, "getGachaResults");
-        const res: any = await fn();
-        all = res.data || [];
-        setAllResultsCache(all);
+      const newCache = { ...countCache };
+
+      for (const g of sorted) {
+        if (newCache[g.code] == null) {
+          const countSnap = await getCountFromServer(
+            collection(db, "gachaResults", g.code, "results")
+          );
+          newCache[g.code] = countSnap.data().count;
+        }
       }
 
+      setCountCache(newCache);
+
       sorted.sort((a, b) => {
-        const aUsed = all.filter((r: any) => r.code === a.code).length;
-        const bUsed = all.filter((r: any) => r.code === b.code).length;
+        const aUsed = newCache[a.code] ?? 0;
+        const bUsed = newCache[b.code] ?? 0;
         return bUsed - aUsed;
       });
     }
@@ -120,21 +131,28 @@ export default function PublicGachaListPage() {
      ★ 個別ガチャの結果を遅延読み込み
   -------------------------------------------------- */
   const loadResultsForCode = async (code: string) => {
-    if (resultsMap[code]) return; // 既に取得済みならスキップ
+    if (resultsMap[code]) return;
 
-    const fn = httpsCallable(functions, "getGachaResults");
-    const res: any = await fn();
+    const snap = await getDocs(
+      query(
+        collection(db, "gachaResults", code, "results"),
+        orderBy("createdAt", "desc")
+      )
+    );
 
-    const filtered = res.data.filter((r: any) => r.code === code);
+    const list = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
 
     setResultsMap((prev) => ({
       ...prev,
-      [code]: filtered,
+      [code]: list,
     }));
   };
 
   /* --------------------------------------------------
-     publicFlags 表示（Xアカウント一致追加）
+     publicFlags 表示
   -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
@@ -189,10 +207,6 @@ export default function PublicGachaListPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
           const isOpen = open[g.code] ?? false;
-
-          /* --------------------------------------------------
-             ★ 遅延読み込みされた結果
-          -------------------------------------------------- */
           const resultsForThis = resultsMap[g.code] ?? [];
 
           /* --------------------------------------------------
@@ -310,7 +324,6 @@ export default function PublicGachaListPage() {
                 onClick={async () => {
                   setOpen((prev) => ({ ...prev, [g.code]: !isOpen }));
 
-                  // ★ 初めて開くときだけ結果を読み込む
                   if (!isOpen) {
                     await loadResultsForCode(g.code);
                   }
@@ -329,12 +342,10 @@ export default function PublicGachaListPage() {
                 {isOpen ? "▲ 詳細を閉じる" : "▼ 詳細を見る"}
               </button>
 
-              {/* ★ 修正：読み込み前は必ず「読み込み中」 */}
               {isOpen && !resultsMap[g.code] && (
                 <p style={{ marginTop: 12 }}>読み込み中…</p>
               )}
 
-              {/* ★ 修正：読み込み後に当選者状況を表示 */}
               {isOpen && resultsMap[g.code] && (
                 <div style={{ marginTop: 16 }}>
                   {/* 使用状況 */}
@@ -364,7 +375,7 @@ export default function PublicGachaListPage() {
 
                   <p style={{ margin: "6px 0" }}>残数：{remaining}</p>
 
-                  {/* ★ 各枠の残数 + 当選者一覧 */}
+                  {/* 枠ごとの状況 */}
                   <div style={{ marginTop: 20 }}>
                     <h3 style={{ marginBottom: 10 }}>🎁 枠ごとの状況</h3>
 
@@ -453,7 +464,7 @@ export default function PublicGachaListPage() {
 }
 
 /* --------------------------------------------------
-   ★ 当選者表示コンポーネント（×●回対応）
+   ★ 当選者表示コンポーネント
 -------------------------------------------------- */
 function FrameWinnerItem({
   uid,

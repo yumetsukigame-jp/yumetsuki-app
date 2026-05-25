@@ -1,9 +1,15 @@
 "use client";
 
 import { Suspense, useEffect, useState, useRef } from "react";
-import { httpsCallable } from "firebase/functions";
-import { functions, db, auth } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "@/firebase";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /* --------------------------------------------------
@@ -63,60 +69,60 @@ function ResultsContent() {
 
   /* --------------------------------------------------
      結果ロード（ここで userName を付与する）
+     ★ サブコレクション版：gachaResults/{code}/results
   -------------------------------------------------- */
   const loadResults = async () => {
     setLoading(true);
 
-    const fn = httpsCallable(functions, "getGachaResults");
-    const res: any = await fn();
-    const list = res.data || [];
+    // ① gachaCodes を全部取得
+    const gachaSnap = await getDocs(collection(db, "gachaCodes"));
+    const gachaList = gachaSnap.docs.map((d) => ({
+      code: d.id,
+      ...d.data(),
+    }));
 
-    // ★ userName を付与
-    const enriched = await Promise.all(
-      list.map(async (r: any) => {
-        const name = await getUserName(r.uid);
-        return { ...r, _userName: name.toLowerCase(), userName: name };
-      })
-    );
-
-    // ★ ガチャコードで絞り込み
-    let filtered = filterCode
-      ? enriched.filter((r: any) => r.code === filterCode)
-      : enriched;
-
-    // ★ ガチャコードごとにグループ化
     const groupedData: any = {};
-    for (const r of filtered) {
-      if (!groupedData[r.code]) groupedData[r.code] = [];
-      groupedData[r.code].push(r);
-    }
-
-    // ★ Firestore からタイトル・publicFlags・枠情報・サムネ・xAccountList を取得
     const titleMap: any = {};
     const metaMap: any = {};
 
-    for (const code of Object.keys(groupedData)) {
-      const snap = await getDoc(doc(db, "gachaCodes", code));
+    // ② 各ガチャごとにサブコレクション results を取得
+    for (const g of gachaList) {
+      const code = g.code as string;
 
-      if (!snap.exists()) {
-        delete groupedData[code];
-        continue;
-      }
+      // code 指定がある場合はそのガチャだけ
+      if (filterCode && code !== filterCode) continue;
 
-      const d = snap.data();
+      const resultsSnap = await getDocs(
+        query(
+          collection(db, "gachaResults", code, "results"),
+          orderBy("createdAt", "desc")
+        )
+      );
 
-      if (!d.title || d.title.trim() === "") {
-        delete groupedData[code];
-        continue;
-      }
+      if (resultsSnap.empty) continue;
 
-      titleMap[code] = d.title;
+      const results = await Promise.all(
+        resultsSnap.docs.map(async (d) => {
+          const data = d.data();
+          const name = await getUserName(data.uid);
+          return {
+            id: d.id,
+            ...data,
+            userName: name,
+            _userName: name.toLowerCase(),
+          };
+        })
+      );
+
+      groupedData[code] = results;
+
+      titleMap[code] = g.title;
       metaMap[code] = {
-        publicFlags: d.publicFlags ?? [],
-        frames: d.frames ?? [],
-        mode: d.mode,
-        thumbnail: d.thumbnail ?? "",
-        xAccountList: d.xAccountList ?? [], // ★ 追加
+        publicFlags: g.publicFlags ?? [],
+        frames: g.frames ?? [],
+        mode: g.mode,
+        thumbnail: g.thumbnail ?? "",
+        xAccountList: g.xAccountList ?? [],
       };
     }
 
