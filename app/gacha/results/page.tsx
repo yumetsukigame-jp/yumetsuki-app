@@ -13,15 +13,18 @@ import {
 import { useSearchParams, useRouter } from "next/navigation";
 
 /* --------------------------------------------------
-   ユーザー名の整形（displayName + xAccount）
+   ユーザー名の整形（displayName + xAccount）@正規化対応
 -------------------------------------------------- */
 function formatUserName(u: any) {
   const name = u.displayName || "";
-  const x = u.xAccount || "";
+  const rawX = u.xAccount || "";
 
-  if (name && x) return `${name}（@${x}）`;
+  // ★ 先頭の @ を全部削除して正規化
+  const normalizedX = rawX.replace(/^@+/, "");
+
+  if (name && normalizedX) return `${name}（@${normalizedX}）`;
   if (name) return name;
-  if (x) return `@${x}`;
+  if (normalizedX) return `@${normalizedX}`;
   return "名無し";
 }
 
@@ -105,7 +108,7 @@ function ResultsContent() {
             id: d.id,
             ...d.data(),
           }))
-          .filter((d) => d.createdAt) // ★ createdAt が無いデータを除外
+          .filter((d) => d.createdAt)
           .map(async (d) => {
             const name = await getUserName(d.uid);
             return {
@@ -124,7 +127,7 @@ function ResultsContent() {
         frames: g.frames ?? [],
         mode: g.mode,
         thumbnail: g.thumbnail ?? "",
-        xAccountList: g.xAccountList ?? [], // ← 使わないが残してOK
+        xAccountList: g.xAccountList ?? [],
       };
     }
 
@@ -354,7 +357,6 @@ function FrameList({
       {framesMeta.map((f: any) => {
         const frameName = f.label;
 
-        // ★ frameName → frame に修正
         let list = items.filter((r: any) => r.frame === frameName);
 
         if (filterMine && currentUid) {

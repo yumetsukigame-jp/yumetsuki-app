@@ -23,7 +23,7 @@ function toDateSafe(ts: any) {
 }
 
 /* --------------------------------------------------
-   ユーザー名取得（キャッシュ付き）
+   ユーザー名取得（キャッシュ付き・@正規化対応）
 -------------------------------------------------- */
 const userCache: Record<string, string> = {};
 
@@ -37,9 +37,16 @@ async function getUserInfo(uid: string) {
   }
 
   const u = snap.data();
-  const name = u.displayName || u.xAccount || "名無し";
-  userCache[uid] = name;
-  return name;
+  const display = u.displayName || "名無し";
+
+  // ★ xAccount の先頭の @ を除去して正規化
+  const rawX = u.xAccount || "";
+  const normalizedX = rawX.replace(/^@+/, ""); // 先頭の @ を全部削除
+  const x = normalizedX ? `（@${normalizedX}）` : "";
+
+  const finalName = `${display}${x}`;
+  userCache[uid] = finalName;
+  return finalName;
 }
 
 export default function GachaDetailPage() {
@@ -186,7 +193,6 @@ export default function GachaDetailPage() {
         s.toLowerCase()
       );
 
-      // ★ 正しい一致条件：貼り付けテキストの中にユーザーXが含まれる
       const matched = list.some((entry: string) => entry.includes(userX));
 
       if (!matched) {
@@ -217,7 +223,7 @@ export default function GachaDetailPage() {
         id: d.id,
         ...d.data(),
       }))
-      .filter((d) => d.createdAt); // ★ createdAt が無いデータを除外
+      .filter((d) => d.createdAt);
 
     setAllResults(list);
     setResultsLoading(false);
@@ -329,7 +335,6 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
       {frames.map((f: any) => {
         const frameName = f.label;
 
-        // ★ frameName → frame に修正
         const list = results.filter((r: any) => r.frame === frameName);
 
         return (
@@ -363,7 +368,7 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
 }
 
 /* ------------------------------------------
-   ★ 名前表示
+   ★ 名前表示（@正規化済み）
 ------------------------------------------ */
 function UserNameItem({ result, currentUid, getUserInfo }: any) {
   const [name, setName] = useState("読み込み中…");

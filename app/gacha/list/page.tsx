@@ -25,7 +25,7 @@ function toDateSafe(ts: any) {
 }
 
 /* --------------------------------------------------
-   ★ ユーザー情報キャッシュ付き取得
+   ★ ユーザー情報キャッシュ付き取得（＠重複修正済み）
 -------------------------------------------------- */
 const userCache: Record<string, any> = {};
 
@@ -40,7 +40,11 @@ async function getUserInfo(uid: string) {
 
   const u = snap.data();
   const name = u.displayName || "名無し";
-  const x = u.xAccount ? `（${u.xAccount}）` : "";
+
+  // ★ xAccount の先頭の @ を除去して正規化
+  const rawX = u.xAccount || "";
+  const normalizedX = rawX.replace(/^@+/, ""); // 先頭の @ を全部削除
+  const x = normalizedX ? `（@${normalizedX}）` : "";
 
   userCache[uid] = { name: `${name}${x}` };
   return userCache[uid];
@@ -51,12 +55,8 @@ export default function PublicGachaListPage() {
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
 
-  // ★ 遅延読み込み：ガチャごとの結果
   const [resultsMap, setResultsMap] = useState<Record<string, any[]>>({});
-
-  // ★ 人気順用：件数キャッシュ
   const [countCache, setCountCache] = useState<Record<string, number>>({});
-
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const router = useRouter();
 
@@ -76,7 +76,6 @@ export default function PublicGachaListPage() {
 
     const now = new Date();
 
-    // 期限切れ除外
     let filtered = list.filter((g: any) => {
       if (!g.title?.trim()) return false;
       const exp = toDateSafe(g.expiresAt);
@@ -84,14 +83,10 @@ export default function PublicGachaListPage() {
       return true;
     });
 
-    // createdAt が無いガチャを除外
     filtered = filtered.filter((g) => g.createdAt);
 
     let sorted = [...filtered];
 
-    /* --------------------------------------------------
-       ★ 新着順
-    -------------------------------------------------- */
     if (sort === "new") {
       sorted.sort(
         (a, b) =>
@@ -100,9 +95,6 @@ export default function PublicGachaListPage() {
       );
     }
 
-    /* --------------------------------------------------
-       ★ 人気順（count() API 使用）
-    -------------------------------------------------- */
     if (sort === "popular") {
       const newCache = { ...countCache };
 
@@ -146,7 +138,7 @@ export default function PublicGachaListPage() {
         id: d.id,
         ...d.data(),
       }))
-      .filter((d) => d.createdAt); // ★ createdAt が無いデータを除外
+      .filter((d) => d.createdAt);
 
     setResultsMap((prev) => ({
       ...prev,
@@ -213,7 +205,7 @@ export default function PublicGachaListPage() {
           const resultsForThis = resultsMap[g.code] ?? [];
 
           /* --------------------------------------------------
-             ★ グレーアウト判定（frameName → frame）
+             ★ グレーアウト判定
           -------------------------------------------------- */
           const frames = g.frames || [];
           const lastIndex = frames.length - 1;
@@ -275,7 +267,6 @@ export default function PublicGachaListPage() {
                   const flags = g.publicFlags ?? [];
                   const isLimited = flags.includes("limited");
 
-                  // ★ 限定公開だけは一覧でもチェック
                   if (isLimited) {
                     const uid = auth.currentUser?.uid;
                     if (!uid) {
@@ -296,23 +287,19 @@ export default function PublicGachaListPage() {
                     }
                   }
 
-                  // ★ Xアカウント一致チェックは一覧では行わない
                   router.push(`/gacha/${g.code}`);
                 }}
               >
                 {g.title}
               </h2>
 
-              {/* 公開設定 */}
               <p style={{ margin: "6px 0" }}>{renderFlags(g.publicFlags)}</p>
 
-              {/* 抽選方式 */}
               <p style={{ margin: "6px 0" }}>
                 抽選方式：
                 {g.mode === "count" ? "枠数方式" : "確率方式"}
               </p>
 
-              {/* リセット方式 */}
               <p style={{ margin: "6px 0" }}>
                 リセット：
                 {g.resetType === "daily"
@@ -469,7 +456,7 @@ export default function PublicGachaListPage() {
 }
 
 /* --------------------------------------------------
-   ★ 当選者表示コンポーネント
+   ★ 当選者表示コンポーネント（＠重複修正済み）
 -------------------------------------------------- */
 function FrameWinnerItem({
   uid,
