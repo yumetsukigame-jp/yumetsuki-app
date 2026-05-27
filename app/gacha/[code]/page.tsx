@@ -39,14 +39,32 @@ async function getUserInfo(uid: string) {
   const u = snap.data();
   const display = u.displayName || "名無し";
 
-  // ★ xAccount の先頭の @ を除去して正規化
   const rawX = u.xAccount || "";
-  const normalizedX = rawX.replace(/^@+/, ""); // 先頭の @ を全部削除
+  const normalizedX = rawX.replace(/^@+/, "");
   const x = normalizedX ? `（@${normalizedX}）` : "";
 
   const finalName = `${display}${x}`;
   userCache[uid] = finalName;
   return finalName;
+}
+
+/* --------------------------------------------------
+   JST 6:00 基準の「昨日」
+-------------------------------------------------- */
+function getPrevDayJST6() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+  // 6時前なら「昨日扱い」にする
+  if (jst.getHours() < 6) {
+    jst.setDate(jst.getDate() - 1);
+  }
+
+  // ここで「昨日」になっているので、これ以上は引かない
+  const y = jst.getFullYear();
+  const m = String(jst.getMonth() + 1).padStart(2, "0");
+  const d = String(jst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export default function GachaDetailPage() {
@@ -59,39 +77,25 @@ export default function GachaDetailPage() {
   const [error, setError] = useState("");
 
   const [allResults, setAllResults] = useState<any[]>([]);
-  const currentUid = auth.currentUser?.uid ?? null;
+  const [currentUid, setCurrentUid] = useState<string | null>(null);
 
+  // Auth 状態をちゃんと追う
   useEffect(() => {
-    load();
+    const unsub = auth.onAuthStateChanged((user) => {
+      setCurrentUid(user?.uid ?? null);
+    });
+    return () => unsub();
   }, []);
 
-  /* --------------------------------------------------
-     JST 6:00 基準の前日
-  -------------------------------------------------- */
-  function getPrevDayJST6() {
-    const now = new Date();
-    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  useEffect(() => {
+    // uid が確定してからロード（winner 限定ガチャの判定のため）
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUid]);
 
-    const cutoff = new Date(jst);
-    cutoff.setHours(6, 0, 0, 0);
-
-    if (jst < cutoff) {
-      jst.setDate(jst.getDate() - 1);
-    }
-
-    jst.setDate(jst.getDate() - 1);
-
-    const y = jst.getFullYear();
-    const m = String(jst.getMonth() + 1).padStart(2, "0");
-    const d = String(jst.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  /* --------------------------------------------------
-     ガチャ情報 + アクセス制御 + 結果取得
-  -------------------------------------------------- */
   const load = async () => {
     setLoading(true);
+    setError("");
 
     const snap = await getDoc(doc(db, "gachaCodes", code as string));
 
@@ -119,6 +123,12 @@ export default function GachaDetailPage() {
 
     // limited → 過去に引いた人のみ
     if (isLimited) {
+      if (!currentUid) {
+        setError("このガチャは限定公開です");
+        setLoading(false);
+        return;
+      }
+
       const historyRef = doc(db, "userGachaHistory", `${currentUid}_${code}`);
       const historySnap = await getDoc(historyRef);
 
@@ -131,7 +141,13 @@ export default function GachaDetailPage() {
 
     // subscriber → サブスク限定
     if (isSubscriberOnly) {
-      const userSnap = await getDoc(doc(db, "users", currentUid!));
+      if (!currentUid) {
+        setError("このガチャはサブスク会員限定です");
+        setLoading(false);
+        return;
+      }
+
+      const userSnap = await getDoc(doc(db, "users", currentUid));
       const user = userSnap.data();
 
       if (!user?.subscriber) {
@@ -143,7 +159,13 @@ export default function GachaDetailPage() {
 
     // nibuichi_winner → 前日的中者限定
     if (isWinnerOnly) {
-      const uid = currentUid!;
+      if (!currentUid) {
+        setError("このガチャは前日のニブイチ的中者限定です（ログインが必要です）");
+        setLoading(false);
+        return;
+      }
+
+      const uid = currentUid;
       const prevDay = getPrevDayJST6();
 
       const predRef = doc(
@@ -202,13 +224,7 @@ export default function GachaDetailPage() {
       }
     }
 
-    // アクセスOK
-    setGacha(data);
-    setLoading(false);
-
-    /* --------------------------------------------------
-       ★ サブコレクションから結果取得
-    -------------------------------------------------- */
+    // ★ サブコレクションから結果取得
     setResultsLoading(true);
 
     const snapResults = await getDocs(
@@ -227,6 +243,10 @@ export default function GachaDetailPage() {
 
     setAllResults(list);
     setResultsLoading(false);
+
+    // アクセスOK
+    setGacha(data);
+    setLoading(false);
   };
 
   const play = () => {
@@ -378,7 +398,7 @@ function UserNameItem({ result, currentUid, getUserInfo }: any) {
       const n = await getUserInfo(result.uid);
       setName(n);
     })();
-  }, []);
+  }, [result.uid, getUserInfo]);
 
   return (
     <li
