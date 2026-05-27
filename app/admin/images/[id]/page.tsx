@@ -67,12 +67,11 @@ export default function ImageDetailPage() {
     const uploadId = uuidv4();
     const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
+    // ★ customMetadata をやめて metadata 直下に入れる（スマホ対策）
     const metadata = {
-      customMetadata: {
-        folder,
-        prefix,
-        originalName: newFile.name,
-      },
+      folder,
+      prefix,
+      originalName: newFile.name,
     };
 
     const task = uploadBytesResumable(storageRef, newFile, metadata);

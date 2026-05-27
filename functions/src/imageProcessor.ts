@@ -12,7 +12,7 @@ const db = admin.firestore();
 // Storage バケット名を明示（必須）
 const bucket = admin.storage().bucket("point-app-1f854.appspot.com");
 
-// ★ ここにリージョン指定を追加（Storage と合わせて us-east1）
+// ★ Storage と同じリージョン us-east1 を指定
 export const processImage = onObjectFinalized(
   { region: "us-east1" },
   async (event) => {
@@ -24,9 +24,11 @@ export const processImage = onObjectFinalized(
     const tempFilePath = path.join(os.tmpdir(), uuidv4());
     const file = bucket.file(filePath);
 
+    // ★ customMetadata を使わず metadata 直下を読む（スマホ対応）
     const metadata = object.metadata || {};
     const folder = metadata.folder || "misc";
     const prefix = metadata.prefix || "";
+    const originalName = metadata.originalName || "unknown";
 
     const newFileName = `${prefix}${uuidv4()}.webp`;
     const outputPath = `images/${folder}/${newFileName}`;
@@ -59,6 +61,7 @@ export const processImage = onObjectFinalized(
       filename: newFileName,
       path: outputPath,
       url: url[0],
+      originalName,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       usedBy: [],
     });
