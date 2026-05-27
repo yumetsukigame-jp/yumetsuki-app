@@ -33,7 +33,9 @@ export default function ImageUploadPage() {
     setMessage("");
 
     const uploadId = uuidv4();
-    const storageRef = ref(storage, `rawUploads/${uid}/${uploadId}`);
+
+    // ★ Functions が監視しているパスに合わせる（ここだけ修正）
+    const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
     const metadata = {
       customMetadata: {
