@@ -137,10 +137,14 @@ export default function Home() {
   }, [authReady, uid]);
 
   /* --------------------------------------------------
-     ローディング
+     Auth 初期化前は絶対に UI を動かさない
   -------------------------------------------------- */
-  if (loading) {
-    return <div style={{ padding: 20 }}>読み込み中…</div>;
+  if (!authReady) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
   }
 
   /* --------------------------------------------------

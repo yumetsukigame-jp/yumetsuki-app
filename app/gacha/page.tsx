@@ -418,8 +418,16 @@ export default function GachaInner() {
   };
 
   /* --------------------------------------------------
-     JSX
+     JSX（authReady が false の間は UI を動かさない）
   -------------------------------------------------- */
+  if (!authReady) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
       {/* ★ GIF オーバーレイ */}
