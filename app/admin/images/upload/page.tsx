@@ -1,14 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { auth, storage } from "@/firebase";
 import { ref, uploadBytesResumable } from "firebase/storage";
+import { onAuthStateChanged } from "firebase/auth";
 import { v4 as uuidv4 } from "uuid";
 
 export default function ImageUploadPage() {
+  /* ------------------------------
+     Auth 状態
+  ------------------------------ */
+  const [uid, setUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
+
+  /* ------------------------------
+     UI 状態
+  ------------------------------ */
   const [file, setFile] = useState<File | null>(null);
   const [folder, setFolder] = useState("gacha");
-  const [prefix, setPrefix] = useState("");
+  const [prefix, setPrefix] = useState("none");
+  const [customName, setCustomName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -23,10 +42,19 @@ export default function ImageUploadPage() {
     "misc",
   ];
 
+  const prefixes = [
+    { value: "none", label: "なし" },
+    { value: "orica_", label: "orica_" },
+    { value: "week_", label: "week_" },
+    { value: "sp_", label: "sp_" },
+    { value: "custom", label: "カスタム入力" },
+  ];
+
+  /* ------------------------------
+     アップロード処理
+  ------------------------------ */
   const handleUpload = async () => {
     if (!file) return setMessage("ファイルを選択してください");
-
-    const uid = auth.currentUser?.uid;
     if (!uid) return setMessage("ログインが必要です");
 
     setUploading(true);
@@ -34,13 +62,17 @@ export default function ImageUploadPage() {
 
     const uploadId = uuidv4();
 
-    // ★ Functions が監視しているパスに合わせる（ここだけ修正）
+    // Functions が監視しているパス
     const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
+
+    // prefix の決定
+    const finalPrefix =
+      prefix === "custom" ? customName : prefix === "none" ? "" : prefix;
 
     const metadata = {
       customMetadata: {
         folder,
-        prefix,
+        prefix: finalPrefix,
         originalName: file.name,
       },
     };
@@ -61,10 +93,36 @@ export default function ImageUploadPage() {
     );
   };
 
+  /* ------------------------------
+     Auth 初期化前
+  ------------------------------ */
+  if (!authReady) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
+  }
+
+  /* ------------------------------
+     未ログイン
+  ------------------------------ */
+  if (!uid) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        ログインが必要です
+      </div>
+    );
+  }
+
+  /* ------------------------------
+     JSX
+  ------------------------------ */
   return (
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-      <h1>📤 画像アップロード</h1>
+      <h1 style={{ marginBottom: 20 }}>📤 画像アップロード</h1>
 
+      {/* フォルダ選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>フォルダ：</label>
         <select
@@ -78,23 +136,84 @@ export default function ImageUploadPage() {
         </select>
       </div>
 
+      {/* prefix 選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>prefix：</label>
-        <input
-          type="text"
-          placeholder="例：orica_ / week_ / sp_"
+        <select
           value={prefix}
           onChange={(e) => setPrefix(e.target.value)}
           style={{ padding: 8, marginLeft: 10 }}
+        >
+          {prefixes.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+
+        {/* カスタム prefix 入力 */}
+        {prefix === "custom" && (
+          <input
+            type="text"
+            placeholder="カスタム prefix"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            style={{
+              padding: 8,
+              marginLeft: 10,
+              border: "1px solid #ccc",
+              borderRadius: 6,
+            }}
+          />
+        )}
+      </div>
+
+      {/* ファイル名（任意） */}
+      <div style={{ marginBottom: 20 }}>
+        <label>ファイル名（任意）：</label>
+        <input
+          type="text"
+          placeholder="例：my_banner.png"
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
+          style={{
+            padding: 8,
+            marginLeft: 10,
+            border: "1px solid #ccc",
+            borderRadius: 6,
+          }}
         />
       </div>
 
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-      />
+      {/* ファイル選択（ボタン化） */}
+      <div style={{ marginBottom: 20 }}>
+        <label
+          style={{
+            display: "inline-block",
+            padding: "10px 20px",
+            background: "#4f46e5",
+            color: "white",
+            borderRadius: 8,
+            cursor: "pointer",
+          }}
+        >
+          ファイルを選択
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
 
+        {file && (
+          <span style={{ marginLeft: 12 }}>
+            選択中：{file.name}
+          </span>
+        )}
+      </div>
+
+      {/* アップロードボタン */}
       <button
         onClick={handleUpload}
         disabled={uploading}
@@ -104,6 +223,7 @@ export default function ImageUploadPage() {
           background: "#2563eb",
           color: "white",
           borderRadius: 8,
+          cursor: uploading ? "not-allowed" : "pointer",
         }}
       >
         {uploading ? "アップロード中…" : "アップロード"}

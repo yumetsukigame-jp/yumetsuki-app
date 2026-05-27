@@ -11,17 +11,18 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
-/* ============================================================
-   JST 時刻ユーティリティ（Functions と同じロジック）
-============================================================ */
-function nowJST(): Date {
+/* --------------------------------------------------
+   JST 6時切り替え（Functions と完全一致）
+-------------------------------------------------- */
+function nowJST() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
   );
 }
 
-function getYesterdayJST6(): string {
+function getYesterdayJST6() {
   const now = nowJST();
   if (now.getHours() < 6) {
     now.setDate(now.getDate() - 2);
@@ -32,7 +33,7 @@ function getYesterdayJST6(): string {
 }
 
 /* --------------------------------------------------
-   ユーザー名取得（キャッシュ付き・@正規化対応）
+   ユーザー名キャッシュ
 -------------------------------------------------- */
 const userCache: Record<string, string> = {};
 
@@ -61,34 +62,37 @@ export default function GachaDetailPage() {
   const { code } = useParams();
   const router = useRouter();
 
+  /* --------------------------------------------------
+     Auth 状態
+  -------------------------------------------------- */
+  const [uid, setUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
+
+  /* --------------------------------------------------
+     ページ状態
+  -------------------------------------------------- */
   const [gacha, setGacha] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [allResults, setAllResults] = useState<any[]>([]);
-  const [currentUid, setCurrentUid] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(false); // ← これがポイント
 
   /* --------------------------------------------------
-     Auth 状態を監視して「初期化完了」を待つ
+     Auth 初期化後にのみ load() を実行
   -------------------------------------------------- */
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((user) => {
-      setCurrentUid(user?.uid ?? null);
-      setAuthReady(true); // 初期化が終わったら true
-    });
-    return () => unsub();
-  }, []);
-
-  /* --------------------------------------------------
-     authReady が true になってから load を呼ぶ
-  -------------------------------------------------- */
-  useEffect(() => {
-    if (!authReady) return; // ここで「ログインしてないことになっている」状態を防ぐ
+    if (!authReady) return;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, currentUid, code]);
+  }, [authReady, uid, code]);
 
   /* --------------------------------------------------
      ガチャ情報 + アクセス制御 + 結果取得
@@ -109,50 +113,49 @@ export default function GachaDetailPage() {
     const flags: string[] = data.publicFlags ?? [];
 
     const isPublic = flags.includes("public");
-    const isLimited = flags.includes("limited");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
     const isXAccountMatch = flags.includes("x_account_match");
 
-    // 公開でない → ログイン必須
-    if (!isPublic && !currentUid) {
+    /* --------------------------------------------------
+       公開設定
+    -------------------------------------------------- */
+    if (!isPublic && !uid) {
       setError("このガチャは限定公開です（ログインが必要です）");
       setLoading(false);
       return;
     }
 
-    // subscriber → サブスク限定
+    /* --------------------------------------------------
+       サブスク限定
+    -------------------------------------------------- */
     if (isSubscriberOnly) {
-      if (!currentUid) {
+      if (!uid) {
         setError("このガチャはサブスク会員限定です（ログインが必要です）");
         setLoading(false);
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", currentUid));
+      const userSnap = await getDoc(doc(db, "users", uid));
       const user = userSnap.data();
 
       if (!user?.subscriber) {
-        setError(
-          `このガチャはサブスク会員限定です。\n\n` +
-            `▼ デバッグ\n` +
-            `uid: ${currentUid}\n` +
-            `subscriber: ${String(user?.subscriber)}`
-        );
+        setError("このガチャはサブスク会員限定です");
         setLoading(false);
         return;
       }
     }
 
-    // nibuichi_winner → 前日的中者限定
+    /* --------------------------------------------------
+       前日的中者限定
+    -------------------------------------------------- */
     if (isWinnerOnly) {
-      if (!currentUid) {
+      if (!uid) {
         setError("ログインが必要です");
         setLoading(false);
         return;
       }
 
-      const uid = currentUid;
       const prevDay = getYesterdayJST6();
 
       const predRef = doc(
@@ -166,43 +169,31 @@ export default function GachaDetailPage() {
 
       if (!predSnap.exists()) {
         setError(
-          `このガチャは前日のニブイチ的中者限定です（予想なし扱い）。\n\n` +
-            `▼ デバッグ\n` +
-            `参照した日付: ${prevDay}\n` +
-            `参照した uid: ${uid}\n` +
-            `Firestore パス: nibuichi_daily/${prevDay}/predictions/${uid}\n` +
-            `predSnap.exists(): false`
+          `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
         );
         setLoading(false);
         return;
       }
 
       const pdata = predSnap.data();
-      const prediction = pdata.prediction;
-      const result = pdata.result;
-
-      if (prediction !== result) {
-        setError(
-          `このガチャは前日のニブイチ的中者限定です（不的中）。\n\n` +
-            `▼ デバッグ\n` +
-            `参照した日付: ${prevDay}\n` +
-            `prediction: ${prediction}\n` +
-            `result: ${result}`
-        );
+      if (pdata.prediction !== pdata.result) {
+        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
         setLoading(false);
         return;
       }
     }
 
-    // Xアカウント一致
+    /* --------------------------------------------------
+       Xアカウント一致
+    -------------------------------------------------- */
     if (isXAccountMatch) {
-      if (!currentUid) {
-        setError("このガチャはXアカウント登録者のみ引けます（ログインが必要です）");
+      if (!uid) {
+        setError("このガチャはXアカウント登録者のみ引けます");
         setLoading(false);
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", currentUid));
+      const userSnap = await getDoc(doc(db, "users", uid));
       const user = userSnap.data();
       const userX = (user?.xAccount ?? "").toLowerCase();
 
@@ -226,7 +217,7 @@ export default function GachaDetailPage() {
     }
 
     /* --------------------------------------------------
-       サブコレクションから結果取得
+       結果取得
     -------------------------------------------------- */
     setResultsLoading(true);
 
@@ -251,13 +242,15 @@ export default function GachaDetailPage() {
     setLoading(false);
   };
 
-  const play = () => {
-    router.push(`/gacha?code=${code}`);
-  };
-
+  /* --------------------------------------------------
+     Auth 初期化前は UI を動かさない
+  -------------------------------------------------- */
   if (!authReady) {
-    // Auth 初期化前はとにかく待つ
-    return <p style={{ padding: 24 }}>ログイン状態を確認中…</p>;
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
   }
 
   if (loading) return <p style={{ padding: 24 }}>読み込み中…</p>;
@@ -294,7 +287,7 @@ export default function GachaDetailPage() {
       </p>
 
       <button
-        onClick={play}
+        onClick={() => router.push(`/gacha?code=${code}`)}
         style={{
           marginTop: 20,
           padding: "12px 20px",
@@ -318,7 +311,7 @@ export default function GachaDetailPage() {
           frames={gacha.frames}
           mode={gacha.mode}
           results={allResults}
-          currentUid={currentUid}
+          currentUid={uid}
           getUserInfo={getUserInfo}
         />
       )}
