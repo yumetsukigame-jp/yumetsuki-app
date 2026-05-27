@@ -1,7 +1,7 @@
 // app/firebase.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, browserLocalPersistence, setPersistence } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
@@ -14,18 +14,19 @@ const firebaseConfig = {
   appId: "1:892402029397:web:d58294a612406c47ce95dc"
 };
 
-// ★ initializeApp は 1 回だけ
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Firestore
 export const db = getFirestore(app);
 
-// Auth（永続化設定）
+// ★ Auth はクライアント側でのみ永続化を設定する
 export const auth = getAuth(app);
-setPersistence(auth, browserLocalPersistence);
 
-// ★ Storage（これが無かった！）
+if (typeof window !== "undefined") {
+  setPersistence(auth, browserLocalPersistence);
+}
+
+// ★ Storage
 export const storage = getStorage(app, "gs://point-app-1f854.firebasestorage.app");
 
-// ★ Gen2 Functions は region を必ず指定
+// ★ Functions
 export const functions = getFunctions(app, "us-central1");
