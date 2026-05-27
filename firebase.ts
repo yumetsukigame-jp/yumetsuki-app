@@ -19,7 +19,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// ★ これが正しい（gs:// は絶対に使わない）
-export const storage = getStorage(app, "https://point-app-1f854.firebasestorage.app");
+// ★ 正しい初期化（これだけで全部直る）
+export const storage = getStorage(app, "point-app-1f854.firebasestorage.app");
 
 export const functions = getFunctions(app, "us-east1");
