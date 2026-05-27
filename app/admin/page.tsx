@@ -220,6 +220,12 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/history">発送履歴</MenuLink>
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
+
+      {/* 🆕 画像管理（追加部分） */}
+      <Section title="🖼 画像管理">
+        <MenuLink href="/admin/images/upload">画像アップロード</MenuLink>
+        <MenuLink href="/admin/images">画像一覧</MenuLink>
+      </Section>
     </div>
   );
 }

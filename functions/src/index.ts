@@ -1190,3 +1190,7 @@ export const resetNibuichiMonthly = onSchedule(
     console.log("=== resetNibuichiMonthly END ===");
   }
 );
+
+export * from "./imageProcessor";
+
+
