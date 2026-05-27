@@ -6,11 +6,9 @@ import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
 
-admin.initializeApp();
-const db = admin.firestore();
 
-// Storage バケット名を明示（必須）
-const bucket = admin.storage().bucket("point-app-1f854.appspot.com");
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
 // ★ Storage と同じリージョン us-east1 を指定
 export const processImage = onObjectFinalized(

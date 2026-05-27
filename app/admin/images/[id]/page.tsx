@@ -6,7 +6,6 @@ import { db, storage } from "@/firebase";
 import {
   doc,
   getDoc,
-  updateDoc,
   deleteDoc,
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, deleteObject } from "firebase/storage";
@@ -61,38 +60,59 @@ export default function ImageDetailPage() {
       return;
     }
 
+    console.log("=== 差し替え開始 ===");
+    console.log("newFile:", newFile);
+    console.log("folder:", folder);
+    console.log("prefix:", prefix);
+
     setSaving(true);
 
     // ① 新しい画像を rawUploads にアップロード
     const uploadId = uuidv4();
     const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
-    // ★ customMetadata をやめて metadata 直下に入れる（スマホ対策）
+    console.log("upload path:", storageRef.fullPath);
+
+    // ★ metadata を customMetadata ではなく直下に入れる（iOS対策）
     const metadata = {
-      folder,
-      prefix,
+      folder: folder || "",
+      prefix: prefix || "",
       originalName: newFile.name,
     };
+
+    console.log("metadata:", metadata);
 
     const task = uploadBytesResumable(storageRef, newFile, metadata);
 
     task.on(
       "state_changed",
-      () => {},
+      (snap) => {
+        const progress = (snap.bytesTransferred / snap.totalBytes) * 100;
+        console.log(`upload progress: ${progress}%`);
+      },
       (err) => {
-        console.error(err);
-        alert("アップロードに失敗しました");
+        console.error("upload error:", err);
+        alert("アップロードに失敗しました（詳細はコンソールを確認）");
         setSaving(false);
       },
       async () => {
-        // ② Functions が処理するので少し待つ
+        console.log("upload complete");
+
         alert("新しい画像を処理中…（数秒〜数十秒）");
 
         // ③ 古い画像を削除
-        await deleteObject(ref(storage, data.path));
+        try {
+          await deleteObject(ref(storage, data.path));
+        } catch (e) {
+          console.error("delete old image error:", e);
+        }
 
         // ④ Firestore の古いメタ情報を削除
-        await deleteDoc(doc(db, "imageMeta", id as string));
+        try {
+          await deleteDoc(doc(db, "imageMeta", id as string));
+        } catch (e) {
+          console.error("delete meta error:", e);
+        }
 
         alert("差し替えが完了しました");
         router.push("/admin/images");
@@ -158,7 +178,11 @@ export default function ImageDetailPage() {
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            console.log("file selected:", file);
+            setNewFile(file);
+          }}
         />
       </div>
 

@@ -3,7 +3,9 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
-initializeApp();
+initializeApp({
+  storageBucket: "point-app-1f854.firebasestorage.app",
+});
 const db = getFirestore();
 
 /* ============================================================
