@@ -49,23 +49,19 @@ async function getUserInfo(uid: string) {
 }
 
 /* --------------------------------------------------
-   JST6時基準の「昨日」を Functions と完全一致で算出
+   JST6時基準の「昨日」(Functions と完全一致)
 -------------------------------------------------- */
 function getPrevDayJST6() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
 
-  // 今日の6時
   const cutoff = new Date(jst);
   cutoff.setHours(6, 0, 0, 0);
 
-  // ★ 6時前なら「今日の日付」を1日戻す（昨日扱い）
   if (jst < cutoff) {
     jst.setDate(jst.getDate() - 1);
   }
 
-  // ★ ここで「今日のニブイチ日付」が決まる
-  // そこから「昨日」を引く
   jst.setDate(jst.getDate() - 1);
 
   const y = jst.getFullYear();
@@ -87,7 +83,7 @@ export default function GachaDetailPage() {
   const [currentUid, setCurrentUid] = useState<string | null>(null);
 
   /* --------------------------------------------------
-     Auth 状態を正しく追跡（初期 null 問題を解消）
+     Auth 状態を正しく追跡
   -------------------------------------------------- */
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
@@ -174,7 +170,7 @@ export default function GachaDetailPage() {
     // nibuichi_winner → 前日的中者限定
     if (isWinnerOnly) {
       if (!currentUid) {
-        setError("このガチャは前日のニブイチ的中者限定です（ログインが必要です）");
+        setError("ログインが必要です");
         setLoading(false);
         return;
       }
@@ -191,17 +187,32 @@ export default function GachaDetailPage() {
       );
       const predSnap = await getDoc(predRef);
 
+      // ★ デバッグ情報を表示
       if (!predSnap.exists()) {
-        setError("このガチャは前日のニブイチ的中者限定です（予想なし）");
+        setError(
+          `予想なし扱いです。\n\n` +
+          `▼ デバッグ情報\n` +
+          `参照した日付: ${prevDay}\n` +
+          `参照した uid: ${uid}\n` +
+          `Firestore パス: nibuichi_daily/${prevDay}/predictions/${uid}\n` +
+          `predSnap.exists(): false`
+        );
         setLoading(false);
         return;
       }
 
-      const prediction = predSnap.data().prediction;
-      const result = predSnap.data().result;
+      const data = predSnap.data();
+      const prediction = data.prediction;
+      const result = data.result;
 
       if (prediction !== result) {
-        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
+        setError(
+          `不的中扱いです。\n\n` +
+          `▼ デバッグ情報\n` +
+          `参照した日付: ${prevDay}\n` +
+          `prediction: ${prediction}\n` +
+          `result: ${result}`
+        );
         setLoading(false);
         return;
       }
@@ -270,7 +281,12 @@ export default function GachaDetailPage() {
   };
 
   if (loading) return <p style={{ padding: 24 }}>読み込み中…</p>;
-  if (error) return <p style={{ padding: 24, color: "red" }}>{error}</p>;
+  if (error)
+    return (
+      <pre style={{ padding: 24, color: "red", whiteSpace: "pre-wrap" }}>
+        {error}
+      </pre>
+    );
   if (!gacha) return null;
 
   const remaining =
