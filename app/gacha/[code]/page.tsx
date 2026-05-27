@@ -49,18 +49,25 @@ async function getUserInfo(uid: string) {
 }
 
 /* --------------------------------------------------
-   JST 6:00 基準の「昨日」
+   JST6時基準の「昨日」を Functions と完全一致で算出
 -------------------------------------------------- */
 function getPrevDayJST6() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
 
-  // 6時前なら「昨日扱い」にする
-  if (jst.getHours() < 6) {
+  // JST6時の境界
+  const cutoff = new Date(jst);
+  cutoff.setHours(6, 0, 0, 0);
+
+  // 6時前なら「昨日扱い」
+  if (jst < cutoff) {
     jst.setDate(jst.getDate() - 1);
   }
 
-  // ここで「昨日」になっているので、これ以上は引かない
+  // ★ ここで「今日のニブイチ日付」が決まる
+  // ★ そこから「昨日」を引く（Functions と同じ）
+  jst.setDate(jst.getDate() - 1);
+
   const y = jst.getFullYear();
   const m = String(jst.getMonth() + 1).padStart(2, "0");
   const d = String(jst.getDate()).padStart(2, "0");
@@ -79,7 +86,9 @@ export default function GachaDetailPage() {
   const [allResults, setAllResults] = useState<any[]>([]);
   const [currentUid, setCurrentUid] = useState<string | null>(null);
 
-  // Auth 状態をちゃんと追う
+  /* --------------------------------------------------
+     Auth 状態を正しく追跡（初期 null 問題を解消）
+  -------------------------------------------------- */
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
       setCurrentUid(user?.uid ?? null);
@@ -87,12 +96,17 @@ export default function GachaDetailPage() {
     return () => unsub();
   }, []);
 
+  /* --------------------------------------------------
+     uid が確定してからロード
+  -------------------------------------------------- */
   useEffect(() => {
-    // uid が確定してからロード（winner 限定ガチャの判定のため）
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUid]);
 
+  /* --------------------------------------------------
+     ガチャ情報 + アクセス制御 + 結果取得
+  -------------------------------------------------- */
   const load = async () => {
     setLoading(true);
     setError("");
@@ -224,7 +238,9 @@ export default function GachaDetailPage() {
       }
     }
 
-    // ★ サブコレクションから結果取得
+    /* --------------------------------------------------
+       ★ サブコレクションから結果取得
+    -------------------------------------------------- */
     setResultsLoading(true);
 
     const snapResults = await getDocs(
