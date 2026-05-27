@@ -9,11 +9,10 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
 /* --------------------------------------------------
-   ★ JST 6時切り替えの今日の日付（完全修正版）
+   JST 6時切り替えの今日の日付
 -------------------------------------------------- */
 function getTodayJST6() {
-  const jst = new Date(); // ← ローカルがJSTなのでそのまま
-
+  const jst = new Date();
   const cutoff = new Date(jst);
   cutoff.setHours(6, 0, 0, 0);
 
@@ -28,14 +27,22 @@ function getTodayJST6() {
 }
 
 export default function Home() {
+  const router = useRouter();
+
+  /* --------------------------------------------------
+     Auth 状態
+  -------------------------------------------------- */
+  const [uid, setUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  /* --------------------------------------------------
+     Firestore データ
+  -------------------------------------------------- */
   const [points, setPoints] = useState<number | null>(null);
   const [nickname, setNickname] = useState<string | null>(null);
   const [xAccount, setXAccount] = useState<string | null>(null);
   const [subscriber, setSubscriber] = useState<boolean>(false);
-
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
@@ -46,36 +53,46 @@ export default function Home() {
   const [totalLose, setTotalLose] = useState(0);
   const [totalBakuado, setTotalBakuado] = useState(0);
 
-  const router = useRouter();
+  const [loading, setLoading] = useState(true);
 
+  /* --------------------------------------------------
+     ① Auth 初期化（uid だけセット）
+  -------------------------------------------------- */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setLoggedIn(false);
-        setLoading(false);
-        return;
-      }
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
 
-      setLoggedIn(true);
-      const uid = user.uid;
+  /* --------------------------------------------------
+     ② uid が確定してから Firestore を読む
+  -------------------------------------------------- */
+  useEffect(() => {
+    if (!authReady) return;
 
+    // 未ログイン
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+
+    const load = async () => {
       const today = getTodayJST6();
 
-      // 管理者判定
-      const adminRef = doc(db, "admins", uid);
-      const adminSnap = await getDoc(adminRef);
+      /* --- 管理者判定 --- */
+      const adminSnap = await getDoc(doc(db, "admins", uid));
       setIsAdmin(adminSnap.exists());
 
-      // ユーザーデータ
-      const ref = doc(db, "users", uid);
-      const snap = await getDoc(ref);
-
-      if (snap.exists()) {
-        const data = snap.data();
-        setPoints(data.points || 0);
-        setNickname(data.displayName || "名無し");
-        setXAccount(data.xAccount || null);
-        setSubscriber(data.subscriber === true);
+      /* --- ユーザーデータ --- */
+      const userSnap = await getDoc(doc(db, "users", uid));
+      if (userSnap.exists()) {
+        const u = userSnap.data();
+        setPoints(u.points ?? 0);
+        setNickname(u.displayName ?? "名無し");
+        setXAccount(u.xAccount ?? null);
+        setSubscriber(u.subscriber === true);
       } else {
         setPoints(0);
         setNickname("名無し");
@@ -83,24 +100,22 @@ export default function Home() {
         setSubscriber(false);
       }
 
-      // 今日の予想
-      const predRef = doc(db, "nibuichi_user_predictions", `${uid}_${today}`);
-      const predSnap = await getDoc(predRef);
+      /* --- 今日の予想 --- */
+      const predSnap = await getDoc(
+        doc(db, "nibuichi_user_predictions", `${uid}_${today}`)
+      );
       if (predSnap.exists()) {
         setTodayPrediction(predSnap.data().prediction);
       }
 
-      // 今日の結果
-      const resultRef = doc(db, "nibuichi_global", today);
-      const resultSnap = await getDoc(resultRef);
+      /* --- 今日の結果 --- */
+      const resultSnap = await getDoc(doc(db, "nibuichi_global", today));
       if (resultSnap.exists()) {
         setTodayResult(resultSnap.data().result);
       }
 
-      // 全体戦績
-      const statsRef = doc(db, "nibuichi_global_stats", "stats");
-      const statsSnap = await getDoc(statsRef);
-
+      /* --- 全体戦績 --- */
+      const statsSnap = await getDoc(doc(db, "nibuichi_global_stats", "stats"));
       if (statsSnap.exists()) {
         const s = statsSnap.data();
         const win = s.win ?? 0;
@@ -116,29 +131,28 @@ export default function Home() {
       }
 
       setLoading(false);
-    });
+    };
 
-    return () => unsub();
-  }, []);
+    load();
+  }, [authReady, uid]);
 
+  /* --------------------------------------------------
+     ローディング
+  -------------------------------------------------- */
   if (loading) {
     return <div style={{ padding: 20 }}>読み込み中…</div>;
   }
 
   /* --------------------------------------------------
-     ★ ログインしていない時の画面
-     ★ yumeapp.webp を「ログインしていません。」と
-       「ログインページへ」の間に配置（改行あり）
+     未ログイン
   -------------------------------------------------- */
-  if (!loggedIn) {
+  if (!uid) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
-
         <p style={{ fontSize: "18px", marginBottom: "12px" }}>
           ログインしていません。
         </p>
 
-        {/* ★ yumeapp.webp（クリックでログイン） */}
         <a href="/login" style={{ display: "block", marginBottom: 20 }}>
           <img
             src="/yumeapp.webp"
@@ -166,42 +180,13 @@ export default function Home() {
         >
           ログインページへ
         </a>
-
-        {/* 🟣 ゆめつき本舗リンク */}
-        <div style={{ marginTop: 40 }}>
-          <a
-            href="https://yumetsuki.base.shop"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: "block" }}
-          >
-            <img
-              src="/honpo.webp"
-              alt="ゆめつき本舗HPはこちら"
-              style={{
-                width: "100%",
-                maxWidth: 320,
-                borderRadius: 12,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                cursor: "pointer",
-                display: "block",
-                margin: "0 auto",
-              }}
-            />
-          </a>
-
-          <p style={{ marginTop: 8, fontWeight: "bold" }}>
-            ゆめつき本舗HPはこちら
-          </p>
-        </div>
       </div>
     );
   }
 
   /* --------------------------------------------------
-     ★ ログイン済みの通常画面
+     ログイン済み画面
   -------------------------------------------------- */
-
   let nibuichiStatus = "未参加";
 
   if (todayPrediction && !todayResult) {
@@ -210,7 +195,9 @@ export default function Home() {
 
   if (todayPrediction && todayResult) {
     const hit = todayPrediction === todayResult;
-    nibuichiStatus = `${todayPrediction} → 結果：${todayResult}（${hit ? "的中" : "ハズレ"}）`;
+    nibuichiStatus = `${todayPrediction} → 結果：${todayResult}（${
+      hit ? "的中" : "ハズレ"
+    }）`;
   }
 
   return (
@@ -356,7 +343,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 🟣 ゆめつき本舗リンク（ログイン後も表示） */}
+      {/* 🟣 ゆめつき本舗リンク */}
       <div style={{ marginTop: 40, textAlign: "center" }}>
         <a
           href="https://yumetsuki.base.shop"
