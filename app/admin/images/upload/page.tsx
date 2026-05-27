@@ -75,11 +75,13 @@ export default function ImageUploadPage() {
     const finalPrefix =
       prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
-    // ★ metadata 直下に入れる（Functions と完全一致）
+    // ★ customMetadata に入れる（Functions と完全一致）
     const metadata = {
-      folder,
-      prefix: finalPrefix,
-      originalName: customFileName || file.name, // 任意ファイル名があれば優先
+      customMetadata: {
+        folder,
+        prefix: finalPrefix,
+        originalName: customFileName || file.name,
+      },
     };
 
     const task = uploadBytesResumable(storageRef, file, metadata);
