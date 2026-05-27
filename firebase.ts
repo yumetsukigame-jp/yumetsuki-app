@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDaoJLk44JYOQkij3XF_OUoui2cqjQLP_k",
@@ -22,6 +23,9 @@ export const db = getFirestore(app);
 // Auth（永続化設定）
 export const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence);
+
+// ★ Storage（これが無かった！）
+export const storage = getStorage(app, "gs://point-app-1f854.firebasestorage.app");
 
 // ★ Gen2 Functions は region を必ず指定
 export const functions = getFunctions(app, "us-central1");
