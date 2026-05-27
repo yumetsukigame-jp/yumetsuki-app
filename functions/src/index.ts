@@ -1,11 +1,11 @@
+import * as functions from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 
 initializeApp({
-  storageBucket: "point-app-1f854.firebasestorage.app",
+  storageBucket: "point-app-1f854.appspot.com",
 });
+
 const db = getFirestore();
 
 /* ============================================================
@@ -21,11 +21,6 @@ function getDateStringJST(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function getTodayJST6(): string {
-  const now = nowJST();
-  if (now.getHours() < 6) now.setDate(now.getDate() - 1);
-  return getDateStringJST(now);
-}
 
 function getYesterdayJST6(): string {
   const now = nowJST();
@@ -34,16 +29,28 @@ function getYesterdayJST6(): string {
   return getDateStringJST(now);
 }
 
+function getTodayJST6(): string {
+  const now = nowJST();
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 1);
+  }
+  return getDateStringJST(now);
+}
+
 /* ============================================================
-   ガチャ機能
+   ガチャ機能（v1 化）
 ============================================================ */
 
-export const createGachaCode = onCall(
-  { region: "us-east1" },
-  async (request) => {
+export const createGachaCode = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
     try {
-      const uid = request.auth?.uid;
-      if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+      const uid = context.auth?.uid;
+      if (!uid)
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "ログインが必要です"
+        );
 
       const {
         title,
@@ -56,14 +63,20 @@ export const createGachaCode = onCall(
         frames,
         expiresAt,
         xAccountList,
-      } = request.data;
+      } = data;
 
       if (!title || !mode || !resetType || !point || !frames) {
-        throw new HttpsError("invalid-argument", "必要な項目が不足しています");
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "必要な項目が不足しています"
+        );
       }
 
       if (!Array.isArray(publicFlags)) {
-        throw new HttpsError("invalid-argument", "publicFlags は配列である必要があります");
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "publicFlags は配列である必要があります"
+        );
       }
 
       const validFlags = [
@@ -76,7 +89,10 @@ export const createGachaCode = onCall(
 
       for (const flag of publicFlags) {
         if (!validFlags.includes(flag)) {
-          throw new HttpsError("invalid-argument", `publicFlags に不正な値があります: ${flag}`);
+          throw new functions.https.HttpsError(
+            "invalid-argument",
+            `publicFlags に不正な値があります: ${flag}`
+          );
         }
       }
 
@@ -117,14 +133,16 @@ export const createGachaCode = onCall(
       return { code };
     } catch (err: any) {
       console.error("createGachaCode error:", err);
-      throw new HttpsError("internal", err.message || "unknown error");
+      throw new functions.https.HttpsError(
+        "internal",
+        err.message || "unknown error"
+      );
     }
-  }
-);
+  });
 
-export const getPublicGachaList = onCall(
-  { region: "us-east1" },
-  async () => {
+export const getPublicGachaList = functions
+  .region("us-east1")
+  .https.onCall(async () => {
     const snap = await db
       .collection("gachaCodes")
       .orderBy("createdAt", "desc")
@@ -146,23 +164,33 @@ export const getPublicGachaList = onCall(
         publicFlags: data.publicFlags ?? [],
       };
     });
-  }
-);
+  });
 
-export const useGachaCode = onCall(
-  { region: "us-east1" },
-  async (request) => {
+export const useGachaCode = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
     try {
-      const uid = request.auth?.uid;
-      if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
+      const uid = context.auth?.uid;
+      if (!uid)
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "ログインが必要です"
+        );
 
-      const code = request.data.code;
-      if (!code) throw new HttpsError("invalid-argument", "コードが必要です");
+      const code = data.code;
+      if (!code)
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "コードが必要です"
+        );
 
       const gachaRef = db.collection("gachaCodes").doc(code);
       const gachaSnap = await gachaRef.get();
       if (!gachaSnap.exists) {
-        throw new HttpsError("not-found", "ガチャが存在しません");
+        throw new functions.https.HttpsError(
+          "not-found",
+          "ガチャが存在しません"
+        );
       }
 
       const gacha: any = gachaSnap.data();
@@ -170,15 +198,22 @@ export const useGachaCode = onCall(
 
       const now = nowJST();
       if (gacha.expiresAt && gacha.expiresAt.toDate() < now) {
-        throw new HttpsError("failed-precondition", "期限切れのガチャです");
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "期限切れのガチャです"
+        );
       }
 
+      // ここから先は元コードそのまま（v1 化済み）
       if (flags.includes("subscriber")) {
         const userRef = db.collection("users").doc(uid);
         const userSnap = await userRef.get();
         const userData = userSnap.data();
         if (!userData?.subscriber) {
-          throw new HttpsError("permission-denied", "このガチャはサブスクライバー限定です");
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "このガチャはサブスクライバー限定です"
+          );
         }
       }
 
@@ -190,8 +225,11 @@ export const useGachaCode = onCall(
           .collection("predictions")
           .doc(uid);
         const histSnap = await histRef.get();
-        if (!histSnap.data() || histSnap.data()?.prediction !== histSnap.data()?.result) {
-          throw new HttpsError(
+        if (
+          !histSnap.data() ||
+          histSnap.data()?.prediction !== histSnap.data()?.result
+        ) {
+          throw new functions.https.HttpsError(
             "permission-denied",
             "前日のニブイチ的中者のみ引けるガチャです"
           );
@@ -204,14 +242,23 @@ export const useGachaCode = onCall(
         const userData = userSnap.data();
         const userX = (userData?.xAccount ?? "").toLowerCase();
         if (!userX) {
-          throw new HttpsError("permission-denied", "このガチャはXアカウント登録者のみ引けます");
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "このガチャはXアカウント登録者のみ引けます"
+          );
         }
-        const list = (gacha.xAccountList ?? []).map((s: string) => s.toLowerCase());
+        const list = (gacha.xAccountList ?? []).map((s: string) =>
+          s.toLowerCase()
+        );
         const matched = list.some((entry: string) => entry.includes(userX));
         if (!matched) {
-          throw new HttpsError("permission-denied", "このガチャは指定されたXアカウントのみ引けます");
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "このガチャは指定されたXアカウントのみ引けます"
+          );
         }
       }
+
       /* ======== ポイント・回数チェック ======== */
 
       const userRef = db.collection("users").doc(uid);
@@ -223,18 +270,31 @@ export const useGachaCode = onCall(
       const maxPerUser = gacha.point.maxPerUser;
 
       if (currentPoints < cost) {
-        throw new HttpsError("failed-precondition", "ポイントが不足しています");
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "ポイントが不足しています"
+        );
       }
 
-      const historyRef = db.collection("userGachaHistory").doc(`${uid}_${code}`);
+      const historyRef = db
+        .collection("userGachaHistory")
+        .doc(`${uid}_${code}`);
       const historySnap = await historyRef.get();
-      const history = historySnap.exists ? historySnap.data()! : { count: 0 };
+      const history = historySnap.exists
+        ? historySnap.data()!
+        : { count: 0 };
 
       if (gacha.resetType === "daily" && history.count >= maxPerUser) {
-        throw new HttpsError("failed-precondition", "今日の回数上限です");
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "今日の回数上限です"
+        );
       }
       if (gacha.resetType === "none" && history.count >= maxPerUser) {
-        throw new HttpsError("failed-precondition", "上限回数に達しています");
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "上限回数に達しています"
+        );
       }
 
       /* ======== 抽選処理 ======== */
@@ -244,11 +304,15 @@ export const useGachaCode = onCall(
 
       if (gacha.mode === "count") {
         const weights = frames.map(
-          (f: any) => Math.max(0, (f.maxCount ?? 0) - (f.usedCount ?? 0))
+          (f: any) =>
+            Math.max(0, (f.maxCount ?? 0) - (f.usedCount ?? 0))
         );
         const total = weights.reduce((a: number, b: number) => a + b, 0);
         if (total <= 0) {
-          throw new HttpsError("failed-precondition", "すべての枠が終了しています");
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "すべての枠が終了しています"
+          );
         }
         let r = Math.random() * total;
         for (let i = 0; i < frames.length; i++) {
@@ -272,7 +336,10 @@ export const useGachaCode = onCall(
       }
 
       if (!selectedFrame) {
-        throw new HttpsError("internal", "抽選に失敗しました");
+        throw new functions.https.HttpsError(
+          "internal",
+          "抽選に失敗しました"
+        );
       }
 
       const reward =
@@ -294,7 +361,10 @@ export const useGachaCode = onCall(
 
         const freshPoints = Number(freshUser.points ?? 0);
         if (freshPoints < cost) {
-          throw new HttpsError("failed-precondition", "ポイントが不足しています");
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "ポイントが不足しています"
+          );
         }
 
         tx.update(userRef, {
@@ -337,17 +407,20 @@ export const useGachaCode = onCall(
       };
     } catch (err: any) {
       console.error("useGachaCode error:", err);
-      throw new HttpsError("internal", err.message || "unknown error");
+      throw new functions.https.HttpsError(
+        "internal",
+        err.message || "unknown error"
+      );
     }
-  }
-);
+  });
 
 /* ============================================================
-   ガチャ結果一覧
+   ガチャ結果一覧（v1 化）
 ============================================================ */
-export const getGachaResults = onCall(
-  { region: "us-east1" },
-  async () => {
+
+export const getGachaResults = functions
+  .region("us-east1")
+  .https.onCall(async () => {
     try {
       const results: any[] = [];
 
@@ -388,19 +461,24 @@ export const getGachaResults = onCall(
       return results;
     } catch (err: any) {
       console.error("getGachaResults error:", err);
-      throw new HttpsError("internal", err.message || "unknown error");
+      throw new functions.https.HttpsError(
+        "internal",
+        err.message || "unknown error"
+      );
     }
-  }
-);
-
+  });
 /* ============================================================
-   手動：ガチャ使用回数リセット
+   手動：ガチャ使用回数リセット（v1 化）
 ============================================================ */
-export const resetGachaUsage = onCall(
-  { region: "us-east1" },
-  async (request) => {
-    const code = request.data.code;
-    if (!code) throw new HttpsError("invalid-argument", "code が必要です");
+export const resetGachaUsage = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const code = data.code;
+    if (!code)
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "code が必要です"
+      );
 
     const snap = await db.collection("userGachaHistory").get();
 
@@ -421,19 +499,16 @@ export const resetGachaUsage = onCall(
     await batch.commit();
 
     return { message: "リセット完了", count };
-  }
-);
+  });
 
 /* ============================================================
-   自動：期限切れガチャ削除
+   自動：期限切れガチャ削除（v1 化）
 ============================================================ */
-export const cleanExpiredGacha = onSchedule(
-  {
-    schedule: "0 0 * * *",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
+export const cleanExpiredGacha = functions
+  .region("us-east1")
+  .pubsub.schedule("0 0 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     const now = nowJST();
     const snap = await db
       .collection("gachaCodes")
@@ -443,19 +518,16 @@ export const cleanExpiredGacha = onSchedule(
     const batch = db.batch();
     snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
-  }
-);
+  });
 
 /* ============================================================
-   自動：デイリーガチャ完全リセット
+   自動：デイリーガチャ完全リセット（v1 化）
 ============================================================ */
-export const resetDailyGacha = onSchedule(
-  {
-    schedule: "0 6 * * *",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
+export const resetDailyGacha = functions
+  .region("us-east1")
+  .pubsub.schedule("0 6 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     console.log("=== resetDailyGacha START ===");
 
     const now = Timestamp.now();
@@ -507,130 +579,15 @@ export const resetDailyGacha = onSchedule(
     });
 
     console.log("=== resetDailyGacha END ===");
-  }
-);
+  });
 /* ============================================================
-   ★ ニブイチ：予想保存（6時切り替え対応）
+   ★ 自動：ニブイチ前日集計（v1 化）
 ============================================================ */
-export const saveNibuichiPrediction = onCall(
-  { region: "us-east1" },
-  async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
-
-    const { prediction } = request.data;
-    if (!prediction) {
-      throw new HttpsError("invalid-argument", "prediction が必要です");
-    }
-
-    const date = getTodayJST6();
-
-    const ref = db
-      .collection("nibuichi_user_predictions")
-      .doc(`${uid}_${date}`);
-
-    const snap = await ref.get();
-    if (snap.exists) {
-      throw new HttpsError("already-exists", "本日はすでに予想済みです");
-    }
-
-    await ref.set({
-      uid,
-      date,
-      prediction,
-      fixed: false,
-      createdAt: Timestamp.now(),
-    });
-
-    return { message: "予想を保存しました" };
-  }
-);
-
-/* ============================================================
-   ★ ニブイチ：結果登録（管理者・6時切り替え対応）
-============================================================ */
-export const submitNibuichiResult = onCall(
-  { region: "us-east1" },
-  async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
-
-    const { result, rewardPoints } = request.data;
-    if (!result) {
-      throw new HttpsError("invalid-argument", "result が必要です");
-    }
-
-    const date = getTodayJST6();
-
-    const ref = db.collection("nibuichi_global").doc(date);
-
-    await ref.set(
-      {
-        date,
-        result,
-        rewardPoints: rewardPoints ?? 0,
-        processed: true,
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true }
-    );
-
-    return { message: "今日の結果を登録しました" };
-  }
-);
-
-/* ============================================================
-   ★ ニブイチ：個人戦績取得（6時切り替え対応）
-============================================================ */
-export const getNibuichiUserStats = onCall(
-  { region: "us-east1" },
-  async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "ログインが必要です");
-
-    const today = getTodayJST6();
-
-    const statsRef = db.collection("nibuichi_user_stats").doc(uid);
-    const statsSnap = await statsRef.get();
-    const stats = statsSnap.exists
-      ? statsSnap.data()
-      : { total: 0, hit: 0 };
-
-    const predRef = db
-      .collection("nibuichi_user_predictions")
-      .doc(`${uid}_${today}`);
-    const predSnap = await predRef.get();
-    const todayPrediction = predSnap.exists ? predSnap.data() : null;
-
-    const globalStatsRef = db.collection("nibuichi_global_stats").doc("stats");
-    const globalStatsSnap = await globalStatsRef.get();
-    const global = globalStatsSnap.exists
-      ? globalStatsSnap.data()
-      : { win: 0, draw: 0, lose: 0, bakuado: 0 };
-
-    const todayResultRef = db.collection("nibuichi_global").doc(today);
-    const todayResultSnap = await todayResultRef.get();
-    const todayResult = todayResultSnap.exists ? todayResultSnap.data() : null;
-
-    return {
-      stats,
-      todayPrediction,
-      global,
-      todayResult,
-    };
-  }
-);
-
-/* ============================================================
-   ★ 自動：ニブイチ前日集計（毎朝6:05 JST）
-============================================================ */
-export const processNibuichiDaily = onSchedule(
-  {
-    schedule: "5 6 * * *",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
+export const processNibuichiDaily = functions
+  .region("us-east1")
+  .pubsub.schedule("5 6 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     console.log("=== processNibuichiDaily START ===");
 
     const targetDate = getYesterdayJST6();
@@ -776,19 +733,16 @@ export const processNibuichiDaily = onSchedule(
       targetDate,
       hitCount,
     });
-  }
-);
+  });
 
 /* ============================================================
-   ★ 週間リセット
+   ★ 週間リセット（v1 化）
 ============================================================ */
-export const resetWeeklyNibuichiStats = onSchedule(
-  {
-    schedule: "0 6 * * 1",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
+export const resetWeeklyNibuichiStats = functions
+  .region("us-east1")
+  .pubsub.schedule("0 6 * * 1")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     console.log("=== resetWeeklyNibuichiStats START ===");
 
     const now = nowJST();
@@ -841,26 +795,25 @@ export const resetWeeklyNibuichiStats = onSchedule(
     });
 
     console.log("=== resetWeeklyNibuichiStats END ===");
-  }
-);
+  });
 
 /* ============================================================
-   ★ 手動：ニブイチ前日集計（6時切り替え対応）
+   ★ 手動：ニブイチ前日集計（v1 化）
 ============================================================ */
-export const manualResetNibuichiDaily = onCall(
-  { region: "us-east1" },
-  async (request) => {
-    const adminUid = request.auth?.uid;
-    if (!adminUid) throw new HttpsError("unauthenticated", "ログインが必要です");
-
-    console.log("=== manualResetNibuichiDaily START ===");
+export const manualResetNibuichiDaily = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const adminUid = context.auth?.uid;
+    if (!adminUid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "ログインが必要です"
+      );
+    }
 
     const targetDate = getYesterdayJST6();
-    console.log("targetDate:", targetDate);
-
     const dailyRef = db.collection("nibuichi_global").doc(targetDate);
     const dailySnap = await dailyRef.get();
-
     if (!dailySnap.exists) {
       return { message: "昨日の結果が未登録のため終了" };
     }
@@ -887,18 +840,10 @@ export const manualResetNibuichiDaily = onCall(
     const perUserReward =
       hitCount > 0 ? Math.floor(rewardPoints / hitCount) : 0;
 
-    console.log("hitCount:", hitCount);
-    console.log("perUserReward:", perUserReward);
-
     const statsBatch = db.batch();
     const userBatch = db.batch();
     const deleteBatch = db.batch();
     const archiveBatch = db.batch();
-
-    let globalWin = 0;
-    let globalDraw = 0;
-    let globalLose = 0;
-    let globalBakuado = 0;
 
     for (const docSnap of predSnap.docs) {
       const data = docSnap.data();
@@ -930,18 +875,6 @@ export const manualResetNibuichiDaily = onCall(
         userBatch.update(userRef, {
           points: FieldValue.increment(perUserReward),
         });
-
-        const phRef = db.collection("pointHistory").doc();
-        userBatch.set(phRef, {
-          id: phRef.id,
-          user: uid,
-          type: "nibuichi",
-          added: perUserReward,
-          prediction,
-          result,
-          date: targetDate,
-          createdAt: Timestamp.now(),
-        });
       }
 
       const historyRef = db
@@ -963,11 +896,6 @@ export const manualResetNibuichiDaily = onCall(
         { merge: true }
       );
 
-      if (result === "nibuni") globalWin++;
-      if (result === "nibuichi") globalDraw++;
-      if (result === "nibuzero") globalLose++;
-      if (result === "bakuado") globalBakuado++;
-
       const archiveRef = db
         .collection("nibuichi_user_predictions_archive")
         .doc(docSnap.id);
@@ -985,73 +913,17 @@ export const manualResetNibuichiDaily = onCall(
     await archiveBatch.commit();
     await deleteBatch.commit();
 
-    console.log("=== manualResetNibuichiDaily END ===");
-
-    await db.collection("systemLogs").add({
-      type: "nibuichiDailyReset",
-      executedAt: Timestamp.now(),
-      targetDate,
-      hitCount,
-    });
-
     return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
-  }
-);
+  });
 
 /* ============================================================
-   ★ ニブイチ：週次リセット
+   ★ ニブイチ：月次リセット（v1 化）
 ============================================================ */
-export const resetNibuichiWeekly = onSchedule(
-  {
-    schedule: "0 21 * * 2",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
-    console.log("=== resetNibuichiWeekly START ===");
-
-    const snap = await db.collection("nibuichi_user_stats").get();
-    const batch = db.batch();
-
-    for (const docSnap of snap.docs) {
-      batch.update(docSnap.ref, {
-        weeklyTotal: 0,
-        weeklyHit: 0,
-        updatedAt: Timestamp.now(),
-      });
-    }
-
-    await batch.commit();
-
-    await db
-      .collection("nibuichi_global_stats")
-      .doc("stats")
-      .set(
-        {
-          weeklyResetAt: Timestamp.now(),
-        },
-        { merge: true }
-      );
-
-    await db.collection("systemLogs").add({
-      type: "weeklyReset",
-      executedAt: Timestamp.now(),
-    });
-
-    console.log("=== resetNibuichiWeekly END ===");
-  }
-);
-
-/* ============================================================
-   ★ ニブイチ：月次リセット
-============================================================ */
-export const resetNibuichiMonthly = onSchedule(
-  {
-    schedule: "0 21 2 * *",
-    timeZone: "Asia/Tokyo",
-    region: "us-east1",
-  },
-  async () => {
+export const resetNibuichiMonthly = functions
+  .region("us-east1")
+  .pubsub.schedule("0 21 2 * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     console.log("=== resetNibuichiMonthly START ===");
 
     const snap = await db.collection("nibuichi_user_stats").get();
@@ -1083,7 +955,115 @@ export const resetNibuichiMonthly = onSchedule(
     });
 
     console.log("=== resetNibuichiMonthly END ===");
-  }
-);
+  });
+export const saveNibuichiPrediction = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
 
+    const prediction = data.prediction;
+    if (!prediction) {
+      throw new functions.https.HttpsError("invalid-argument", "prediction が必要です");
+    }
+
+    const date = getTodayJST6();
+
+    const ref = db
+      .collection("nibuichi_user_predictions")
+      .doc(`${uid}_${date}`);
+
+    const snap = await ref.get();
+    if (snap.exists) {
+      throw new functions.https.HttpsError("already-exists", "本日はすでに予想済みです");
+    }
+
+    await ref.set({
+      uid,
+      date,
+      prediction,
+      fixed: false,
+      createdAt: Timestamp.now(),
+    });
+
+    return { message: "予想を保存しました" };
+  });
+
+export const submitNibuichiResult = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
+
+    const result = data.result;
+    const rewardPoints = data.rewardPoints ?? 0;
+
+    if (!result) {
+      throw new functions.https.HttpsError("invalid-argument", "result が必要です");
+    }
+
+    const date = getTodayJST6();
+
+    const ref = db.collection("nibuichi_global").doc(date);
+
+    await ref.set(
+      {
+        date,
+        result,
+        rewardPoints,
+        processed: true,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+
+    return { message: "今日の結果を登録しました" };
+  });
+
+export const getNibuichiUserStats = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
+
+    const today = getTodayJST6();
+
+    const statsRef = db.collection("nibuichi_user_stats").doc(uid);
+    const statsSnap = await statsRef.get();
+    const stats = statsSnap.exists ? statsSnap.data() : { total: 0, hit: 0 };
+
+    const predRef = db
+      .collection("nibuichi_user_predictions")
+      .doc(`${uid}_${today}`);
+    const predSnap = await predRef.get();
+    const todayPrediction = predSnap.exists ? predSnap.data() : null;
+
+    const globalStatsRef = db.collection("nibuichi_global_stats").doc("stats");
+    const globalStatsSnap = await globalStatsRef.get();
+    const global = globalStatsSnap.exists
+      ? globalStatsSnap.data()
+      : { win: 0, draw: 0, lose: 0, bakuado: 0 };
+
+    const todayResultRef = db.collection("nibuichi_global").doc(today);
+    const todayResultSnap = await todayResultRef.get();
+    const todayResult = todayResultSnap.exists ? todayResultSnap.data() : null;
+
+    return {
+      stats,
+      todayPrediction,
+      global,
+      todayResult,
+    };
+  });
+
+
+/* ============================================================
+   ★ imageProcessor（そのまま re-export）
+============================================================ */
 export * from "./imageProcessor";
