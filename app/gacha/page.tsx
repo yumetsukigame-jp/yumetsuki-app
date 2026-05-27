@@ -12,6 +12,26 @@ import {
   setDoc,
   collection,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+
+/* --------------------------------------------------
+   JST 6時切り替え（Functions と完全一致）
+-------------------------------------------------- */
+function nowJST() {
+  return new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+}
+
+function getYesterdayJST6() {
+  const now = nowJST();
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 2);
+  } else {
+    now.setDate(now.getDate() - 1);
+  }
+  return now.toISOString().slice(0, 10);
+}
 
 export default function GachaInner() {
   const router = useRouter();
@@ -31,9 +51,25 @@ export default function GachaInner() {
 
   const [gif, setGif] = useState<"win" | "lose" | null>(null);
 
-  // ★ 追加：ガチャ実行ロック
   const [isPlaying, setIsPlaying] = useState(false);
 
+  /* --------------------------------------------------
+     Auth 状態
+  -------------------------------------------------- */
+  const [uid, setUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
+
+  /* --------------------------------------------------
+     URL から code を取得
+  -------------------------------------------------- */
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -42,20 +78,25 @@ export default function GachaInner() {
     }
   }, []);
 
-  const loadUserPoints = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-
-    const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists()) {
-      setUserPoints(snap.data().points ?? 0);
-    }
-  };
-
+  /* --------------------------------------------------
+     ユーザーポイント読み込み（uid が確定してから）
+  -------------------------------------------------- */
   useEffect(() => {
-    loadUserPoints();
-  }, []);
+    if (!authReady || !uid) return;
 
+    const loadUserPoints = async () => {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        setUserPoints(snap.data().points ?? 0);
+      }
+    };
+
+    loadUserPoints();
+  }, [authReady, uid]);
+
+  /* --------------------------------------------------
+     公開設定の表示
+  -------------------------------------------------- */
   const renderFlags = (flags: string[] = []) => {
     const map: Record<string, string> = {
       public: "🌐 公開",
@@ -68,25 +109,9 @@ export default function GachaInner() {
     return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
-  function getPrevDayJST6() {
-    const now = new Date();
-    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-
-    const cutoff = new Date(jst);
-    cutoff.setHours(6, 0, 0, 0);
-
-    if (jst < cutoff) {
-      jst.setDate(jst.getDate() - 1);
-    }
-
-    jst.setDate(jst.getDate() - 1);
-
-    const y = jst.getFullYear();
-    const m = String(jst.getMonth() + 1).padStart(2, "0");
-    const d = String(jst.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
+  /* --------------------------------------------------
+     ガチャコード確認（Auth 初期化後にのみ実行）
+  -------------------------------------------------- */
   const checkCode = async () => {
     setError("");
     setGacha(null);
@@ -96,6 +121,13 @@ export default function GachaInner() {
       setError("コードを入力してください");
       return;
     }
+
+    if (!authReady) {
+      setError("ログイン状態を確認中です。少し待ってください。");
+      return;
+    }
+
+    const userUid = uid;
 
     setLoading(true);
 
@@ -109,27 +141,32 @@ export default function GachaInner() {
 
     const data = snap.data();
     const flags: string[] = data.publicFlags ?? [];
-    const uid = auth.currentUser?.uid ?? null;
 
     const isPublic = flags.includes("public");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
     const isXAccountMatch = flags.includes("x_account_match");
 
-    if (!isPublic && !uid) {
+    /* --------------------------------------------------
+       公開設定
+    -------------------------------------------------- */
+    if (!isPublic && !userUid) {
       setError("このガチャは限定公開です（ログインが必要です）");
       setLoading(false);
       return;
     }
 
+    /* --------------------------------------------------
+       サブスク限定
+    -------------------------------------------------- */
     if (isSubscriberOnly) {
-      if (!uid) {
+      if (!userUid) {
         setError("このガチャはサブスク会員限定です");
         setLoading(false);
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", uid));
+      const userSnap = await getDoc(doc(db, "users", userUid));
       const user = userSnap.data();
 
       if (!user?.subscriber) {
@@ -139,26 +176,31 @@ export default function GachaInner() {
       }
     }
 
+    /* --------------------------------------------------
+       前日的中者限定（Functions と同じ日付ロジック）
+    -------------------------------------------------- */
     if (isWinnerOnly) {
-      if (!uid) {
+      if (!userUid) {
         setError("このガチャは前日のニブイチ的中者限定です");
         setLoading(false);
         return;
       }
 
-      const prevDay = getPrevDayJST6();
+      const prevDay = getYesterdayJST6();
 
       const predRef = doc(
         db,
         "nibuichi_daily",
         prevDay,
         "predictions",
-        uid
+        userUid
       );
       const predSnap = await getDoc(predRef);
 
       if (!predSnap.exists()) {
-        setError("このガチャは前日のニブイチ的中者限定です（予想なし）");
+        setError(
+          `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
+        );
         setLoading(false);
         return;
       }
@@ -173,14 +215,17 @@ export default function GachaInner() {
       }
     }
 
+    /* --------------------------------------------------
+       Xアカウント一致
+    -------------------------------------------------- */
     if (isXAccountMatch) {
-      if (!uid) {
+      if (!userUid) {
         setError("このガチャはXアカウント登録者のみ引けます");
         setLoading(false);
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", uid));
+      const userSnap = await getDoc(doc(db, "users", userUid));
       const user = userSnap.data();
       const userX = (user?.xAccount ?? "").toLowerCase();
 
@@ -211,7 +256,7 @@ export default function GachaInner() {
      ★ ガチャ実行（連打防止付き）
   -------------------------------------------------- */
   const play = async () => {
-    if (isPlaying) return; // ★ 連打防止
+    if (isPlaying) return;
     setIsPlaying(true);
 
     setError("");
@@ -239,18 +284,24 @@ export default function GachaInner() {
         setSpinning(false);
         setStop(true);
         setResult(res.data);
-        loadUserPoints();
+
+        // ポイント更新
+        if (uid) {
+          getDoc(doc(db, "users", uid)).then((snap) => {
+            if (snap.exists()) {
+              setUserPoints(snap.data().points ?? 0);
+            }
+          });
+        }
 
         setGif(null);
-
-        setIsPlaying(false); // ★ ロック解除
+        setIsPlaying(false);
       }, 10000);
-
     } catch (e: any) {
       setSpinning(false);
       setGif(null);
       setError(e.message);
-      setIsPlaying(false); // ★ エラー時も解除
+      setIsPlaying(false);
     }
   };
 
@@ -258,7 +309,6 @@ export default function GachaInner() {
      発送処理
   -------------------------------------------------- */
   const handleShipping = async () => {
-    const uid = auth.currentUser?.uid;
     if (!uid) {
       alert("ログインが必要です");
       return;
@@ -367,6 +417,9 @@ export default function GachaInner() {
     );
   };
 
+  /* --------------------------------------------------
+     JSX
+  -------------------------------------------------- */
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
       {/* ★ GIF オーバーレイ */}
@@ -459,7 +512,7 @@ export default function GachaInner() {
 
           <button
             onClick={play}
-            disabled={isPlaying} // ★ 連打防止
+            disabled={isPlaying}
             style={{
               width: "100%",
               padding: "12px 0",
