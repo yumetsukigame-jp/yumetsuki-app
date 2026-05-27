@@ -28,4 +28,4 @@ if (typeof window !== "undefined") {
 export const storage = getStorage(app, "gs://point-app-1f854.firebasestorage.app");
 
 // ★ Functions
-export const functions = getFunctions(app, "us-central1");
+export const functions = getFunctions(app, "us-east1");
