@@ -12,14 +12,23 @@ import {
   orderBy,
 } from "firebase/firestore";
 
-/* --------------------------------------------------
-   Timestamp → Date 安全変換
--------------------------------------------------- */
-function toDateSafe(ts: any) {
-  if (!ts) return null;
-  if (ts.toDate) return ts.toDate();
-  if (ts._seconds) return new Date(ts._seconds * 1000);
-  return null;
+/* ============================================================
+   JST 時刻ユーティリティ（Functions と完全一致）
+============================================================ */
+function nowJST(): Date {
+  return new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+}
+
+function getYesterdayJST6(): string {
+  const now = nowJST();
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 2);
+  } else {
+    now.setDate(now.getDate() - 1);
+  }
+  return now.toISOString().slice(0, 10);
 }
 
 /* --------------------------------------------------
@@ -46,28 +55,6 @@ async function getUserInfo(uid: string) {
   const finalName = `${display}${x}`;
   userCache[uid] = finalName;
   return finalName;
-}
-
-/* --------------------------------------------------
-   JST6時基準の「昨日」(Functions と完全一致)
--------------------------------------------------- */
-function getPrevDayJST6() {
-  const now = new Date();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-
-  const cutoff = new Date(jst);
-  cutoff.setHours(6, 0, 0, 0);
-
-  if (jst < cutoff) {
-    jst.setDate(jst.getDate() - 1);
-  }
-
-  jst.setDate(jst.getDate() - 1);
-
-  const y = jst.getFullYear();
-  const m = String(jst.getMonth() + 1).padStart(2, "0");
-  const d = String(jst.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 export default function GachaDetailPage() {
@@ -176,7 +163,7 @@ export default function GachaDetailPage() {
       }
 
       const uid = currentUid;
-      const prevDay = getPrevDayJST6();
+      const prevDay = getYesterdayJST6(); // ← Functions と完全一致
 
       const predRef = doc(
         db,
@@ -231,7 +218,7 @@ export default function GachaDetailPage() {
       const userX = (user?.xAccount ?? "").toLowerCase();
 
       if (!userX) {
-        setError("Xアカウントを登録していないため、このガチャは引けません");
+        setError("Xアカウウントを登録していないため、このガチャは引けません");
         setLoading(false);
         return;
       }
