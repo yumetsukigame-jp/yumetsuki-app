@@ -13,7 +13,7 @@ import {
 } from "firebase/firestore";
 
 /* ============================================================
-   JST 時刻ユーティリティ（Functions と完全一致）
+   JST 時刻ユーティリティ（Functions と同じロジック）
 ============================================================ */
 function nowJST(): Date {
   return new Date(
@@ -68,24 +68,27 @@ export default function GachaDetailPage() {
 
   const [allResults, setAllResults] = useState<any[]>([]);
   const [currentUid, setCurrentUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false); // ← これがポイント
 
   /* --------------------------------------------------
-     Auth 状態を正しく追跡
+     Auth 状態を監視して「初期化完了」を待つ
   -------------------------------------------------- */
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
       setCurrentUid(user?.uid ?? null);
+      setAuthReady(true); // 初期化が終わったら true
     });
     return () => unsub();
   }, []);
 
   /* --------------------------------------------------
-     uid が確定してからロード
+     authReady が true になってから load を呼ぶ
   -------------------------------------------------- */
   useEffect(() => {
+    if (!authReady) return; // ここで「ログインしてないことになっている」状態を防ぐ
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUid]);
+  }, [authReady, currentUid, code]);
 
   /* --------------------------------------------------
      ガチャ情報 + アクセス制御 + 結果取得
@@ -113,33 +116,15 @@ export default function GachaDetailPage() {
 
     // 公開でない → ログイン必須
     if (!isPublic && !currentUid) {
-      setError("このガチャは限定公開です");
+      setError("このガチャは限定公開です（ログインが必要です）");
       setLoading(false);
       return;
-    }
-
-    // limited → 過去に引いた人のみ
-    if (isLimited) {
-      if (!currentUid) {
-        setError("このガチャは限定公開です");
-        setLoading(false);
-        return;
-      }
-
-      const historyRef = doc(db, "userGachaHistory", `${currentUid}_${code}`);
-      const historySnap = await getDoc(historyRef);
-
-      if (!historySnap.exists()) {
-        setError("このガチャは限定公開です");
-        setLoading(false);
-        return;
-      }
     }
 
     // subscriber → サブスク限定
     if (isSubscriberOnly) {
       if (!currentUid) {
-        setError("このガチャはサブスク会員限定です");
+        setError("このガチャはサブスク会員限定です（ログインが必要です）");
         setLoading(false);
         return;
       }
@@ -148,7 +133,12 @@ export default function GachaDetailPage() {
       const user = userSnap.data();
 
       if (!user?.subscriber) {
-        setError("このガチャはサブスク会員限定です");
+        setError(
+          `このガチャはサブスク会員限定です。\n\n` +
+            `▼ デバッグ\n` +
+            `uid: ${currentUid}\n` +
+            `subscriber: ${String(user?.subscriber)}`
+        );
         setLoading(false);
         return;
       }
@@ -163,7 +153,7 @@ export default function GachaDetailPage() {
       }
 
       const uid = currentUid;
-      const prevDay = getYesterdayJST6(); // ← Functions と完全一致
+      const prevDay = getYesterdayJST6();
 
       const predRef = doc(
         db,
@@ -174,31 +164,30 @@ export default function GachaDetailPage() {
       );
       const predSnap = await getDoc(predRef);
 
-      // ★ デバッグ情報を表示
       if (!predSnap.exists()) {
         setError(
-          `予想なし扱いです。\n\n` +
-          `▼ デバッグ情報\n` +
-          `参照した日付: ${prevDay}\n` +
-          `参照した uid: ${uid}\n` +
-          `Firestore パス: nibuichi_daily/${prevDay}/predictions/${uid}\n` +
-          `predSnap.exists(): false`
+          `このガチャは前日のニブイチ的中者限定です（予想なし扱い）。\n\n` +
+            `▼ デバッグ\n` +
+            `参照した日付: ${prevDay}\n` +
+            `参照した uid: ${uid}\n` +
+            `Firestore パス: nibuichi_daily/${prevDay}/predictions/${uid}\n` +
+            `predSnap.exists(): false`
         );
         setLoading(false);
         return;
       }
 
-      const data = predSnap.data();
-      const prediction = data.prediction;
-      const result = data.result;
+      const pdata = predSnap.data();
+      const prediction = pdata.prediction;
+      const result = pdata.result;
 
       if (prediction !== result) {
         setError(
-          `不的中扱いです。\n\n` +
-          `▼ デバッグ情報\n` +
-          `参照した日付: ${prevDay}\n` +
-          `prediction: ${prediction}\n` +
-          `result: ${result}`
+          `このガチャは前日のニブイチ的中者限定です（不的中）。\n\n` +
+            `▼ デバッグ\n` +
+            `参照した日付: ${prevDay}\n` +
+            `prediction: ${prediction}\n` +
+            `result: ${result}`
         );
         setLoading(false);
         return;
@@ -208,7 +197,7 @@ export default function GachaDetailPage() {
     // Xアカウント一致
     if (isXAccountMatch) {
       if (!currentUid) {
-        setError("このガチャはXアカウント登録者のみ引けます");
+        setError("このガチャはXアカウント登録者のみ引けます（ログインが必要です）");
         setLoading(false);
         return;
       }
@@ -218,7 +207,7 @@ export default function GachaDetailPage() {
       const userX = (user?.xAccount ?? "").toLowerCase();
 
       if (!userX) {
-        setError("Xアカウウントを登録していないため、このガチャは引けません");
+        setError("Xアカウントを登録していないため、このガチャは引けません");
         setLoading(false);
         return;
       }
@@ -237,7 +226,7 @@ export default function GachaDetailPage() {
     }
 
     /* --------------------------------------------------
-       ★ サブコレクションから結果取得
+       サブコレクションから結果取得
     -------------------------------------------------- */
     setResultsLoading(true);
 
@@ -258,7 +247,6 @@ export default function GachaDetailPage() {
     setAllResults(list);
     setResultsLoading(false);
 
-    // アクセスOK
     setGacha(data);
     setLoading(false);
   };
@@ -267,13 +255,20 @@ export default function GachaDetailPage() {
     router.push(`/gacha?code=${code}`);
   };
 
+  if (!authReady) {
+    // Auth 初期化前はとにかく待つ
+    return <p style={{ padding: 24 }}>ログイン状態を確認中…</p>;
+  }
+
   if (loading) return <p style={{ padding: 24 }}>読み込み中…</p>;
+
   if (error)
     return (
       <pre style={{ padding: 24, color: "red", whiteSpace: "pre-wrap" }}>
         {error}
       </pre>
     );
+
   if (!gacha) return null;
 
   const remaining =
@@ -366,9 +361,15 @@ export default function GachaDetailPage() {
 }
 
 /* ------------------------------------------
-   ★ 簡易 FrameList
+   簡易 FrameList
 ------------------------------------------ */
-function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any) {
+function SimpleFrameList({
+  frames,
+  mode,
+  results,
+  currentUid,
+  getUserInfo,
+}: any) {
   return (
     <div style={{ marginTop: 16 }}>
       {frames.map((f: any) => {
@@ -407,7 +408,7 @@ function SimpleFrameList({ frames, mode, results, currentUid, getUserInfo }: any
 }
 
 /* ------------------------------------------
-   ★ 名前表示（@正規化済み）
+   名前表示
 ------------------------------------------ */
 function UserNameItem({ result, currentUid, getUserInfo }: any) {
   const [name, setName] = useState("読み込み中…");
