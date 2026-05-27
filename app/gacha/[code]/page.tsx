@@ -55,17 +55,17 @@ function getPrevDayJST6() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
 
-  // JST6時の境界
+  // 今日の6時
   const cutoff = new Date(jst);
   cutoff.setHours(6, 0, 0, 0);
 
-  // 6時前なら「昨日扱い」
+  // ★ 6時前なら「今日の日付」を1日戻す（昨日扱い）
   if (jst < cutoff) {
     jst.setDate(jst.getDate() - 1);
   }
 
   // ★ ここで「今日のニブイチ日付」が決まる
-  // ★ そこから「昨日」を引く（Functions と同じ）
+  // そこから「昨日」を引く
   jst.setDate(jst.getDate() - 1);
 
   const y = jst.getFullYear();
