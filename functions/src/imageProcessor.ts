@@ -6,11 +6,13 @@ import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
 
-// ★ initializeApp() は不要（index.ts で既に呼ばれている）
 const db = admin.firestore();
-const bucket = admin.storage().bucket();
 
-// ★ Storage と同じリージョン us-east1 を指定
+// ★ 必ず firebasestorage.app を指定（404 対策）
+const bucket = admin
+  .storage()
+  .bucket("point-app-1f854.firebasestorage.app");
+
 export const processImage = onObjectFinalized(
   { region: "us-east1" },
   async (event) => {
@@ -23,46 +25,57 @@ export const processImage = onObjectFinalized(
       const tempFilePath = path.join(os.tmpdir(), uuidv4());
       const file = bucket.file(filePath);
 
-      // ★ customMetadata を使わず metadata 直下を読む（スマホ対応）
-      const metadata = object.metadata || {};
+      // ★ metadata 直下を読む（スマホ含め全端末対応）
+      const metadata = (object.metadata || {}) as {
+        folder?: string;
+        prefix?: string;
+        originalName?: string;
+      };
+
       const folder = metadata.folder || "misc";
       const prefix = metadata.prefix || "";
       const originalName = metadata.originalName || "unknown";
 
-      const newFileName = `${prefix}${uuidv4()}.webp`;
+      // ★ originalName から拡張子を除去（png/jpg/jpeg/heic など全部対応）
+      const baseName = originalName.replace(/\.[^/.]+$/, "");
+
+      // ★ 人間が読めるファイル名を生成
+      const newFileName = `${prefix}${baseName}.webp`;
+
+      // 保存先パス
       const outputPath = `images/${folder}/${newFileName}`;
 
-      // ダウンロード
+      // rawUploads からダウンロード
       await file.download({ destination: tempFilePath });
 
-      // WebP 変換
+      // WebP 変換（1200px 内に収める）
       const processedBuffer = await sharp(tempFilePath)
         .resize({ width: 1200, height: 1200, fit: "inside" })
         .webp({ quality: 80 })
         .toBuffer();
 
-      // アップロード
+      // images/{folder}/ にアップロード
       const outputFile = bucket.file(outputPath);
       await outputFile.save(processedBuffer, {
         metadata: { contentType: "image/webp" },
       });
 
-      // ★ 公開 URL（Signed URL をやめる）
+      // 公開 URL
       const url = outputFile.publicUrl();
 
-      // Firestore 保存
+      // Firestore に保存
       await db.collection("imageMeta").add({
         folder,
         prefix,
-        fileName: newFileName,   // UI が読むフィールド名
+        fileName: newFileName,
         path: outputPath,
-        url: url,                // ← url[0] ではなく url
+        url,
         originalName,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         usedBy: [],
       });
 
-      // 元ファイル削除
+      // rawUploads の元ファイル削除
       await file.delete();
       fs.unlinkSync(tempFilePath);
 

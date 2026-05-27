@@ -26,8 +26,14 @@ export default function ImageUploadPage() {
   ------------------------------ */
   const [file, setFile] = useState<File | null>(null);
   const [folder, setFolder] = useState("gacha");
+
+  // prefix 関連
   const [prefix, setPrefix] = useState("none");
-  const [customName, setCustomName] = useState("");
+  const [customPrefix, setCustomPrefix] = useState("");
+
+  // ファイル名（任意入力）
+  const [customFileName, setCustomFileName] = useState("");
+
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -67,14 +73,13 @@ export default function ImageUploadPage() {
 
     // prefix の決定
     const finalPrefix =
-      prefix === "custom" ? customName : prefix === "none" ? "" : prefix;
+      prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
+    // ★ metadata 直下に入れる（Functions と完全一致）
     const metadata = {
-      customMetadata: {
-        folder,
-        prefix: finalPrefix,
-        originalName: file.name,
-      },
+      folder,
+      prefix: finalPrefix,
+      originalName: customFileName || file.name, // 任意ファイル名があれば優先
     };
 
     const task = uploadBytesResumable(storageRef, file, metadata);
@@ -156,8 +161,8 @@ export default function ImageUploadPage() {
           <input
             type="text"
             placeholder="カスタム prefix"
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
+            value={customPrefix}
+            onChange={(e) => setCustomPrefix(e.target.value)}
             style={{
               padding: 8,
               marginLeft: 10,
@@ -174,8 +179,8 @@ export default function ImageUploadPage() {
         <input
           type="text"
           placeholder="例：my_banner.png"
-          value={customName}
-          onChange={(e) => setCustomName(e.target.value)}
+          value={customFileName}
+          onChange={(e) => setCustomFileName(e.target.value)}
           style={{
             padding: 8,
             marginLeft: 10,
@@ -185,7 +190,7 @@ export default function ImageUploadPage() {
         />
       </div>
 
-      {/* ファイル選択（ボタン化） */}
+      {/* ファイル選択 */}
       <div style={{ marginBottom: 20 }}>
         <label
           style={{
