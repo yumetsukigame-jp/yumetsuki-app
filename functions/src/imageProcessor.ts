@@ -12,7 +12,7 @@ const bucket = admin.storage().bucket();
 
 // ★ Storage と同じリージョン us-east1 を指定
 export const processImage = onObjectFinalized(
-{ region: "us-central1" },
+{ region: "us-east1" },
   async (event) => {
     const object = event.data;
 
