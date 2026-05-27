@@ -18,14 +18,13 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const db = getFirestore(app);
 
-// ★ Auth はクライアント側でのみ永続化を設定する
+// ★ Auth（SSR対策）
 export const auth = getAuth(app);
-
 if (typeof window !== "undefined") {
   setPersistence(auth, browserLocalPersistence);
 }
 
-// ★ Storage
+// ★ Storage（これが無いとアップロードは絶対に動かない）
 export const storage = getStorage(app, "gs://point-app-1f854.firebasestorage.app");
 
 // ★ Functions
