@@ -328,25 +328,6 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🔴 管理者 */}
-      <div
-        style={{
-          marginTop: "40px",
-          paddingTop: "20px",
-          borderTop: "1px solid #ddd",
-        }}
-      >
-        {isAdmin ? (
-          <a href="/admin" style={{ color: "#dc2626", fontSize: "18px" }}>
-            管理者トップへ
-          </a>
-        ) : (
-          <a href="/admin/login" style={{ color: "#dc2626", fontSize: "18px" }}>
-            管理者ログイン
-          </a>
-        )}
-      </div>
-
       {/* 🟣 ゆめつき本舗リンク */}
       <div style={{ marginTop: 40, textAlign: "center" }}>
         <a
@@ -373,6 +354,25 @@ export default function Home() {
         <p style={{ marginTop: 8, fontWeight: "bold" }}>
           ゆめつき本舗HPはこちら
         </p>
+      </div>
+
+            {/* 🔴 管理者 */}
+      <div
+        style={{
+          marginTop: "40px",
+          paddingTop: "20px",
+          borderTop: "1px solid #ddd",
+        }}
+      >
+        {isAdmin ? (
+          <a href="/admin" style={{ color: "#dc2626", fontSize: "18px" }}>
+            管理者トップへ
+          </a>
+        ) : (
+          <a href="/admin/login" style={{ color: "#dc2626", fontSize: "18px" }}>
+            管理者ログイン
+          </a>
+        )}
       </div>
     </div>
   );
