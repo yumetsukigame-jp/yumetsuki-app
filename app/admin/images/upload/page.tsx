@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, storage } from "@/firebase";
+import { auth, storage, db } from "@/firebase";
 import { ref, uploadBytesResumable } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
 import { v4 as uuidv4 } from "uuid";
+import { collection, getDocs } from "firebase/firestore";
 
 export default function ImageUploadPage() {
   /* ------------------------------
@@ -75,13 +76,11 @@ export default function ImageUploadPage() {
     const finalPrefix =
       prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
-    // ★ customMetadata に入れる（Functions と完全一致）
+    // ★ metadata（新仕様：customMetadata ではなく直下）
     const metadata = {
-      customMetadata: {
-        folder,
-        prefix: finalPrefix,
-        originalName: customFileName || file.name,
-      },
+      folder,
+      prefix: finalPrefix,
+      originalName: customFileName || file.name,
     };
 
     const task = uploadBytesResumable(storageRef, file, metadata);
@@ -93,9 +92,27 @@ export default function ImageUploadPage() {
         setMessage("アップロードに失敗しました");
         setUploading(false);
       },
-      () => {
+      async () => {
         setMessage("アップロード完了！画像処理中…");
         setUploading(false);
+
+        /* ---------------------------------------------------------
+           ★ Firestore の imageMeta が作られるまで待つ（ポーリング）
+           --------------------------------------------------------- */
+        const targetName = customFileName || file.name;
+
+        const interval = setInterval(async () => {
+          const snap = await getDocs(collection(db, "imageMeta"));
+          const found = snap.docs.find((d) => {
+            const data = d.data();
+            return data.originalName === targetName;
+          });
+
+          if (found) {
+            clearInterval(interval);
+            setMessage("画像処理が完了しました！");
+          }
+        }, 1500);
       }
     );
   };

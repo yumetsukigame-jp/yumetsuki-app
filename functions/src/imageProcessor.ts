@@ -23,21 +23,14 @@ export const processImage = onObjectFinalized(
       const tempFilePath = path.join(os.tmpdir(), uuidv4());
       const file = bucket.file(filePath);
 
-      /* ============================================================
-         ★ Firebase Storage 新仕様：
-           customMetadata は object.metadata.customMetadata ではなく
-           object.metadata の直下にフラットで入る
-         ============================================================ */
+      // ★ 新仕様：metadata は直下に入る
       const metadata = object.metadata || {};
 
       const folder = metadata.folder || "misc";
       const prefix = metadata.prefix || "";
       const originalName = metadata.originalName || "unknown";
 
-      // 拡張子除去
       const baseName = originalName.replace(/\.[^/.]+$/, "");
-
-      // 保存ファイル名
       const newFileName = `${prefix}${baseName}.webp`;
 
       const outputPath = `images/${folder}/${newFileName}`;
@@ -57,7 +50,14 @@ export const processImage = onObjectFinalized(
         metadata: { contentType: "image/webp" },
       });
 
-      const url = outputFile.publicUrl();
+      /* ============================================================
+         ★ 署名なしでアクセス可能な URL を自分で組み立てる
+         ============================================================ */
+      const url =
+        "https://firebasestorage.googleapis.com/v0/b/" +
+        "point-app-1f854.firebasestorage.app/o/" +
+        encodeURIComponent(outputPath) +
+        "?alt=media";
 
       // Firestore 保存
       await db.collection("imageMeta").add({
