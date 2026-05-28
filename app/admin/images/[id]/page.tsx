@@ -60,44 +60,30 @@ export default function ImageDetailPage() {
       return;
     }
 
-    console.log("=== 差し替え開始 ===");
-    console.log("newFile:", newFile);
-    console.log("folder:", folder);
-    console.log("prefix:", prefix);
-
     setSaving(true);
 
     // ① 新しい画像を rawUploads にアップロード
     const uploadId = uuidv4();
     const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
-    console.log("upload path:", storageRef.fullPath);
-
-    // ★ metadata を customMetadata ではなく直下に入れる（iOS対策）
+    // ★ metadata は直下に入れる（新 Storage 仕様）
     const metadata = {
       folder: folder || "",
       prefix: prefix || "",
       originalName: newFile.name,
     };
 
-    console.log("metadata:", metadata);
-
     const task = uploadBytesResumable(storageRef, newFile, metadata);
 
     task.on(
       "state_changed",
-      (snap) => {
-        const progress = (snap.bytesTransferred / snap.totalBytes) * 100;
-        console.log(`upload progress: ${progress}%`);
-      },
+      () => {},
       (err) => {
         console.error("upload error:", err);
-        alert("アップロードに失敗しました（詳細はコンソールを確認）");
+        alert("アップロードに失敗しました");
         setSaving(false);
       },
       async () => {
-        console.log("upload complete");
-
         alert("新しい画像を処理中…（数秒〜数十秒）");
 
         // ③ 古い画像を削除
@@ -132,7 +118,7 @@ export default function ImageDetailPage() {
           src={data.url}
           style={{ width: "100%", borderRadius: 8, marginBottom: 10 }}
         />
-        <p><strong>filename:</strong> {data.filename}</p>
+        <p><strong>filename:</strong> {data.fileName}</p>
         <p><strong>prefix:</strong> {data.prefix || "(なし)"}</p>
         <p><strong>folder:</strong> {data.folder}</p>
         <p><strong>path:</strong> {data.path}</p>
@@ -178,11 +164,7 @@ export default function ImageDetailPage() {
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0] ?? null;
-            console.log("file selected:", file);
-            setNewFile(file);
-          }}
+          onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
         />
       </div>
 

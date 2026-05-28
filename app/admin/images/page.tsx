@@ -124,7 +124,7 @@ export default function ImageListPage() {
 
                 {/* メタ情報 */}
                 <p style={{ fontSize: 12, margin: 0 }}>
-                  <strong>filename:</strong> {img.filename}
+                  <strong>filename:</strong> {img.fileName}
                 </p>
                 <p style={{ fontSize: 12, margin: 0 }}>
                   <strong>prefix:</strong> {img.prefix || "(なし)"}

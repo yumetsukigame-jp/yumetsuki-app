@@ -8,10 +8,8 @@ import * as fs from "fs";
 
 const db = admin.firestore();
 
-// ★ 必ず firebasestorage.app を指定（404 対策）
-const bucket = admin
-  .storage()
-  .bucket("point-app-1f854.firebasestorage.app");
+// ★ firebasestorage.app を必ず指定
+const bucket = admin.storage().bucket("point-app-1f854.firebasestorage.app");
 
 export const processImage = onObjectFinalized(
   { region: "us-east1" },
@@ -25,21 +23,21 @@ export const processImage = onObjectFinalized(
       const tempFilePath = path.join(os.tmpdir(), uuidv4());
       const file = bucket.file(filePath);
 
-      // ★ customMetadata を正しく読む
-      const metadata = (object.metadata?.customMetadata || {}) as {
-        folder?: string;
-        prefix?: string;
-        originalName?: string;
-      };
+      /* ============================================================
+         ★ Firebase Storage 新仕様：
+           customMetadata は object.metadata.customMetadata ではなく
+           object.metadata の直下にフラットで入る
+         ============================================================ */
+      const metadata = object.metadata || {};
 
       const folder = metadata.folder || "misc";
       const prefix = metadata.prefix || "";
       const originalName = metadata.originalName || "unknown";
 
-      // ★ originalName から拡張子を除去
+      // 拡張子除去
       const baseName = originalName.replace(/\.[^/.]+$/, "");
 
-      // ★ 人間が読めるファイル名
+      // 保存ファイル名
       const newFileName = `${prefix}${baseName}.webp`;
 
       const outputPath = `images/${folder}/${newFileName}`;
