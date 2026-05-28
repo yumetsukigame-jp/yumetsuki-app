@@ -6,9 +6,10 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 export default function ProfilePage() {
-  const [name, setName] = useState("");           // 本名（外部非表示）
-  const [displayName, setDisplayName] = useState(""); // ニックネーム（外部表示）
-  const [xAccount, setXAccount] = useState("");   // Xアカウント
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [xAccount, setXAccount] = useState("");
+  const [xAccountConfirmed, setXAccountConfirmed] = useState(false); // ★ 追加
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function ProfilePage() {
         setName(data.name ?? "");
         setDisplayName(data.displayName ?? "");
         setXAccount(data.xAccount ?? "");
+        setXAccountConfirmed(data.xAccountConfirmed ?? false); // ★ 追加
       }
 
       setLoading(false);
@@ -39,7 +41,8 @@ export default function ProfilePage() {
     await updateDoc(doc(db, "users", user.uid), {
       name,
       displayName,
-      xAccount,
+      // ★ xAccountConfirmed が true の場合は xAccount を更新しない
+      ...(xAccountConfirmed ? {} : { xAccount }),
     });
 
     alert("保存しました！");
@@ -47,7 +50,7 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = "/"; // ログアウト後トップへ
+    window.location.href = "/";
   };
 
   if (loading) {
@@ -65,7 +68,6 @@ export default function ProfilePage() {
     >
       <h1 style={{ marginBottom: "20px" }}>プロフィール編集</h1>
 
-      {/* 説明文 */}
       <p
         style={{
           background: "#f0f4ff",
@@ -111,13 +113,34 @@ export default function ProfilePage() {
         />
 
         {/* Xアカウント */}
-        <input
-          type="text"
-          placeholder="Xアカウント（@から）"
-          value={xAccount}
-          onChange={(e) => setXAccount(e.target.value)}
-          style={inputStyle}
-        />
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            placeholder="Xアカウント（@から）"
+            value={xAccount}
+            onChange={(e) => setXAccount(e.target.value)}
+            disabled={xAccountConfirmed} // ★ 確定済みなら編集不可
+            style={{
+              ...inputStyle,
+              background: xAccountConfirmed ? "#e5e7eb" : "white",
+              cursor: xAccountConfirmed ? "not-allowed" : "text",
+            }}
+          />
+
+          {/* ★ 確定済みなら注意文を表示 */}
+          {xAccountConfirmed && (
+            <p
+              style={{
+                marginTop: "6px",
+                fontSize: "13px",
+                color: "#dc2626",
+                textAlign: "left",
+              }}
+            >
+              この X アカウントは管理者により確定されています。変更したい場合は管理者にご連絡ください。
+            </p>
+          )}
+        </div>
 
         <button
           onClick={save}
@@ -136,7 +159,7 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* ▼ ログアウトボタン */}
+      {/* ログアウト */}
       <button
         onClick={handleLogout}
         style={{
@@ -152,7 +175,6 @@ export default function ProfilePage() {
       >
         ログアウト
       </button>
-      {/* ▲ ログアウトボタン */}
     </div>
   );
 }
