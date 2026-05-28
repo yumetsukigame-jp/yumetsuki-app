@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 export default function ProfilePage() {
   const [name, setName] = useState("");           // 本名（外部非表示）
@@ -45,6 +45,11 @@ export default function ProfilePage() {
     alert("保存しました！");
   };
 
+  const handleLogout = async () => {
+    await signOut(auth);
+    window.location.href = "/"; // ログアウト後トップへ
+  };
+
   if (loading) {
     return <div style={{ padding: 20 }}>読み込み中…</div>;
   }
@@ -60,7 +65,7 @@ export default function ProfilePage() {
     >
       <h1 style={{ marginBottom: "20px" }}>プロフィール編集</h1>
 
-      {/* ★ 説明文を追加 ★ */}
+      {/* 説明文 */}
       <p
         style={{
           background: "#f0f4ff",
@@ -87,7 +92,7 @@ export default function ProfilePage() {
           gap: "16px",
         }}
       >
-        {/* 本名（外部非表示） */}
+        {/* 本名 */}
         <input
           type="text"
           placeholder="名前（外部非表示）"
@@ -96,7 +101,7 @@ export default function ProfilePage() {
           style={inputStyle}
         />
 
-        {/* ニックネーム（外部表示） */}
+        {/* ニックネーム */}
         <input
           type="text"
           placeholder="ニックネーム（外部表示）"
@@ -130,6 +135,24 @@ export default function ProfilePage() {
           保存する
         </button>
       </div>
+
+      {/* ▼ ログアウトボタン */}
+      <button
+        onClick={handleLogout}
+        style={{
+          marginTop: "30px",
+          padding: "12px 20px",
+          background: "#ef4444",
+          color: "white",
+          borderRadius: "8px",
+          border: "none",
+          fontSize: "16px",
+          cursor: "pointer",
+        }}
+      >
+        ログアウト
+      </button>
+      {/* ▲ ログアウトボタン */}
     </div>
   );
 }
