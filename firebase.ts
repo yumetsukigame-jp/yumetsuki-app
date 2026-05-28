@@ -20,6 +20,6 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 // ★ 正しい初期化（これだけで全部直る）
-export const storage = getStorage(app, "point-app-1f854.firebasestorage.app");
+export const storage = getStorage(app);
 
 export const functions = getFunctions(app, "us-east1");
