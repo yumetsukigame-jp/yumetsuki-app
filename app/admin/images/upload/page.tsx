@@ -8,9 +8,6 @@ import { v4 as uuidv4 } from "uuid";
 import { collection, getDocs } from "firebase/firestore";
 
 export default function ImageUploadPage() {
-  /* ------------------------------
-     Auth 状態
-  ------------------------------ */
   const [uid, setUid] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -22,17 +19,12 @@ export default function ImageUploadPage() {
     return () => unsub();
   }, []);
 
-  /* ------------------------------
-     UI 状態
-  ------------------------------ */
   const [file, setFile] = useState<File | null>(null);
   const [folder, setFolder] = useState("gacha");
 
-  // prefix 関連
   const [prefix, setPrefix] = useState("none");
   const [customPrefix, setCustomPrefix] = useState("");
 
-  // ファイル名（任意入力）
   const [customFileName, setCustomFileName] = useState("");
 
   const [uploading, setUploading] = useState(false);
@@ -57,9 +49,6 @@ export default function ImageUploadPage() {
     { value: "custom", label: "カスタム入力" },
   ];
 
-  /* ------------------------------
-     アップロード処理
-  ------------------------------ */
   const handleUpload = async () => {
     if (!file) return setMessage("ファイルを選択してください");
     if (!uid) return setMessage("ログインが必要です");
@@ -68,15 +57,14 @@ export default function ImageUploadPage() {
     setMessage("");
 
     const uploadId = uuidv4();
-
-    // Functions が監視しているパス
     const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
-    // prefix の決定
     const finalPrefix =
       prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
-    // ★ metadata（新仕様：customMetadata ではなく直下）
+    /* ---------------------------------------------------------
+       ★ 新 Storage 仕様：metadata は customMetadata ではなく直下
+       --------------------------------------------------------- */
     const metadata = {
       folder,
       prefix: finalPrefix,
@@ -96,9 +84,7 @@ export default function ImageUploadPage() {
         setMessage("アップロード完了！画像処理中…");
         setUploading(false);
 
-        /* ---------------------------------------------------------
-           ★ Firestore の imageMeta が作られるまで待つ（ポーリング）
-           --------------------------------------------------------- */
+        // Firestore の imageMeta が作られるまで待つ
         const targetName = customFileName || file.name;
 
         const interval = setInterval(async () => {
@@ -117,36 +103,18 @@ export default function ImageUploadPage() {
     );
   };
 
-  /* ------------------------------
-     Auth 初期化前
-  ------------------------------ */
   if (!authReady) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        読み込み中…
-      </div>
-    );
+    return <div style={{ padding: 24, textAlign: "center" }}>読み込み中…</div>;
   }
 
-  /* ------------------------------
-     未ログイン
-  ------------------------------ */
   if (!uid) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        ログインが必要です
-      </div>
-    );
+    return <div style={{ padding: 24, textAlign: "center" }}>ログインが必要です</div>;
   }
 
-  /* ------------------------------
-     JSX
-  ------------------------------ */
   return (
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 20 }}>📤 画像アップロード</h1>
 
-      {/* フォルダ選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>フォルダ：</label>
         <select
@@ -160,7 +128,6 @@ export default function ImageUploadPage() {
         </select>
       </div>
 
-      {/* prefix 選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>prefix：</label>
         <select
@@ -175,7 +142,6 @@ export default function ImageUploadPage() {
           ))}
         </select>
 
-        {/* カスタム prefix 入力 */}
         {prefix === "custom" && (
           <input
             type="text"
@@ -192,7 +158,6 @@ export default function ImageUploadPage() {
         )}
       </div>
 
-      {/* ファイル名（任意） */}
       <div style={{ marginBottom: 20 }}>
         <label>ファイル名（任意）：</label>
         <input
@@ -209,7 +174,6 @@ export default function ImageUploadPage() {
         />
       </div>
 
-      {/* ファイル選択 */}
       <div style={{ marginBottom: 20 }}>
         <label
           style={{
@@ -230,14 +194,9 @@ export default function ImageUploadPage() {
           />
         </label>
 
-        {file && (
-          <span style={{ marginLeft: 12 }}>
-            選択中：{file.name}
-          </span>
-        )}
+        {file && <span style={{ marginLeft: 12 }}>選択中：{file.name}</span>}
       </div>
 
-      {/* アップロードボタン */}
       <button
         onClick={handleUpload}
         disabled={uploading}
