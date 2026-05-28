@@ -28,6 +28,9 @@ export default function ImageUploadPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
 
+  /* ------------------------------
+     フォルダ選択肢
+  ------------------------------ */
   const folders = [
     "gacha",
     "banners",
@@ -36,17 +39,47 @@ export default function ImageUploadPage() {
     "character-select",
     "rewards",
     "memories",
+    "orica",
     "misc",
   ];
 
-  const prefixes = [
-    { value: "none", label: "なし" },
-    { value: "orica_", label: "orica_" },
-    { value: "week_", label: "week_" },
-    { value: "sp_", label: "sp_" },
-    { value: "custom", label: "カスタム入力" },
-  ];
+  /* ------------------------------
+     フォルダ別 prefix 設定
+  ------------------------------ */
+  const prefixOptionsByFolder: Record<string, { value: string; label: string }[]> = {
+    memories: [
+      { value: "none", label: "なし" },
+      { value: "week_", label: "week_（memories）" },
+      { value: "oripa_", label: "oripa_（memories）" },
+      { value: "sp_", label: "sp_（memories）" },
+      { value: "custom", label: "カスタム入力" },
+    ],
+    orica: [
+      { value: "none", label: "なし" },
+      { value: "orica_", label: "orica_（orica）" },
+      { value: "sp_", label: "sp_（orica）" },
+      { value: "honpo_", label: "honpo_（orica）" },
+      { value: "custom", label: "カスタム入力" },
+    ],
+    default: [
+      { value: "none", label: "なし" },
+      { value: "sp_", label: "sp_" },
+      { value: "custom", label: "カスタム入力" },
+    ],
+  };
 
+  // 現在のフォルダに応じた prefix リスト
+  const prefixes =
+    prefixOptionsByFolder[folder] ?? prefixOptionsByFolder.default;
+
+  // フォルダ変更時に prefix をリセット
+  useEffect(() => {
+    setPrefix(prefixes[0].value);
+  }, [folder]);
+
+  /* ------------------------------
+     アップロード処理
+  ------------------------------ */
   const handleUpload = async () => {
     if (!file) return setMessage("ファイルを選択してください");
     if (!uid) return setMessage("ログインが必要です");
@@ -56,11 +89,9 @@ export default function ImageUploadPage() {
 
     const uploadId = uuidv4();
 
-    // prefix の決定
     const finalPrefix =
       prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
-    // ★ metadata を URL に埋め込む（Storage の仕様変更に影響されない）
     const metaObj = {
       folder,
       prefix: finalPrefix,
@@ -69,13 +100,11 @@ export default function ImageUploadPage() {
 
     const encoded = encodeURIComponent(JSON.stringify(metaObj));
 
-    // Functions が監視しているパス
     const storageRef = ref(
       storage,
       `rawUploads/admin/${uploadId}?meta=${encoded}`
     );
 
-    // ★ 第3引数に metadata を渡さない（破棄されるため）
     const task = uploadBytesResumable(storageRef, file);
 
     task.on(
@@ -89,7 +118,6 @@ export default function ImageUploadPage() {
         setMessage("アップロード完了！画像処理中…");
         setUploading(false);
 
-        // Firestore の imageMeta が作られるまで待つ
         const targetName = metaObj.originalName;
 
         const interval = setInterval(async () => {
@@ -116,10 +144,14 @@ export default function ImageUploadPage() {
     return <div style={{ padding: 24, textAlign: "center" }}>ログインが必要です</div>;
   }
 
+  /* ------------------------------
+     JSX
+  ------------------------------ */
   return (
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 20 }}>📤 画像アップロード</h1>
 
+      {/* フォルダ選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>フォルダ：</label>
         <select
@@ -133,6 +165,7 @@ export default function ImageUploadPage() {
         </select>
       </div>
 
+      {/* prefix 選択 */}
       <div style={{ marginBottom: 20 }}>
         <label>prefix：</label>
         <select
@@ -163,6 +196,7 @@ export default function ImageUploadPage() {
         )}
       </div>
 
+      {/* ファイル名（任意） */}
       <div style={{ marginBottom: 20 }}>
         <label>ファイル名（任意）：</label>
         <input
@@ -179,6 +213,7 @@ export default function ImageUploadPage() {
         />
       </div>
 
+      {/* ファイル選択 */}
       <div style={{ marginBottom: 20 }}>
         <label
           style={{
@@ -202,6 +237,7 @@ export default function ImageUploadPage() {
         {file && <span style={{ marginLeft: 12 }}>選択中：{file.name}</span>}
       </div>
 
+      {/* アップロードボタン */}
       <button
         onClick={handleUpload}
         disabled={uploading}
