@@ -21,10 +21,8 @@ export default function ImageUploadPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [folder, setFolder] = useState("gacha");
-
   const [prefix, setPrefix] = useState("none");
   const [customPrefix, setCustomPrefix] = useState("");
-
   const [customFileName, setCustomFileName] = useState("");
 
   const [uploading, setUploading] = useState(false);
@@ -57,21 +55,28 @@ export default function ImageUploadPage() {
     setMessage("");
 
     const uploadId = uuidv4();
-    const storageRef = ref(storage, `rawUploads/admin/${uploadId}`);
 
+    // prefix の決定
     const finalPrefix =
       prefix === "custom" ? customPrefix : prefix === "none" ? "" : prefix;
 
-    /* ---------------------------------------------------------
-       ★ 新 Storage 仕様：metadata は customMetadata ではなく直下
-       --------------------------------------------------------- */
-    const metadata = {
+    // ★ metadata を URL に埋め込む（Storage の仕様変更に影響されない）
+    const metaObj = {
       folder,
       prefix: finalPrefix,
       originalName: customFileName || file.name,
     };
 
-    const task = uploadBytesResumable(storageRef, file, metadata);
+    const encoded = encodeURIComponent(JSON.stringify(metaObj));
+
+    // Functions が監視しているパス
+    const storageRef = ref(
+      storage,
+      `rawUploads/admin/${uploadId}?meta=${encoded}`
+    );
+
+    // ★ 第3引数に metadata を渡さない（破棄されるため）
+    const task = uploadBytesResumable(storageRef, file);
 
     task.on(
       "state_changed",
@@ -85,7 +90,7 @@ export default function ImageUploadPage() {
         setUploading(false);
 
         // Firestore の imageMeta が作られるまで待つ
-        const targetName = customFileName || file.name;
+        const targetName = metaObj.originalName;
 
         const interval = setInterval(async () => {
           const snap = await getDocs(collection(db, "imageMeta"));
