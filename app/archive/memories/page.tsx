@@ -1,25 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { db } from "@/firebase";
+import { collection, getDocs } from "firebase/firestore";
 import MemoryCard from "../../components/MemoryCard";
 import OricaModal from "../../components/OricaModal";
 
 export default function MemoriesPage() {
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<any[]>([]);
   const [modalImg, setModalImg] = useState<string | null>(null);
 
-  // 画像一覧取得
+  // Firestore から memories フォルダの画像を取得
   useEffect(() => {
-    fetch("/api/memories-images")
-      .then((res) => res.json())
-      .then((data) => setImages(data));
+    const load = async () => {
+      const snap = await getDocs(collection(db, "imageMeta"));
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((d) => d.folder === "memories"); // ← memories のみ
+
+      setImages(list);
+    };
+
+    load();
   }, []);
 
-  // グループ分類
+  // グループ分類（prefix で判定）
   const groups = {
-    week: images.filter((img) => img.includes("/week_")),
-    oripa: images.filter((img) => img.includes("/oripa_")),
-    sp: images.filter((img) => img.includes("/sp_")),
+    week: images.filter((img) => img.prefix?.startsWith("week_")),
+    oripa: images.filter((img) => img.prefix?.startsWith("oripa_")),
+    sp: images.filter((img) => img.prefix?.startsWith("sp_")),
   };
 
   return (
@@ -53,9 +62,9 @@ export default function MemoriesPage() {
           >
             {groupImages.map((img) => (
               <MemoryCard
-                key={img}
-                img={img}
-                onClick={() => setModalImg(img)}
+                key={img.url}
+                img={img.url} // ← Firestore の URL を使う
+                onClick={() => setModalImg(img.url)}
               />
             ))}
           </div>
@@ -82,7 +91,6 @@ export default function MemoriesPage() {
           書庫に戻る
         </a>
       </div>
-      {/* ▲ ここまで */}
     </div>
   );
 }

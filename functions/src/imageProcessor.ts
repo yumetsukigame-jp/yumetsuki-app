@@ -18,8 +18,8 @@ export const processImage = onObjectFinalized(
 
       if (!filePath || !filePath.startsWith("rawUploads/")) return;
 
-      // ★ URL の meta=xxx を取り出す
-      let metadata = {};
+      // ★ metadata を any として扱う（型エラー回避）
+      let metadata: any = {};
       const idx = filePath.indexOf("?meta=");
       if (idx !== -1) {
         const encoded = filePath.substring(idx + 6);
