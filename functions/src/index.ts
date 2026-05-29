@@ -736,68 +736,6 @@ export const processNibuichiDaily = functions
   });
 
 /* ============================================================
-   ★ 週間リセット（v1 化）
-============================================================ */
-export const resetWeeklyNibuichiStats = functions
-  .region("us-east1")
-  .pubsub.schedule("0 6 * * 1")
-  .timeZone("Asia/Tokyo")
-  .onRun(async () => {
-    console.log("=== resetWeeklyNibuichiStats START ===");
-
-    const now = nowJST();
-    const year = now.getFullYear();
-    const week = Math.ceil(
-      ((now.getTime() - new Date(year, 0, 1).getTime()) / 86400000 +
-        new Date(year, 0, 1).getDay() +
-        1) /
-        7
-    );
-    const archiveId = `${year}-Week${week}`;
-
-    const snap = await db.collection("nibuichi_user_stats").get();
-
-    const batch = db.batch();
-    const archiveBatch = db.batch();
-
-    for (const docSnap of snap.docs) {
-      const data = docSnap.data();
-      const uid = docSnap.id;
-
-      const archiveRef = db
-        .collection("nibuichi_weekly_archive")
-        .doc(archiveId)
-        .collection("users")
-        .doc(uid);
-
-      archiveBatch.set(archiveRef, {
-        uid,
-        weeklyTotal: data.weeklyTotal ?? 0,
-        weeklyHit: data.weeklyHit ?? 0,
-        total: data.total ?? 0,
-        hit: data.hit ?? 0,
-        archivedAt: Timestamp.now(),
-      });
-
-      batch.update(docSnap.ref, {
-        weeklyTotal: 0,
-        weeklyHit: 0,
-      });
-    }
-
-    await archiveBatch.commit();
-    await batch.commit();
-
-    await db.collection("systemLogs").add({
-      type: "weeklyNibuichiReset",
-      executedAt: Timestamp.now(),
-      archiveId,
-    });
-
-    console.log("=== resetWeeklyNibuichiStats END ===");
-  });
-
-/* ============================================================
    ★ 手動：ニブイチ前日集計（v1 化）
 ============================================================ */
 export const manualResetNibuichiDaily = functions
@@ -917,11 +855,73 @@ export const manualResetNibuichiDaily = functions
   });
 
 /* ============================================================
+   ★ 週間リセット（v1 化）
+============================================================ */
+export const resetWeeklyNibuichiStats = functions
+  .region("us-east1")
+  .pubsub.schedule("55 5 * * 2") // ← 火曜 5:55 に変更
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
+    console.log("=== resetWeeklyNibuichiStats START ===");
+
+    const now = nowJST();
+    const year = now.getFullYear();
+    const week = Math.ceil(
+      ((now.getTime() - new Date(year, 0, 1).getTime()) / 86400000 +
+        new Date(year, 0, 1).getDay() +
+        1) /
+        7
+    );
+    const archiveId = `${year}-Week${week}`;
+
+    const snap = await db.collection("nibuichi_user_stats").get();
+
+    const batch = db.batch();
+    const archiveBatch = db.batch();
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      const uid = docSnap.id;
+
+      const archiveRef = db
+        .collection("nibuichi_weekly_archive")
+        .doc(archiveId)
+        .collection("users")
+        .doc(uid);
+
+      archiveBatch.set(archiveRef, {
+        uid,
+        weeklyTotal: data.weeklyTotal ?? 0,
+        weeklyHit: data.weeklyHit ?? 0,
+        total: data.total ?? 0,
+        hit: data.hit ?? 0,
+        archivedAt: Timestamp.now(),
+      });
+
+      batch.update(docSnap.ref, {
+        weeklyTotal: 0,
+        weeklyHit: 0,
+      });
+    }
+
+    await archiveBatch.commit();
+    await batch.commit();
+
+    await db.collection("systemLogs").add({
+      type: "weeklyNibuichiReset",
+      executedAt: Timestamp.now(),
+      archiveId,
+    });
+
+    console.log("=== resetWeeklyNibuichiStats END ===");
+  });
+
+/* ============================================================
    ★ ニブイチ：月次リセット（v1 化）
 ============================================================ */
 export const resetNibuichiMonthly = functions
   .region("us-east1")
-  .pubsub.schedule("0 21 2 * *")
+  .pubsub.schedule("55 5 2 * *") // ← 2日 5:55 に変更
   .timeZone("Asia/Tokyo")
   .onRun(async () => {
     console.log("=== resetNibuichiMonthly START ===");
@@ -956,6 +956,7 @@ export const resetNibuichiMonthly = functions
 
     console.log("=== resetNibuichiMonthly END ===");
   });
+
 export const saveNibuichiPrediction = functions
   .region("us-east1")
   .https.onCall(async (data, context) => {

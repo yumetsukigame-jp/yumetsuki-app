@@ -93,7 +93,7 @@ export default function NibuichiRankingPage() {
     total = assignRanks(total, "score");
 
     /* -----------------------------
-       週間ランキング（weeklyScore = weeklyHit × weeklyRate）
+       週間ランキング（参加数優先 → スコア順）
     ----------------------------- */
     let weekly = users
       .filter((u) => (u.weeklyTotal ?? 0) > 0)
@@ -111,7 +111,14 @@ export default function NibuichiRankingPage() {
           weeklyScore: score,
         };
       })
-      .sort((a, b) => b.weeklyScore - a.weeklyScore);
+      .sort((a, b) => {
+        // ★ ① 参加数優先
+        if (b.weeklyTotal !== a.weeklyTotal) {
+          return b.weeklyTotal - a.weeklyTotal;
+        }
+        // ★ ② スコア順
+        return b.weeklyScore - a.weeklyScore;
+      });
 
     weekly = assignRanks(weekly, "weeklyScore");
 
@@ -141,7 +148,6 @@ export default function NibuichiRankingPage() {
           {(showMoreTotal ? totalRank : totalRank.slice(0, 20)).map((u) => {
             const info = userMap[u.uid] ?? {};
 
-            // ★ 色付け（同着対応）
             let colorClass = "";
             if (u.rank === 1) colorClass = "bg-yellow-100 border-yellow-400";
             else if (u.rank === 2) colorClass = "bg-gray-100 border-gray-400";
