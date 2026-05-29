@@ -38,11 +38,8 @@ export default function Home() {
   /* --------------------------------------------------
      Firestore データ
   -------------------------------------------------- */
-  const [points, setPoints] = useState<number | null>(null);
-
-  // ★ nickname 初期値を undefined に変更（null だと “名無し” と判定されるため）
+  const [points, setPoints] = useState<number | undefined>(undefined);
   const [nickname, setNickname] = useState<string | undefined>(undefined);
-
   const [xAccount, setXAccount] = useState<string | undefined>(undefined);
   const [subscriber, setSubscriber] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -92,12 +89,10 @@ export default function Home() {
       const userSnap = await getDoc(doc(db, "users", uid));
       if (userSnap.exists()) {
         const u = userSnap.data();
-        setPoints(u.points ?? 0);
 
-        // ★ undefined → 読み込み中、null → 本当に未設定
+        setPoints(u.points ?? 0);
         setNickname(u.displayName ?? "名無し");
         setXAccount(u.xAccount ?? undefined);
-
         setSubscriber(u.subscriber === true);
       } else {
         setPoints(0);
@@ -146,6 +141,17 @@ export default function Home() {
      Auth 初期化前は絶対に UI を動かさない
   -------------------------------------------------- */
   if (!authReady) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
+  }
+
+  /* --------------------------------------------------
+     Firestore 読み込み前も UI を描画しない（最重要）
+  -------------------------------------------------- */
+  if (loading) {
     return (
       <div style={{ padding: 20, textAlign: "center" }}>
         読み込み中…
@@ -245,17 +251,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* ★ nickname === undefined のときは “読み込み中…” を表示 */}
+      {/* nickname と points は loading 完了後に必ず正しい値 */}
       <h2 style={{ marginBottom: "10px" }}>
-        {nickname === undefined ? "読み込み中…" : nickname}
+        {nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
       </h2>
 
       <h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
         現在のポイント：
-        <span style={{ fontWeight: "bold" }}>
-          {points === null ? "読み込み中…" : `${points} pt`}
-        </span>
+        <span style={{ fontWeight: "bold" }}>{points} pt</span>
       </h1>
 
       {/* 🟡 今日のニブイチ */}
