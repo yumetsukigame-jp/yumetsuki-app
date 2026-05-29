@@ -20,16 +20,16 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
-  const [loading, setLoading] = useState(true); // ← ★ 追加：読み込み中フラグ
+  const [loading, setLoading] = useState(true);
 
-  // ★ ページネーション
+  // ページネーション
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
 
   const fetchUsers = async () => {
-    setLoading(true); // ← ★ 読み込み開始
+    setLoading(true);
 
-    // ★ createdAt が無いユーザーを自動修正
+    // createdAt が無いユーザーを自動修正
     const allSnap = await getDocs(collection(db, "users"));
     for (const d of allSnap.docs) {
       const data = d.data();
@@ -72,28 +72,23 @@ export default function UsersPage() {
 
     if (sortOrder === "pointsDesc") {
       sorted.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-
     } else if (sortOrder === "pointsAsc") {
       sorted.sort((a, b) => (a.points ?? 0) - (b.points ?? 0));
-
     } else if (sortOrder === "lastLoginDesc") {
       sorted.sort(
         (a, b) =>
           (b.lastLogin?.seconds ?? 0) - (a.lastLogin?.seconds ?? 0)
       );
-
     } else if (sortOrder === "lastLoginAsc") {
       sorted.sort(
         (a, b) =>
           (a.lastLogin?.seconds ?? 0) - (b.lastLogin?.seconds ?? 0)
       );
-
     } else if (sortOrder === "createdAsc") {
       sorted.sort(
         (a, b) =>
           (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)
       );
-
     } else {
       sorted.sort(
         (a, b) =>
@@ -105,14 +100,14 @@ export default function UsersPage() {
     setFiltered(sorted);
     setCurrentPage(1);
 
-    setLoading(false); // ← ★ 読み込み完了
+    setLoading(false);
   };
 
   useEffect(() => {
     fetchUsers();
   }, [sortOrder]);
 
-  // 検索（メール + 名前 + Xアカウント）
+  // 検索（メール + 名前 + ニックネーム + Xアカウント）
   const handleSearch = (text) => {
     setSearch(text);
 
@@ -127,11 +122,13 @@ export default function UsersPage() {
     const result = users.filter((u) => {
       const email = (u.email || "").toLowerCase();
       const name = (u.name || "").toLowerCase();
+      const display = (u.displayName || "").toLowerCase();
       const x = (u.xAccount || "").toLowerCase();
 
       return (
         email.includes(lower) ||
         name.includes(lower) ||
+        display.includes(lower) ||
         x.includes(lower)
       );
     });
@@ -195,7 +192,7 @@ export default function UsersPage() {
     fetchUsers();
   };
 
-  // ★ ページネーション計算
+  // ページネーション
   const totalPages = Math.ceil(filtered.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const currentUsers = filtered.slice(startIndex, startIndex + pageSize);
@@ -209,7 +206,7 @@ export default function UsersPage() {
         type="text"
         value={search}
         onChange={(e) => handleSearch(e.target.value)}
-        placeholder="メール・名前・Xアカウントで検索"
+        placeholder="メール・名前・ニックネーム・Xアカウントで検索"
         style={{
           width: "100%",
           padding: "10px",
@@ -241,15 +238,9 @@ export default function UsersPage() {
         </select>
       </div>
 
-      {/* ★ 読み込み中は「ユーザーがいません」を出さない */}
-      {!loading && filtered.length === 0 && (
-        <p>ユーザーがいません。</p>
-      )}
-
-      {/* ★ 読み込み中 */}
+      {!loading && filtered.length === 0 && <p>ユーザーがいません。</p>}
       {loading && <p>読み込み中…</p>}
 
-      {/* ★ 25名ずつ表示 */}
       {!loading &&
         currentUsers.map((user) => (
           <div
@@ -263,8 +254,11 @@ export default function UsersPage() {
           >
             <p><strong>メール：</strong> {user.email || "不明"}</p>
             <p><strong>名前：</strong> {user.name || "未登録"}</p>
-            <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
 
+            {/* ★ ニックネーム追加 */}
+            <p><strong>ニックネーム：</strong> {user.displayName || "未登録"}</p>
+
+            <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
             <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
 
             <button
@@ -383,7 +377,7 @@ export default function UsersPage() {
           </div>
         ))}
 
-      {/* ★ ページネーション */}
+      {/* ページネーション */}
       {!loading && totalPages > 1 && (
         <div style={{ marginTop: "20px", textAlign: "center" }}>
           <button

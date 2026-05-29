@@ -50,10 +50,8 @@ export default function GachaManagePage() {
   const deleteCode = async (id: string) => {
     if (!confirm("本当に削除しますか？")) return;
 
-    // ① ガチャ本体削除
     await deleteDoc(doc(db, "gachaCodes", id));
 
-    // ② サブコレクションの結果削除
     const resultsRef = collection(db, "gachaResults", id, "results");
     const snap = await getDocs(resultsRef);
 
@@ -66,12 +64,11 @@ export default function GachaManagePage() {
   };
 
   /* --------------------------------------------------
-     ★ アーカイブへ移動（ガチャ本体 + 結果も移動）
+     ★ アーカイブへ移動
   -------------------------------------------------- */
   const archiveCode = async (id: string) => {
     if (!confirm("このガチャをアーカイブへ移動しますか？")) return;
 
-    // ① ガチャ本体取得
     const ref = doc(db, "gachaCodes", id);
     const snap = await getDoc(ref);
 
@@ -82,18 +79,13 @@ export default function GachaManagePage() {
 
     const data = snap.data();
 
-    // ② アーカイブへコピー
     await setDoc(doc(db, "gachaCodesArchive", id), {
       ...data,
       archivedAt: new Date(),
     });
 
-    // ③ 元データ削除
     await deleteDoc(ref);
 
-    /* --------------------------------------------------
-       ★ ④ サブコレクションの結果もアーカイブへ移動
-    -------------------------------------------------- */
     const srcRef = collection(db, "gachaResults", id, "results");
     const srcSnap = await getDocs(srcRef);
 
@@ -126,7 +118,7 @@ export default function GachaManagePage() {
   };
 
   /* -----------------------------------------
-     ★ 再発行＝内容変更（updateDoc）
+     ★ 再発行＝内容変更
   ----------------------------------------- */
   const updateGacha = async (codeData: any) => {
     if (!confirm("このガチャの内容を更新しますか？")) return;
@@ -184,9 +176,6 @@ export default function GachaManagePage() {
     return { label };
   };
 
-  /* --------------------------------------------------
-     ★ ガチャ結果取得（サブコレクション版）
-  -------------------------------------------------- */
   const getResultsByCode = async (code: string) => {
     const snap = await getDocs(
       collection(db, "gachaResults", code, "results")
@@ -280,6 +269,32 @@ function GachaItem({
       setResults(r);
       setLoading(false);
     }
+  };
+
+  /* -----------------------------------------
+     ★ Xアカウント対象編集
+  ----------------------------------------- */
+  const [editXList, setEditXList] = useState(false);
+  const [xListText, setXListText] = useState("");
+
+  const openXEditor = () => {
+    const list = codeData.xAccountList ?? [];
+    setXListText(list.join("\n"));
+    setEditXList(true);
+  };
+
+  const saveXList = async () => {
+    const newList = xListText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    await updateDoc(doc(db, "gachaCodes", codeData.id), {
+      xAccountList: newList,
+    });
+
+    alert("Xアカウント対象リストを更新しました");
+    setEditXList(false);
   };
 
   const remaining =
@@ -396,6 +411,80 @@ function GachaItem({
             >
               {(codeData.xAccountList ?? []).join("\n")}
             </pre>
+          )}
+
+          {/* ▼ 編集ボタン */}
+          <button
+            onClick={openXEditor}
+            style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              background: "#4f46e5",
+              color: "white",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            Xアカウント対象を編集
+          </button>
+
+          {/* ▼ 編集UI */}
+          {editXList && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 12,
+                background: "#fff",
+                borderRadius: 6,
+                border: "1px solid #ddd",
+              }}
+            >
+              <textarea
+                value={xListText}
+                onChange={(e) => setXListText(e.target.value)}
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  padding: 10,
+                  borderRadius: 6,
+                  border: "1px solid #ccc",
+                  fontSize: 14,
+                  whiteSpace: "pre",
+                }}
+              />
+
+              <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                <button
+                  onClick={saveXList}
+                  style={{
+                    padding: "6px 12px",
+                    background: "#2563eb",
+                    color: "white",
+                    borderRadius: 6,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  保存
+                </button>
+
+                <button
+                  onClick={() => setEditXList(false)}
+                  style={{
+                    padding: "6px 12px",
+                    background: "#6b7280",
+                    color: "white",
+                    borderRadius: 6,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

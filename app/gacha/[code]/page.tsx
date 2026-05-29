@@ -14,22 +14,43 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 
 /* --------------------------------------------------
-   JST 6時切り替え（Functions と完全一致）
+   JST 6時切り替え（ズレない完全版）
 -------------------------------------------------- */
 function nowJST() {
+  const formatter = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+
   return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+    `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get(
+      "minute"
+    )}:${get("second")}:00+09:00`
   );
 }
 
 function getYesterdayJST6() {
   const now = nowJST();
-  if (now.getHours() < 6) {
-    now.setDate(now.getDate() - 2);
+  const hour = now.getHours();
+
+  const target = new Date(now);
+
+  if (hour < 6) {
+    target.setDate(target.getDate() - 2);
   } else {
-    now.setDate(now.getDate() - 1);
+    target.setDate(target.getDate() - 1);
   }
-  return now.toISOString().slice(0, 10);
+
+  return target.toISOString().slice(0, 10);
 }
 
 /* --------------------------------------------------
@@ -147,7 +168,7 @@ export default function GachaDetailPage() {
     }
 
     /* --------------------------------------------------
-       前日的中者限定
+       前日的中者限定（JST6時切り替え）
     -------------------------------------------------- */
     if (isWinnerOnly) {
       if (!uid) {
