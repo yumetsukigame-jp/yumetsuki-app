@@ -14,7 +14,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 
 /* --------------------------------------------------
-   JST 6時切り替え（ズレない完全版）
+   JST 6時切り替え（完全修正版）
 -------------------------------------------------- */
 function nowJST() {
   const formatter = new Intl.DateTimeFormat("ja-JP", {
@@ -31,10 +31,11 @@ function nowJST() {
   const parts = formatter.formatToParts(new Date());
   const get = (type: string) => parts.find((p) => p.type === type)?.value;
 
+  // ★ 秒の後ろに ":00" を付けない（これがバグの原因だった）
   return new Date(
     `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get(
       "minute"
-    )}:${get("second")}:00+09:00`
+    )}:${get("second")}+09:00`
   );
 }
 
@@ -48,6 +49,11 @@ function getYesterdayJST6() {
     target.setDate(target.getDate() - 2);
   } else {
     target.setDate(target.getDate() - 1);
+  }
+
+  if (isNaN(target.getTime())) {
+    console.error("Invalid target date in getYesterdayJST6:", target);
+    return "";
   }
 
   return target.toISOString().slice(0, 10);
