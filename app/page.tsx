@@ -39,8 +39,11 @@ export default function Home() {
      Firestore データ
   -------------------------------------------------- */
   const [points, setPoints] = useState<number | null>(null);
-  const [nickname, setNickname] = useState<string | null>(null);
-  const [xAccount, setXAccount] = useState<string | null>(null);
+
+  // ★ nickname 初期値を undefined に変更（null だと “名無し” と判定されるため）
+  const [nickname, setNickname] = useState<string | undefined>(undefined);
+
+  const [xAccount, setXAccount] = useState<string | undefined>(undefined);
   const [subscriber, setSubscriber] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -90,13 +93,16 @@ export default function Home() {
       if (userSnap.exists()) {
         const u = userSnap.data();
         setPoints(u.points ?? 0);
+
+        // ★ undefined → 読み込み中、null → 本当に未設定
         setNickname(u.displayName ?? "名無し");
-        setXAccount(u.xAccount ?? null);
+        setXAccount(u.xAccount ?? undefined);
+
         setSubscriber(u.subscriber === true);
       } else {
         setPoints(0);
         setNickname("名無し");
-        setXAccount(null);
+        setXAccount(undefined);
         setSubscriber(false);
       }
 
@@ -239,8 +245,9 @@ export default function Home() {
         </div>
       )}
 
+      {/* ★ nickname === undefined のときは “読み込み中…” を表示 */}
       <h2 style={{ marginBottom: "10px" }}>
-        {nickname}
+        {nickname === undefined ? "読み込み中…" : nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
       </h2>
 
@@ -356,7 +363,7 @@ export default function Home() {
         </p>
       </div>
 
-            {/* 🔴 管理者 */}
+      {/* 🔴 管理者 */}
       <div
         style={{
           marginTop: "40px",
