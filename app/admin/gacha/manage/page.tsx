@@ -240,263 +240,363 @@ export default function GachaManagePage() {
     </div>
   );
 }
-        <div>
-          <button
-            onClick={() => archiveCode(codeData.id)}
-            style={btnGraySmall}
-          >
-            アーカイブ
-          </button>
+/* ------------------------------
+   ガチャ1件分の表示
+------------------------------ */
+function GachaItem({
+  codeData,
+  getUserInfo,
+  getResultsByCode,
+  updateTitle,
+  updateExpire,
+  updatePublicFlags,
+  updateGacha,
+  deleteCode,
+  archiveCode,
+}) {
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-          <button
-            onClick={() => deleteCode(codeData.id)}
-            style={btnRedSmall}
-          >
-            削除
-          </button>
-        </div>
-      </div>
+  const [showX, setShowX] = useState(false);
 
-      <p>コード：{codeData.code}</p>
-      <p>方式：{codeData.mode === "count" ? "枠数方式" : "確率方式"}</p>
-      <p>
-        1回 {codeData.point.cost} pt（上限 {codeData.point.maxPerUser} 回）
-      </p>
+  const toggle = async () => {
+    setOpen(!open);
+    if (!open) {
+      setLoading(true);
+      const r = await getResultsByCode(codeData.code);
+      setResults(r);
+      setLoading(false);
+    }
+  };
 
-      <p>残数：{remaining}</p>
+  /* -----------------------------------------
+     ★ Xアカウント対象編集
+  ----------------------------------------- */
+  const [editXList, setEditXList] = useState(false);
+  const [xListText, setXListText] = useState("");
 
-      <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
+  const openXEditor = () => {
+    const list = codeData.xAccountList ?? [];
+    setXListText(list.join("\n"));
+    setEditXList(true);
+  };
 
-      {/* ★ Xアカウント折りたたみ */}
-      {codeData.publicFlags?.includes("x_account_match") && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: 8,
-            background: "#f9fafb",
-            border: "1px solid #eee",
-            borderRadius: 6,
-          }}
-        >
-          <strong>対象Xアカウント</strong>
+  const saveXList = async () => {
+    const newList = xListText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
 
-          <button
-            onClick={() => setShowX((prev) => !prev)}
-            style={{
-              marginTop: 6,
-              padding: "4px 8px",
-              background: "#2563eb",
-              color: "white",
-              borderRadius: 4,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            {showX ? "▲ 閉じる" : "▼ 表示する"}
-          </button>
+    await updateDoc(doc(db, "gachaCodes", codeData.id), {
+      xAccountList: newList,
+    });
 
-          {showX && (
-            <pre
-              style={{
-                whiteSpace: "pre-wrap",
-                marginTop: 6,
-                fontSize: 13,
-                background: "#fff",
-                padding: 8,
-                borderRadius: 4,
-                border: "1px solid #ddd",
-              }}
-            >
-              {(codeData.xAccountList ?? []).join("\n")}
-            </pre>
-          )}
+    alert("Xアカウント対象リストを更新しました");
+    setEditXList(false);
+  };
 
-          {/* ▼ 編集ボタン */}
-          <button
-            onClick={openXEditor}
-            style={{
-              marginTop: 8,
-              padding: "6px 10px",
-              background: "#4f46e5",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            Xアカウント対象を編集
-          </button>
+  const remaining =
+    codeData.mode === "count"
+      ? codeData.totalCount - results.length
+      : "∞";
 
-          {/* ▼ 編集UI */}
-          {editXList && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: 12,
-                background: "#fff",
-                borderRadius: 6,
-                border: "1px solid #ddd",
-              }}
-            >
-              <textarea
-                value={xListText}
-                onChange={(e) => setXListText(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: "120px",
-                  padding: 10,
-                  borderRadius: 6,
-                  border: "1px solid #ccc",
-                  fontSize: 14,
-                  whiteSpace: "pre",
-                }}
-              />
+  const resetUsage = async () => {
+    if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
 
-              <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-                <button
-                  onClick={saveXList}
-                  style={{
-                    padding: "6px 12px",
-                    background: "#2563eb",
-                    color: "white",
-                    borderRadius: 6,
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  保存
-                </button>
+    const fn = httpsCallable(functions, "resetGachaUsage");
+    const res: any = await fn({ code: codeData.code });
 
-                <button
-                  onClick={() => setEditXList(false)}
-                  style={{
-                    padding: "6px 12px",
-                    background: "#6b7280",
-                    color: "white",
-                    borderRadius: 6,
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+    alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
+  };
 
-      {/* 公開設定の編集 */}
-      <div style={{ marginBottom: 12 }}>
-        {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
-          <label key={flag} style={{ marginRight: 12 }}>
-            <input
-              type="checkbox"
-              checked={codeData.publicFlags?.includes(flag)}
-              onChange={(e) => {
-                const flags = new Set(codeData.publicFlags ?? []);
-                e.target.checked ? flags.add(flag) : flags.delete(flag);
-                updatePublicFlags(codeData.id, Array.from(flags));
-              }}
-            />
-            {renderFlags([flag])}
-          </label>
-        ))}
-      </div>
+  const renderFlags = (flags: string[] = []) => {
+    const map: Record<string, string> = {
+      public: "🌐 公開",
+      limited: "🔒 限定",
+      subscriber: "⭐ サブスク限定",
+      nibuichi_winner: "🎯 的中者限定",
+      x_account_match: "📝 Xアカウント一致",
+    };
+    if (flags.length === 0) return "（未設定）";
+    return flags.map((f) => map[f] ?? f).join(" / ");
+  };
 
-      <button
-        onClick={resetUsage}
+  return (
+    <div> {/* ← ★外側の div（構文エラー修正） */}
+      <div
         style={{
-          padding: "6px 12px",
-          background: "#dc2626",
-          color: "white",
-          borderRadius: 6,
-          border: "none",
-          marginBottom: 12,
-          cursor: "pointer",
+          border: "1px solid #ccc",
+          padding: 16,
+          borderRadius: 8,
+          marginBottom: 24,
         }}
       >
-        使用回数をリセット
-      </button>
-
-      {open && (
-        <div style={{ marginTop: 16 }}>
-          <p>作成日：{codeData.createdAt.toDate().toLocaleString()}</p>
-          <p>締切日：{codeData.expiresAt.toDate().toLocaleString()}</p>
-
-          <label>期限を変更：</label>
-          <input
-            type="datetime-local"
-            onChange={(e) => updateExpire(codeData.id, e.target.value)}
-            style={{
-              padding: 6,
-              border: "1px solid #ccc",
-              borderRadius: 6,
-              marginBottom: 12,
-              display: "block",
-            }}
-          />
-
-          <label>タイトル編集：</label>
-          <input
-            type="text"
-            defaultValue={codeData.title}
-            onBlur={(e) => updateTitle(codeData.id, e.target.value)}
-            style={{
-              padding: 6,
-              border: "1px solid #ccc",
-              borderRadius: 6,
-              marginBottom: 12,
-              display: "block",
-            }}
-          />
-
-          <hr />
-
-          {loading ? (
-            <p>読み込み中…</p>
-          ) : (
-            <FrameList
-              frames={codeData.frames}
-              results={results}
-              getUserInfo={getUserInfo}
-              mode={codeData.mode}
-            />
-          )}
-
-          <hr style={{ margin: "16px 0" }} />
-
-          <button
-            onClick={() => navigator.clipboard.writeText(codeData.code)}
-            style={btnBlue}
+        {/* タイトル + 削除 + アーカイブ */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2
+            onClick={toggle}
+            style={{ cursor: "pointer", color: "#2563eb", margin: 0 }}
           >
-            コピー
-          </button>
+            {codeData.title}
+          </h2>
 
-          <button
-            onClick={() => updateGacha(codeData)}
-            style={btnGreen}
-          >
-            内容を更新
-          </button>
+          <div>
+            <button
+              onClick={() => archiveCode(codeData.id)}
+              style={btnGraySmall}
+            >
+              アーカイブ
+            </button>
 
-          <button
-            onClick={() => archiveCode(codeData.id)}
-            style={btnGray}
-          >
-            アーカイブへ移動
-          </button>
-
-          <button
-            onClick={() => deleteCode(codeData.id)}
-            style={btnRed}
-          >
-            削除
-          </button>
+            <button
+              onClick={() => deleteCode(codeData.id)}
+              style={btnRedSmall}
+            >
+              削除
+            </button>
+          </div>
         </div>
-      )}
+
+        <p>コード：{codeData.code}</p>
+        <p>方式：{codeData.mode === "count" ? "枠数方式" : "確率方式"}</p>
+        <p>
+          1回 {codeData.point.cost} pt（上限 {codeData.point.maxPerUser} 回）
+        </p>
+
+        <p>残数：{remaining}</p>
+
+        <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
+
+        {/* ★ Xアカウント折りたたみ */}
+        {codeData.publicFlags?.includes("x_account_match") && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: 8,
+              background: "#f9fafb",
+              border: "1px solid #eee",
+              borderRadius: 6,
+            }}
+          >
+            <strong>対象Xアカウント</strong>
+
+            <button
+              onClick={() => setShowX((prev) => !prev)}
+              style={{
+                marginTop: 6,
+                padding: "4px 8px",
+                background: "#2563eb",
+                color: "white",
+                borderRadius: 4,
+                border: "none",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              {showX ? "▲ 閉じる" : "▼ 表示する"}
+            </button>
+
+            {showX && (
+              <pre
+                style={{
+                  whiteSpace: "pre-wrap",
+                  marginTop: 6,
+                  fontSize: 13,
+                  background: "#fff",
+                  padding: 8,
+                  borderRadius: 4,
+                  border: "1px solid #ddd",
+                }}
+              >
+                {(codeData.xAccountList ?? []).join("\n")}
+              </pre>
+            )}
+
+            <button
+              onClick={openXEditor}
+              style={{
+                marginTop: 8,
+                padding: "6px 10px",
+                background: "#4f46e5",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              Xアカウント対象を編集
+            </button>
+
+            {editXList && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  background: "#fff",
+                  borderRadius: 6,
+                  border: "1px solid #ddd",
+                }}
+              >
+                <textarea
+                  value={xListText}
+                  onChange={(e) => setXListText(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: "120px",
+                    padding: 10,
+                    borderRadius: 6,
+                    border: "1px solid #ccc",
+                    fontSize: 14,
+                    whiteSpace: "pre",
+                  }}
+                />
+
+                <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                  <button
+                    onClick={saveXList}
+                    style={{
+                      padding: "6px 12px",
+                      background: "#2563eb",
+                      color: "white",
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    保存
+                  </button>
+
+                  <button
+                    onClick={() => setEditXList(false)}
+                    style={{
+                      padding: "6px 12px",
+                      background: "#6b7280",
+                      color: "white",
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 公開設定の編集 */}
+        <div style={{ marginBottom: 12 }}>
+          {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
+            <label key={flag} style={{ marginRight: 12 }}>
+              <input
+                type="checkbox"
+                checked={codeData.publicFlags?.includes(flag)}
+                onChange={(e) => {
+                  const flags = new Set(codeData.publicFlags ?? []);
+                  e.target.checked ? flags.add(flag) : flags.delete(flag);
+                  updatePublicFlags(codeData.id, Array.from(flags));
+                }}
+              />
+              {renderFlags([flag])}
+            </label>
+          ))}
+        </div>
+
+        <button
+          onClick={resetUsage}
+          style={{
+            padding: "6px 12px",
+            background: "#dc2626",
+            color: "white",
+            borderRadius: 6,
+            border: "none",
+            marginBottom: 12,
+            cursor: "pointer",
+          }}
+        >
+          使用回数をリセット
+        </button>
+
+        {open && (
+          <div style={{ marginTop: 16 }}>
+            <p>作成日：{codeData.createdAt.toDate().toLocaleString()}</p>
+            <p>締切日：{codeData.expiresAt.toDate().toLocaleString()}</p>
+
+            <label>期限を変更：</label>
+            <input
+              type="datetime-local"
+              onChange={(e) => updateExpire(codeData.id, e.target.value)}
+              style={{
+                padding: 6,
+                border: "1px solid #ccc",
+                borderRadius: 6,
+                marginBottom: 12,
+                display: "block",
+              }}
+            />
+
+            <label>タイトル編集：</label>
+            <input
+              type="text"
+              defaultValue={codeData.title}
+              onBlur={(e) => updateTitle(codeData.id, e.target.value)}
+              style={{
+                padding: 6,
+                border: "1px solid #ccc",
+                borderRadius: 6,
+                marginBottom: 12,
+                display: "block",
+              }}
+            />
+
+            <hr />
+
+            {loading ? (
+              <p>読み込み中…</p>
+            ) : (
+              <FrameList
+                frames={codeData.frames}
+                results={results}
+                getUserInfo={getUserInfo}
+                mode={codeData.mode}
+              />
+            )}
+
+            <hr style={{ margin: "16px 0" }} />
+
+            <button
+              onClick={() => navigator.clipboard.writeText(codeData.code)}
+              style={btnBlue}
+            >
+              コピー
+            </button>
+
+            <button
+              onClick={() => updateGacha(codeData)}
+              style={btnGreen}
+            >
+              内容を更新
+            </button>
+
+            <button
+              onClick={() => archiveCode(codeData.id)}
+              style={btnGray}
+            >
+              アーカイブへ移動
+            </button>
+
+            <button
+              onClick={() => deleteCode(codeData.id)}
+              style={btnRed}
+            >
+              削除
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -516,12 +616,10 @@ function FrameList({ frames, results, getUserInfo, mode }) {
             ? f.name
             : null;
 
-        // 一致する枠がなければ当選者なし
         const filtered = frameKey
           ? results.filter((r: any) => r.frameName === frameKey)
           : [];
 
-        // ★ 重複排除（id でユニーク化）
         const frameResults = Array.from(
           new Map(filtered.map((r: any) => [r.id, r])).values()
         ).sort((a: any, b: any) => a.reward - b.reward);
