@@ -603,16 +603,20 @@ function GachaItem({
 }
 
 /* ------------------------------
-   枠ごとの当選者一覧（★重複バグ修正済）
+   枠ごとの当選者一覧（★重複バグ完全修正版）
 ------------------------------ */
 function FrameList({ frames, results, getUserInfo, mode }) {
   return (
     <div>
       {frames.map((f: any, i: number) => {
-        // ★ frameName は label のみを参照（重複の原因だった name を排除）
-        const filtered = results.filter((r: any) => r.frameName === f.label);
+        // label と name の両方に対応しつつ、重複は排除
+        const filtered = results.filter(
+          (r: any) =>
+            r.frameName === f.label ||
+            r.frameName === f.name
+        );
 
-        // ★ 万が一過去データに name が混ざっていても重複しないようにユニーク化
+        // ★ 重複排除（id でユニーク化）
         const frameResults = Array.from(
           new Map(filtered.map((r: any) => [r.id, r])).values()
         ).sort((a: any, b: any) => a.reward - b.reward);
@@ -620,7 +624,7 @@ function FrameList({ frames, results, getUserInfo, mode }) {
         return (
           <div key={i} style={{ marginBottom: 20 }}>
             <h3>
-              {f.label}（
+              {f.label || f.name}（
               {mode === "count"
                 ? `${frameResults.length}/${f.maxCount}`
                 : `${Math.round(f.probability * 100)}%`}
