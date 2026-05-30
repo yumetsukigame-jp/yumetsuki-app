@@ -149,6 +149,37 @@ export default function NibuichiPage() {
         />
       </div>
 
+      {/* ★ ニブイチの参加方法（ルール） */}
+      <div className="bg-white shadow p-4 rounded-lg">
+        <h2 className="text-lg font-bold mb-3">ニブイチの参加方法</h2>
+
+        <div className="space-y-3 text-sm leading-relaxed">
+
+          <div className="flex items-start gap-2">
+            <div className="w-6 h-6 flex items-center justify-center bg-blue-500 text-white rounded-full text-xs font-bold">
+              1
+            </div>
+            <p>
+              下記から予想を選択すると、<br />
+              <span className="font-bold text-blue-600">的中で山分けポイントが付与</span>されます。
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <div className="w-6 h-6 flex items-center justify-center bg-green-500 text-white rounded-full text-xs font-bold">
+              2
+            </div>
+            <p>
+              予想スクショを
+              <span className="font-bold">Xでリプ or リポスト</span>
+              すると、<br />
+              <span className="font-bold text-green-600">的中翌日はヒャクブイチガチャが引けます</span>。
+            </p>
+          </div>
+
+        </div>
+      </div>
+
       {/* ★ ゆめつき戦績 & 個人戦績（横並び） */}
       <div className="flex flex-col md:flex-row gap-4">
 
