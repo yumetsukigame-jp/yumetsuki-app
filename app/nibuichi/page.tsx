@@ -21,9 +21,7 @@ export default function NibuichiPage() {
 
   const [predictionStats, setPredictionStats] = useState<any>(null);
 
-  // -----------------------------
   // JST 今日の日付（6時切り替え）
-  // -----------------------------
   const getTodayJST6 = () => {
     const now = new Date(
       new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
@@ -32,9 +30,7 @@ export default function NibuichiPage() {
     return now.toISOString().slice(0, 10);
   };
 
-  // -----------------------------
   // ログイン監視
-  // -----------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -44,10 +40,7 @@ export default function NibuichiPage() {
     return () => unsub();
   }, []);
 
-  // -----------------------------
-  // 今日の予想者数を取得（棒グラフ用）
-  // ※ サーバーが保存した date を優先して使う
-  // -----------------------------
+  // 今日の予想者数取得
   const fetchTodayPredictions = async (targetDate: string) => {
     const q = query(
       collection(db, "nibuichi_user_predictions"),
@@ -74,9 +67,7 @@ export default function NibuichiPage() {
     setPredictionStats(counts);
   };
 
-  // -----------------------------
   // 戦績・今日の予想取得
-  // -----------------------------
   const fetchStats = async () => {
     setLoading(true);
     try {
@@ -98,7 +89,6 @@ export default function NibuichiPage() {
       if (todayPredData?.prediction) {
         setSelected(todayPredData.prediction);
 
-        // ★ サーバーが保存した date を優先し、なければフロント計算の todayJST
         const targetDate = todayPredData.date ?? todayJST;
         await fetchTodayPredictions(targetDate);
       } else {
@@ -110,9 +100,7 @@ export default function NibuichiPage() {
     setLoading(false);
   };
 
-  // -----------------------------
   // 今日の予想を確定
-  // -----------------------------
   const sendPrediction = async () => {
     if (!user || !selected) return;
 
@@ -161,33 +149,38 @@ export default function NibuichiPage() {
         />
       </div>
 
-      {/* ゆめつき戦績 */}
-      <div className="bg-white shadow p-4 rounded-lg">
-        <h2 className="text-lg font-bold mb-2">ゆめつきの戦績</h2>
-        <div className="space-y-1 text-sm">
-          <div>勝（ニブニ）：{globalStats?.win ?? 0}</div>
-          <div>分（ニブイチ）：{globalStats?.draw ?? 0}</div>
-          <div>敗（ニブゼロ）：{globalStats?.lose ?? 0}</div>
-          <div>爆アド：{globalStats?.bakuado ?? 0}</div>
-        </div>
-      </div>
+      {/* ★ ゆめつき戦績 & 個人戦績（横並び） */}
+      <div className="flex flex-col md:flex-row gap-4">
 
-      {/* 個人戦績 */}
-      <div className="bg-white shadow p-4 rounded-lg">
-        <h2 className="text-lg font-bold mb-2">個人戦績</h2>
-        <div className="space-y-1 text-sm">
-          <div>参加数：{stats?.total ?? 0}</div>
-          <div>的中数：{stats?.hit ?? 0}</div>
-          <div>
-            的中率：
-            {stats?.total > 0
-              ? ((stats.hit / stats.total) * 100).toFixed(1) + "%"
-              : "0%"}
+        {/* ゆめつき戦績 */}
+        <div className="flex-1 bg-white shadow p-4 rounded-lg">
+          <h2 className="text-lg font-bold mb-2">ゆめつきの戦績</h2>
+          <div className="space-y-1 text-sm">
+            <div>勝（ニブニ）：{globalStats?.win ?? 0}</div>
+            <div>分（ニブイチ）：{globalStats?.draw ?? 0}</div>
+            <div>敗（ニブゼロ）：{globalStats?.lose ?? 0}</div>
+            <div>爆アド：{globalStats?.bakuado ?? 0}</div>
           </div>
         </div>
+
+        {/* 個人戦績 */}
+        <div className="flex-1 bg-white shadow p-4 rounded-lg">
+          <h2 className="text-lg font-bold mb-2">個人戦績</h2>
+          <div className="space-y-1 text-sm">
+            <div>参加数：{stats?.total ?? 0}</div>
+            <div>的中数：{stats?.hit ?? 0}</div>
+            <div>
+              的中率：
+              {stats?.total > 0
+                ? ((stats.hit / stats.total) * 100).toFixed(1) + "%"
+                : "0%"}
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      {/* ★ 今日の予想状況（棒グラフ） */}
+      {/* 今日の予想状況（棒グラフ） */}
       {todayPrediction?.prediction && predictionStats && (
         <div className="bg-white shadow p-4 rounded-lg">
           <h2 className="text-lg font-bold mb-3">今日の予想状況</h2>
