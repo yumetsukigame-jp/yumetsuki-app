@@ -171,7 +171,7 @@ export default function NibuichiPage() {
             </div>
             <p>
               予想スクショを
-              <span className="font-bold">Xでリプ or リポスト</span>
+              <span className="font-bold">Xでリプ and リポスト</span>
               すると、<br />
               <span className="font-bold text-green-600">的中翌日はヒャクブイチガチャが引けます</span>。
             </p>
