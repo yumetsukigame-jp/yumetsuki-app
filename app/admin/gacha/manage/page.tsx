@@ -608,26 +608,25 @@ function FrameList({ frames, results, getUserInfo, mode }) {
   return (
     <div>
       {frames.map((f: any, i: number) => {
-        // ★ frameName と一致するキーを自動判定（label / name 混在対策）
-        const frameKey =
-          results.some((r: any) => r.frameName === f.label)
-            ? f.label
-            : results.some((r: any) => r.frameName === f.name)
-            ? f.name
-            : null;
+        // ★ ユーザー側と同じロジックに統一
+        const frameName = f.label || f.name;
 
-        const filtered = frameKey
-          ? results.filter((r: any) => r.frameName === frameKey)
-          : [];
+        // ★ 新形式（frame）を優先、古い形式（frameName）も fallback
+        const list = results.filter(
+          (r: any) =>
+            r.frame === frameName ||
+            r.frameName === frameName
+        );
 
+        // ★ 重複排除
         const frameResults = Array.from(
-          new Map(filtered.map((r: any) => [r.id, r])).values()
-        ).sort((a: any, b: any) => a.reward - b.reward);
+          new Map(list.map((r: any) => [r.id, r])).values()
+        ).sort((a, b) => a.reward - b.reward);
 
         return (
           <div key={i} style={{ marginBottom: 20 }}>
             <h3>
-              {f.label || f.name}（
+              {frameName}（
               {mode === "count"
                 ? `${frameResults.length}/${f.maxCount}`
                 : `${Math.round(f.probability * 100)}%`}
@@ -653,6 +652,7 @@ function FrameList({ frames, results, getUserInfo, mode }) {
     </div>
   );
 }
+
 
 /* ------------------------------
    当選者の表示
