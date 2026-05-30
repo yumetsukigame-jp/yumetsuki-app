@@ -240,107 +240,6 @@ export default function GachaManagePage() {
     </div>
   );
 }
-
-/* ------------------------------
-   ガチャ1件分の表示
------------------------------- */
-function GachaItem({
-  codeData,
-  getUserInfo,
-  getResultsByCode,
-  updateTitle,
-  updateExpire,
-  updatePublicFlags,
-  updateGacha,
-  deleteCode,
-  archiveCode,
-}) {
-  const [open, setOpen] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const [showX, setShowX] = useState(false);
-
-  const toggle = async () => {
-    setOpen(!open);
-    if (!open) {
-      setLoading(true);
-      const r = await getResultsByCode(codeData.code);
-      setResults(r);
-      setLoading(false);
-    }
-  };
-
-  /* -----------------------------------------
-     ★ Xアカウント対象編集
-  ----------------------------------------- */
-  const [editXList, setEditXList] = useState(false);
-  const [xListText, setXListText] = useState("");
-
-  const openXEditor = () => {
-    const list = codeData.xAccountList ?? [];
-    setXListText(list.join("\n"));
-    setEditXList(true);
-  };
-
-  const saveXList = async () => {
-    const newList = xListText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    await updateDoc(doc(db, "gachaCodes", codeData.id), {
-      xAccountList: newList,
-    });
-
-    alert("Xアカウント対象リストを更新しました");
-    setEditXList(false);
-  };
-
-  const remaining =
-    codeData.mode === "count"
-      ? codeData.totalCount - results.length
-      : "∞";
-
-  const resetUsage = async () => {
-    if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
-
-    const fn = httpsCallable(functions, "resetGachaUsage");
-    const res: any = await fn({ code: codeData.code });
-
-    alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
-  };
-
-  const renderFlags = (flags: string[] = []) => {
-    const map: Record<string, string> = {
-      public: "🌐 公開",
-      limited: "🔒 限定",
-      subscriber: "⭐ サブスク限定",
-      nibuichi_winner: "🎯 的中者限定",
-      x_account_match: "📝 Xアカウント一致",
-    };
-    if (flags.length === 0) return "（未設定）";
-    return flags.map((f) => map[f] ?? f).join(" / ");
-  };
-
-  return (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 24,
-      }}
-    >
-      {/* タイトル + 削除 + アーカイブ */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2
-          onClick={toggle}
-          style={{ cursor: "pointer", color: "#2563eb", margin: 0 }}
-        >
-          {codeData.title}
-        </h2>
-
         <div>
           <button
             onClick={() => archiveCode(codeData.id)}
@@ -609,12 +508,18 @@ function FrameList({ frames, results, getUserInfo, mode }) {
   return (
     <div>
       {frames.map((f: any, i: number) => {
-        // label と name の両方に対応しつつ、重複は排除
-        const filtered = results.filter(
-          (r: any) =>
-            r.frameName === f.label ||
-            r.frameName === f.name
-        );
+        // ★ frameName と一致するキーを自動判定（label / name 混在対策）
+        const frameKey =
+          results.some((r: any) => r.frameName === f.label)
+            ? f.label
+            : results.some((r: any) => r.frameName === f.name)
+            ? f.name
+            : null;
+
+        // 一致する枠がなければ当選者なし
+        const filtered = frameKey
+          ? results.filter((r: any) => r.frameName === frameKey)
+          : [];
 
         // ★ 重複排除（id でユニーク化）
         const frameResults = Array.from(
