@@ -42,3 +42,8 @@ next-env.d.ts
 source_images/
 
 serviceAccountKey.json
+
+# ★ 追加（これがないと GitHub に push できない）
+.firebase/
+functions/node_modules/
+functions/.next/
