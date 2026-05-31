@@ -101,8 +101,7 @@ export default function AdminNibuichiPage() {
   };
 
   /* --------------------------------------------------
-     戦績 & 今日の結果取得
-     ★ getNibuichiUserStats の todayResult を正しく使用
+     戦績 & 今日の結果取得（修正版）
   -------------------------------------------------- */
   const fetchStats = async () => {
     setLoading(true);
@@ -120,9 +119,9 @@ export default function AdminNibuichiPage() {
       setSelected(tr?.result ?? null);
       setRewardPoints(tr?.rewardPoints ?? 500);
 
-      // ★ 今日の日付で棒グラフ取得
-      const today = getTodayJST6();
-      await fetchTodayPredictions(today);
+      // ★ 修正ポイント：サーバー側の日付を優先
+      const targetDate = tr?.date ?? getTodayJST6();
+      await fetchTodayPredictions(targetDate);
 
       setEditMode(false);
     } catch (err) {
@@ -189,7 +188,6 @@ export default function AdminNibuichiPage() {
 
   /* --------------------------------------------------
      ★ 正しい確定判定
-     processed === true のときだけ確定扱い
   -------------------------------------------------- */
   const isFixed = todayResult?.processed === true;
 

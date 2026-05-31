@@ -15,5 +15,11 @@
       ],
       "source": "functions"
     }
-  ]
+  ],
+  "hosting": {
+    "source": "."
+  },
+  "auth": {
+    "providers": {}
+  }
 }
