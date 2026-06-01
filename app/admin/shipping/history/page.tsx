@@ -16,9 +16,10 @@ export default function ShippingHistoryPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchHistory = async () => {
+    // ★ shippedAt の降順（新しい順）
     const q = query(
       collection(db, "shippingHistory"),
-      orderBy("requestedAt", "desc")
+      orderBy("shippedAt", "desc")
     );
 
     const snap = await getDocs(q);
@@ -36,7 +37,7 @@ export default function ShippingHistoryPage() {
     fetchHistory();
   }, []);
 
-  // 🔥 発送済みにする処理
+  // 🔥 発送済みにする処理（履歴側で再確定する場合）
   const markAsShipped = async (id: string) => {
     const ref = doc(db, "shippingHistory", id);
 
@@ -79,7 +80,7 @@ export default function ShippingHistoryPage() {
             {item.image && (
               <img
                 src={item.image}
-                alt={item.name}
+                alt={item.rewardName}
                 style={{
                   width: "80px",
                   height: "80px",
@@ -89,18 +90,19 @@ export default function ShippingHistoryPage() {
             )}
 
             <div style={{ flex: 1 }}>
+              <p><strong>ニックネーム：</strong> {item.userNickname ?? "名無し"}</p>
               <p><strong>ユーザー名：</strong> {item.userName}</p>
               <p><strong>メール：</strong> {item.userEmail}</p>
-              <p><strong>X：</strong> {item.userX ?? "不明"}</p> {/* ★ 追加 */}
+              <p><strong>X：</strong> {item.userX ?? "不明"}</p>
               <p><strong>ユーザーID：</strong> {item.uid}</p>
 
-              <p><strong>発送物：</strong> {item.name}</p>
+              <p><strong>発送物：</strong> {item.rewardName}</p>
               <p><strong>ポイント：</strong> {item.cost} pt</p>
 
               <p>
-                <strong>依頼日時：</strong>{" "}
-                {item.requestedAt?.toDate
-                  ? item.requestedAt.toDate().toLocaleString()
+                <strong>発送日時：</strong>{" "}
+                {item.shippedAt?.toDate
+                  ? item.shippedAt.toDate().toLocaleString()
                   : "不明"}
               </p>
 
@@ -110,18 +112,9 @@ export default function ShippingHistoryPage() {
                   {item.shipped ? "発送済み" : "準備中"}
                 </span>
               </p>
-
-              {item.shippedAt && (
-                <p>
-                  <strong>発送日時：</strong>{" "}
-                  {item.shippedAt?.toDate
-                    ? item.shippedAt.toDate().toLocaleString()
-                    : "不明"}
-                </p>
-              )}
             </div>
 
-            {/* 🔥 発送済みボタン */}
+            {/* 🔥 発送済みボタン（必要なら残す） */}
             {!item.shipped && (
               <button
                 onClick={() => markAsShipped(item.id)}

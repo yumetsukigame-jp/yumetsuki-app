@@ -18,6 +18,10 @@ export default function ShippingAdminPage() {
   // ★ 発送済みカードの開閉状態
   const [openMap, setOpenMap] = useState<{ [uid: string]: boolean }>({});
 
+  // ★ ページネーション
+  const [page, setPage] = useState(1);
+  const perPage = 10;
+
   const toggleOpen = (uid: string) => {
     setOpenMap((prev) => ({ ...prev, [uid]: !prev[uid] }));
   };
@@ -31,13 +35,19 @@ export default function ShippingAdminPage() {
       const uid = d.id;
       const rewardData = d.data();
 
-      // ★ users コレクションからユーザー情報を取得
+      // ★ users コレクションからユーザー情報を取得（ニックネーム含む）
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
       const userData = userSnap.exists()
         ? userSnap.data()
-        : { name: "不明", email: "不明", xAccount: "不明" };
+        : {
+            name: "不明",
+            email: "不明",
+            xAccount: "不明",
+            displayName: "名無し",
+            xAccountConfirmed: false,
+          };
 
       data.push({
         uid,
@@ -45,13 +55,20 @@ export default function ShippingAdminPage() {
         userName: userData.name ?? "不明",
         userEmail: userData.email ?? "不明",
         userX: userData.xAccount ?? "不明",
+        userNickname: userData.displayName ?? "名無し",
+        xAccountConfirmed: userData.xAccountConfirmed ?? false,
       });
     }
 
-    // ★ 未発送 → 発送済み の順に並び替え
+    // ★ 未発送 → 発送済み の順
+    // ★ 同じ発送状態なら timestamp の降順（新しい順）
     data.sort((a, b) => {
-      if (a.shipped === b.shipped) return 0;
-      return a.shipped ? 1 : -1; // 未発送(false) が先
+      if (a.shipped !== b.shipped) {
+        return a.shipped ? 1 : -1;
+      }
+      const tA = a.timestamp?.toDate()?.getTime() ?? 0;
+      const tB = b.timestamp?.toDate()?.getTime() ?? 0;
+      return tB - tA;
     });
 
     setList(data);
@@ -84,6 +101,7 @@ export default function ShippingAdminPage() {
         userName: item.userName,
         userEmail: item.userEmail,
         userX: item.userX,
+        userNickname: item.userNickname,
       });
     } else {
       await updateDoc(ref, {
@@ -95,7 +113,19 @@ export default function ShippingAdminPage() {
     fetchData();
   };
 
+  // ★ Xアカウント確定
+  const confirmXAccount = async (uid: string) => {
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, {
+      xAccountConfirmed: true,
+    });
+    fetchData();
+  };
+
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+
+  // ★ ページ分割
+  const paginatedList = list.slice((page - 1) * perPage, page * perPage);
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
@@ -104,9 +134,8 @@ export default function ShippingAdminPage() {
       </h1>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {list.map((item) => {
-          const isOpen = openMap[item.uid] ?? !item.shipped; 
-          // ★ 未発送は最初から開く、発送済みは閉じる
+        {paginatedList.map((item) => {
+          const isOpen = openMap[item.uid] ?? !item.shipped;
 
           return (
             <div
@@ -115,7 +144,7 @@ export default function ShippingAdminPage() {
                 border: "1px solid #ddd",
                 borderRadius: "8px",
                 padding: "16px",
-                background: item.shipped ? "#f5f5f5" : "#fffbe6", // ★ 色分け
+                background: item.shipped ? "#f5f5f5" : "#fffbe6",
               }}
             >
               {/* ヘッダー部分（クリックで開閉） */}
@@ -128,7 +157,7 @@ export default function ShippingAdminPage() {
                 }}
               >
                 <div>
-                  <strong>{item.userName}</strong>（{item.userEmail}）
+                  <strong>{item.userNickname}</strong>（{item.userEmail}）
                   <br />
                   <span style={{ fontSize: "12px", color: "#666" }}>
                     {item.shipped
@@ -147,7 +176,31 @@ export default function ShippingAdminPage() {
               {/* 詳細（開閉） */}
               {isOpen && (
                 <div style={{ marginTop: "12px" }}>
+                  <p><strong>ニックネーム：</strong> {item.userNickname}</p>
                   <p><strong>X：</strong> {item.userX}</p>
+
+                  {/* ★ Xアカウント確定ボタン */}
+                  <p>
+                    <strong>Xアカウント確定：</strong>{" "}
+                    {item.xAccountConfirmed ? (
+                      <span style={{ color: "green" }}>✔ 確定済み</span>
+                    ) : (
+                      <button
+                        onClick={() => confirmXAccount(item.uid)}
+                        style={{
+                          padding: "6px 12px",
+                          background: "#3b82f6",
+                          color: "white",
+                          borderRadius: "6px",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Xアカウントを確定
+                      </button>
+                    )}
+                  </p>
+
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
                   <p><strong>発送物：</strong> {item.name}</p>
                   <p><strong>ポイント：</strong> {item.cost} pt</p>
@@ -176,6 +229,22 @@ export default function ShippingAdminPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* ★ ページネーション */}
+      <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+        <button disabled={page === 1} onClick={() => setPage(page - 1)}>
+          前へ
+        </button>
+
+        <span>ページ {page}</span>
+
+        <button
+          disabled={page * perPage >= list.length}
+          onClick={() => setPage(page + 1)}
+        >
+          次へ
+        </button>
       </div>
     </div>
   );

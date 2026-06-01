@@ -15,7 +15,13 @@ export default function ShippingStatsPage() {
 
     snap.docs.forEach((d) => {
       const data = d.data();
-      const name = data.rewardName;
+
+      // ★ ガチャ対応：複数のフィールド名をチェック
+      const name =
+        data.rewardName || // 通常の発送
+        data.name ||        // ガチャの可能性
+        data.frameName ||   // ガチャの別名
+        "不明なアイテム";
 
       if (!countMap[name]) {
         countMap[name] = 0;
