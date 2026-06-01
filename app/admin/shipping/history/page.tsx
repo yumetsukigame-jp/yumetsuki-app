@@ -8,20 +8,18 @@ import {
   query,
   orderBy,
   updateDoc,
-  doc
+  doc,
+  deleteDoc,
 } from "firebase/firestore";
 
 export default function ShippingHistoryPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openMap, setOpenMap] = useState<{ [id: string]: boolean }>({});
+  const [sortKey, setSortKey] = useState("dateDesc");
 
   const fetchHistory = async () => {
-    // ★ shippedAt の降順（新しい順）
-    const q = query(
-      collection(db, "shippingHistory"),
-      orderBy("shippedAt", "desc")
-    );
-
+    const q = query(collection(db, "shippingHistory"), orderBy("shippedAt", "desc"));
     const snap = await getDocs(q);
 
     const list = snap.docs.map((d) => ({
@@ -37,7 +35,7 @@ export default function ShippingHistoryPage() {
     fetchHistory();
   }, []);
 
-  // 🔥 発送済みにする処理（履歴側で再確定する場合）
+  // 🔥 発送済みにする処理
   const markAsShipped = async (id: string) => {
     const ref = doc(db, "shippingHistory", id);
 
@@ -46,15 +44,49 @@ export default function ShippingHistoryPage() {
       shippedAt: new Date(),
     });
 
-    // UI 更新
     setHistory((prev) =>
       prev.map((item) =>
-        item.id === id
-          ? { ...item, shipped: true, shippedAt: new Date() }
-          : item
+        item.id === id ? { ...item, shipped: true, shippedAt: new Date() } : item
       )
     );
   };
+
+  // 🔥 削除処理
+  const deleteHistory = async (id: string) => {
+    if (!confirm("本当に削除しますか？")) return;
+
+    await deleteDoc(doc(db, "shippingHistory", id));
+
+    setHistory((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  // 🔥 開閉
+  const toggleOpen = (id: string) => {
+    setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // 🔥 並べ替え
+  const sortedHistory = [...history].sort((a, b) => {
+    const tA = a.shippedAt?.toDate()?.getTime() ?? 0;
+    const tB = b.shippedAt?.toDate()?.getTime() ?? 0;
+
+    switch (sortKey) {
+      case "dateAsc":
+        return tA - tB;
+      case "dateDesc":
+        return tB - tA;
+      case "pointHigh":
+        return (b.cost ?? 0) - (a.cost ?? 0);
+      case "pointLow":
+        return (a.cost ?? 0) - (b.cost ?? 0);
+      case "nameAsc":
+        return (a.rewardName ?? "").localeCompare(b.rewardName ?? "");
+      case "nameDesc":
+        return (b.rewardName ?? "").localeCompare(a.rewardName ?? "");
+      default:
+        return 0;
+    }
+  });
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
@@ -64,75 +96,103 @@ export default function ShippingHistoryPage() {
         発送履歴（管理者）
       </h1>
 
+      {/* 🔥 並べ替え UI */}
+      <div style={{ marginBottom: "20px" }}>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value)}
+          style={{ padding: "8px", borderRadius: "6px" }}
+        >
+          <option value="dateDesc">発送日時（新しい順）</option>
+          <option value="dateAsc">発送日時（古い順）</option>
+          <option value="pointHigh">ポイント（高い順）</option>
+          <option value="pointLow">ポイント（低い順）</option>
+          <option value="nameAsc">名前順（A→Z）</option>
+          <option value="nameDesc">名前順（Z→A）</option>
+        </select>
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {history.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "16px",
-              display: "flex",
-              gap: "16px",
-              alignItems: "center",
-            }}
-          >
-            {item.image && (
-              <img
-                src={item.image}
-                alt={item.rewardName}
+        {sortedHistory.map((item) => {
+          const isOpen = openMap[item.id] ?? false;
+
+          return (
+            <div
+              key={item.id}
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                padding: "16px",
+              }}
+            >
+              {/* 🔥 ヘッダー（クリックで開閉） */}
+              <div
+                onClick={() => toggleOpen(item.id)}
                 style={{
-                  width: "80px",
-                  height: "80px",
-                  objectFit: "contain",
-                }}
-              />
-            )}
-
-            <div style={{ flex: 1 }}>
-              <p><strong>ニックネーム：</strong> {item.userNickname ?? "名無し"}</p>
-              <p><strong>ユーザー名：</strong> {item.userName}</p>
-              <p><strong>メール：</strong> {item.userEmail}</p>
-              <p><strong>X：</strong> {item.userX ?? "不明"}</p>
-              <p><strong>ユーザーID：</strong> {item.uid}</p>
-
-              <p><strong>発送物：</strong> {item.rewardName}</p>
-              <p><strong>ポイント：</strong> {item.cost} pt</p>
-
-              <p>
-                <strong>発送日時：</strong>{" "}
-                {item.shippedAt?.toDate
-                  ? item.shippedAt.toDate().toLocaleString()
-                  : "不明"}
-              </p>
-
-              <p>
-                <strong>発送状態：</strong>{" "}
-                <span style={{ color: item.shipped ? "green" : "orange" }}>
-                  {item.shipped ? "発送済み" : "準備中"}
-                </span>
-              </p>
-            </div>
-
-            {/* 🔥 発送済みボタン（必要なら残す） */}
-            {!item.shipped && (
-              <button
-                onClick={() => markAsShipped(item.id)}
-                style={{
-                  padding: "10px 16px",
-                  background: "#4f46e5",
-                  color: "white",
-                  borderRadius: "8px",
-                  border: "none",
+                  display: "flex",
+                  justifyContent: "space-between",
                   cursor: "pointer",
-                  height: "40px",
                 }}
               >
-                発送済みにする
-              </button>
-            )}
-          </div>
-        ))}
+                <div>
+                  <strong>{item.rewardName}</strong>
+                  <br />
+                  <span style={{ fontSize: "12px", color: "#666" }}>
+                    {item.shippedAt?.toDate
+                      ? item.shippedAt.toDate().toLocaleString()
+                      : "日時不明"}
+                  </span>
+                </div>
+                <div style={{ fontSize: "20px" }}>{isOpen ? "▲" : "▼"}</div>
+              </div>
+
+              {/* 🔥 詳細（開閉） */}
+              {isOpen && (
+                <div style={{ marginTop: "12px" }}>
+                  <p><strong>ニックネーム：</strong> {item.userNickname ?? "名無し"}</p>
+                  <p><strong>ユーザー名：</strong> {item.userName}</p>
+                  <p><strong>メール：</strong> {item.userEmail}</p>
+                  <p><strong>X：</strong> {item.userX ?? "不明"}</p>
+                  <p><strong>ユーザーID：</strong> {item.uid}</p>
+                  <p><strong>ポイント：</strong> {item.cost} pt</p>
+
+                  {/* ボタン群 */}
+                  <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                    {!item.shipped && (
+                      <button
+                        onClick={() => markAsShipped(item.id)}
+                        style={{
+                          padding: "10px 16px",
+                          background: "#4f46e5",
+                          color: "white",
+                          borderRadius: "8px",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        発送済みにする
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => deleteHistory(item.id)}
+                      style={{
+                        padding: "10px 16px",
+                        background: "#dc2626",
+                        color: "white",
+                        borderRadius: "8px",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
