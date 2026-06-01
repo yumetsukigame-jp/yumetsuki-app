@@ -35,7 +35,7 @@ export default function ShippingHistoryPage() {
     fetchHistory();
   }, []);
 
-  // 🔥 発送済みにする処理
+  // 発送済みにする
   const markAsShipped = async (id: string) => {
     const ref = doc(db, "shippingHistory", id);
 
@@ -51,7 +51,7 @@ export default function ShippingHistoryPage() {
     );
   };
 
-  // 🔥 削除処理
+  // 削除
   const deleteHistory = async (id: string) => {
     if (!confirm("本当に削除しますか？")) return;
 
@@ -60,12 +60,12 @@ export default function ShippingHistoryPage() {
     setHistory((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // 🔥 開閉
+  // 開閉
   const toggleOpen = (id: string) => {
     setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 🔥 並べ替え
+  // 並べ替え
   const sortedHistory = [...history].sort((a, b) => {
     const tA = a.shippedAt?.toDate()?.getTime() ?? 0;
     const tB = b.shippedAt?.toDate()?.getTime() ?? 0;
@@ -80,9 +80,9 @@ export default function ShippingHistoryPage() {
       case "pointLow":
         return (a.cost ?? 0) - (b.cost ?? 0);
       case "nameAsc":
-        return (a.rewardName ?? "").localeCompare(b.rewardName ?? "");
+        return (a.userNickname ?? "").localeCompare(b.userNickname ?? "");
       case "nameDesc":
-        return (b.rewardName ?? "").localeCompare(a.rewardName ?? "");
+        return (b.userNickname ?? "").localeCompare(a.userNickname ?? "");
       default:
         return 0;
     }
@@ -96,7 +96,7 @@ export default function ShippingHistoryPage() {
         発送履歴（管理者）
       </h1>
 
-      {/* 🔥 並べ替え UI */}
+      {/* 並べ替え */}
       <div style={{ marginBottom: "20px" }}>
         <select
           value={sortKey}
@@ -107,8 +107,8 @@ export default function ShippingHistoryPage() {
           <option value="dateAsc">発送日時（古い順）</option>
           <option value="pointHigh">ポイント（高い順）</option>
           <option value="pointLow">ポイント（低い順）</option>
-          <option value="nameAsc">名前順（A→Z）</option>
-          <option value="nameDesc">名前順（Z→A）</option>
+          <option value="nameAsc">ニックネーム（A→Z）</option>
+          <option value="nameDesc">ニックネーム（Z→A）</option>
         </select>
       </div>
 
@@ -125,38 +125,63 @@ export default function ShippingHistoryPage() {
                 padding: "16px",
               }}
             >
-              {/* 🔥 ヘッダー（クリックで開閉） */}
+              {/* ▼▼▼ ヘッダー（閉じている時の表示） ▼▼▼ */}
               <div
                 onClick={() => toggleOpen(item.id)}
                 style={{
                   display: "flex",
+                  alignItems: "center",
                   justifyContent: "space-between",
                   cursor: "pointer",
                 }}
               >
-                <div>
-                  <strong>{item.rewardName}</strong>
-                  <br />
-                  <span style={{ fontSize: "12px", color: "#666" }}>
-                    {item.shippedAt?.toDate
-                      ? item.shippedAt.toDate().toLocaleString()
-                      : "日時不明"}
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {/* アイコン */}
+                  {item.image && (
+                    <img
+                      src={item.image}
+                      alt={item.rewardName}
+                      style={{
+                        width: "40px",
+                        height: "40px",
+                        objectFit: "contain",
+                        borderRadius: "6px",
+                      }}
+                    />
+                  )}
+
+                  <div>
+                    {/* 発送物名 */}
+                    <strong>{item.rewardName}</strong>
+                    <br />
+
+                    {/* ニックネーム＋Xアカウント */}
+                    <span style={{ fontSize: "13px", color: "#444" }}>
+                      {item.userNickname ?? "名無し"}（{item.userX ?? "不明"}）
+                    </span>
+                    <br />
+
+                    {/* 発送日時 */}
+                    <span style={{ fontSize: "12px", color: "#666" }}>
+                      {item.shippedAt?.toDate
+                        ? item.shippedAt.toDate().toLocaleString()
+                        : "日時不明"}
+                    </span>
+                  </div>
                 </div>
+
                 <div style={{ fontSize: "20px" }}>{isOpen ? "▲" : "▼"}</div>
               </div>
+              {/* ▲▲▲ ヘッダーここまで ▲▲▲ */}
 
-              {/* 🔥 詳細（開閉） */}
+              {/* ▼▼▼ 詳細（開閉） ▼▼▼ */}
               {isOpen && (
                 <div style={{ marginTop: "12px" }}>
-                  <p><strong>ニックネーム：</strong> {item.userNickname ?? "名無し"}</p>
                   <p><strong>ユーザー名：</strong> {item.userName}</p>
                   <p><strong>メール：</strong> {item.userEmail}</p>
-                  <p><strong>X：</strong> {item.userX ?? "不明"}</p>
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
                   <p><strong>ポイント：</strong> {item.cost} pt</p>
 
-                  {/* ボタン群 */}
                   <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
                     {!item.shipped && (
                       <button
@@ -190,6 +215,7 @@ export default function ShippingHistoryPage() {
                   </div>
                 </div>
               )}
+              {/* ▲▲▲ 詳細ここまで ▲▲▲ */}
             </div>
           );
         })}
