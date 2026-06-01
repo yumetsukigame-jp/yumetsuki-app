@@ -147,39 +147,62 @@ export default function ShippingAdminPage() {
                 background: item.shipped ? "#f5f5f5" : "#fffbe6",
               }}
             >
-              {/* ヘッダー部分（クリックで開閉） */}
+              {/* ▼▼▼ ヘッダー（アイコン＋発送物名＋ニックネーム＋X） ▼▼▼ */}
               <div
                 onClick={() => toggleOpen(item.uid)}
                 style={{
                   display: "flex",
+                  alignItems: "center",
                   justifyContent: "space-between",
                   cursor: "pointer",
                 }}
               >
-                <div>
-                  <strong>{item.userNickname}</strong>（{item.userEmail}）
-                  <br />
-                  <span style={{ fontSize: "12px", color: "#666" }}>
-                    {item.shipped
-                      ? `発送済み：${item.shippedAt
-                          ?.toDate()
-                          .toLocaleString()}`
-                      : "未発送"}
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {/* ★ アイコン（小） */}
+                  {item.image && (
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      style={{
+                        width: "40px",
+                        height: "40px",
+                        objectFit: "contain",
+                        borderRadius: "6px",
+                      }}
+                    />
+                  )}
+
+                  <div>
+                    {/* 発送物名 */}
+                    <strong>{item.name}</strong>
+                    <br />
+
+                    {/* ニックネーム＋Xアカウント */}
+                    <span style={{ fontSize: "13px", color: "#444" }}>
+                      {item.userNickname}（{item.userX}）
+                    </span>
+                    <br />
+
+                    {/* 発送状態 */}
+                    <span style={{ fontSize: "12px", color: "#666" }}>
+                      {item.shipped
+                        ? `発送済み：${item.shippedAt?.toDate().toLocaleString()}`
+                        : "未発送"}
+                    </span>
+                  </div>
                 </div>
 
-                <div style={{ fontSize: "20px" }}>
-                  {isOpen ? "▲" : "▼"}
-                </div>
+                <div style={{ fontSize: "20px" }}>{isOpen ? "▲" : "▼"}</div>
               </div>
+              {/* ▲▲▲ ヘッダーここまで ▲▲▲ */}
 
-              {/* 詳細（開閉） */}
+              {/* ▼▼▼ 詳細（開閉） ▼▼▼ */}
               {isOpen && (
                 <div style={{ marginTop: "12px" }}>
                   <p><strong>ニックネーム：</strong> {item.userNickname}</p>
                   <p><strong>X：</strong> {item.userX}</p>
 
-                  {/* ★ Xアカウント確定ボタン */}
+                  {/* Xアカウント確定 */}
                   <p>
                     <strong>Xアカウント確定：</strong>{" "}
                     {item.xAccountConfirmed ? (
@@ -202,12 +225,8 @@ export default function ShippingAdminPage() {
                   </p>
 
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
-                  <p><strong>発送物：</strong> {item.name}</p>
                   <p><strong>ポイント：</strong> {item.cost} pt</p>
-                  <p>
-                    <strong>選択日時：</strong>{" "}
-                    {item.timestamp?.toDate().toLocaleString()}
-                  </p>
+                  <p><strong>選択日時：</strong> {item.timestamp?.toDate().toLocaleString()}</p>
 
                   <button
                     onClick={() => toggleShipped(item.uid, item.shipped, item)}
@@ -226,12 +245,13 @@ export default function ShippingAdminPage() {
                   </button>
                 </div>
               )}
+              {/* ▲▲▲ 詳細ここまで ▲▲▲ */}
             </div>
           );
         })}
       </div>
 
-      {/* ★ ページネーション */}
+      {/* ページネーション */}
       <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
         <button disabled={page === 1} onClick={() => setPage(page - 1)}>
           前へ
