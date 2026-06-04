@@ -265,9 +265,36 @@ export default function AdminNibuichiPage() {
         </div>
       )}
 
+        {/* 選択肢 */}
+        <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+
+          {options.map((opt) => (
+            <button
+              key={opt.key}
+              disabled={isFixed && !editMode}
+              onClick={() => setSelected(opt.key)}
+              className={`border rounded-lg overflow-hidden shadow ${
+                selected === opt.key ? "ring-4 ring-red-400" : ""
+              } ${(isFixed && !editMode) ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <Image
+                src={opt.img}
+                alt={opt.label}
+                width={300}
+                height={300}
+                className="w-full"
+              />
+              <div className="text-center py-1 text-sm font-bold">
+                {opt.label}
+              </div>
+            </button>
+          ))}
+        </div>
+
       {/* 今日の結果入力 */}
       <div className="bg-white shadow p-4 rounded-lg">
-        <h2 className="text-lg font-bold mb-3">今日の結果を入力</h2>
+
 
         {!isFixed && selected && (
           <div className="text-center text-blue-600 font-bold mb-3">
@@ -297,31 +324,6 @@ export default function AdminNibuichiPage() {
             className="border p-2 rounded w-full mt-1"
             disabled={isFixed && !editMode}
           />
-        </div>
-
-        {/* 選択肢 */}
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          {options.map((opt) => (
-            <button
-              key={opt.key}
-              disabled={isFixed && !editMode}
-              onClick={() => setSelected(opt.key)}
-              className={`border rounded-lg overflow-hidden shadow ${
-                selected === opt.key ? "ring-4 ring-red-400" : ""
-              } ${(isFixed && !editMode) ? "opacity-60 cursor-not-allowed" : ""}`}
-            >
-              <Image
-                src={opt.img}
-                alt={opt.label}
-                width={300}
-                height={300}
-                className="w-full"
-              />
-              <div className="text-center py-1 text-sm font-bold">
-                {opt.label}
-              </div>
-            </button>
-          ))}
         </div>
 
         {/* ボタン */}
