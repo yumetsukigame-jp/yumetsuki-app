@@ -223,12 +223,13 @@ if (isXAccountMatch) {
   const userSnap = await getDoc(doc(db, "users", uid));
   const user = userSnap.data();
 
+  // ★ Xアカウント正規化（部分一致を正しく行うため必須）
   function normalizeX(x: string) {
     return x
       .trim()
       .toLowerCase()
-      .replace(/^@+/, "")
-      .replace(/\s+/g, "");
+      .replace(/^@+/, "")   // 先頭の @ を削除
+      .replace(/\s+/g, ""); // 空白除去
   }
 
   const userX = normalizeX(user?.xAccount ?? "");
@@ -239,11 +240,13 @@ if (isXAccountMatch) {
     return;
   }
 
+  // ★ ガチャ側リストも normalize
   const list = (data.xAccountList ?? []).map((s: string) =>
     normalizeX(s)
   );
 
-  const matched = list.some((entry: string) => entry === userX);
+  // ★ 部分一致（あなたの仕様）
+  const matched = list.some((entry: string) => entry.includes(userX));
 
   if (!matched) {
     setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます");
