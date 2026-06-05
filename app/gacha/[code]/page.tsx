@@ -210,38 +210,48 @@ export default function GachaDetailPage() {
       }
     }
 
-    /* --------------------------------------------------
-       Xアカウント一致
-    -------------------------------------------------- */
-    if (isXAccountMatch) {
-      if (!uid) {
-        setError("このガチャはXアカウント登録者のみ引けます");
-        setLoading(false);
-        return;
-      }
+/* --------------------------------------------------
+   Xアカウント一致
+-------------------------------------------------- */
+if (isXAccountMatch) {
+  if (!uid) {
+    setError("このガチャはXアカウント登録者のみ引けます");
+    setLoading(false);
+    return;
+  }
 
-      const userSnap = await getDoc(doc(db, "users", uid));
-      const user = userSnap.data();
-      const userX = (user?.xAccount ?? "").toLowerCase();
+  const userSnap = await getDoc(doc(db, "users", uid));
+  const user = userSnap.data();
 
-      if (!userX) {
-        setError("Xアカウントを登録していないため、このガチャは引けません");
-        setLoading(false);
-        return;
-      }
+  function normalizeX(x: string) {
+    return x
+      .trim()
+      .toLowerCase()
+      .replace(/^@+/, "")
+      .replace(/\s+/g, "");
+  }
 
-      const list = (data.xAccountList ?? []).map((s: string) =>
-        s.toLowerCase()
-      );
+  const userX = normalizeX(user?.xAccount ?? "");
 
-      const matched = list.some((entry: string) => entry.includes(userX));
+  if (!userX) {
+    setError("Xアカウントを登録していないため、このガチャは引けません");
+    setLoading(false);
+    return;
+  }
 
-      if (!matched) {
-        setError("このガチャは指定されたXアカウントのみ引けます");
-        setLoading(false);
-        return;
-      }
-    }
+  const list = (data.xAccountList ?? []).map((s: string) =>
+    normalizeX(s)
+  );
+
+  const matched = list.some((entry: string) => entry === userX);
+
+  if (!matched) {
+    setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます");
+    setLoading(false);
+    return;
+  }
+}
+
 
     /* --------------------------------------------------
        結果取得
