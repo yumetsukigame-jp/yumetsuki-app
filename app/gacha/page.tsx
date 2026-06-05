@@ -257,7 +257,7 @@ const checkCode = async () => {
     const matched = list.some((entry: string) => entry.includes(userX));
 
     if (!matched) {
-      setError("このガチャは指定されたXアカウントのみ引けます");
+      setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます");
       setLoading(false);
       return;
     }
