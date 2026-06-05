@@ -242,7 +242,7 @@ if (isXAccountMatch) {
     return;
   }
 
-  // ★ ガチャ側リストから「(@xxxx)」形式だけを抽出
+  // ★ ガチャ側リストから「@ を含む行」だけを抽出（名前行を除外）
   const rawList = (data.xAccountList ?? []).filter((s: string) =>
     s.includes("@")
   );
@@ -259,8 +259,6 @@ if (isXAccountMatch) {
     return;
   }
 }
-
-
 
 
     /* --------------------------------------------------
