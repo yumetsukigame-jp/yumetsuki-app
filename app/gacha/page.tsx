@@ -215,42 +215,59 @@ export default function GachaInner() {
       }
     }
 
-    /* --------------------------------------------------
-       Xアカウント一致
-    -------------------------------------------------- */
-    if (isXAccountMatch) {
-      if (!userUid) {
-        setError("このガチャはXアカウント登録者のみ引けます");
-        setLoading(false);
-        return;
-      }
-
-      const userSnap = await getDoc(doc(db, "users", userUid));
-      const user = userSnap.data();
-      const userX = (user?.xAccount ?? "").toLowerCase();
-
-      if (!userX) {
-        setError("Xアカウントを登録していないため、このガチャは引けません");
-        setLoading(false);
-        return;
-      }
-
-      const list = (data.xAccountList ?? []).map((s: string) =>
-        s.toLowerCase()
-      );
-
-      const matched = list.some((entry: string) => entry.includes(userX));
-
-      if (!matched) {
-        setError("このガチャは指定されたXアカウントのみ引けます");
-        setLoading(false);
-        return;
-      }
-    }
-
-    setGacha(data);
+/* --------------------------------------------------
+   Xアカウント一致
+-------------------------------------------------- */
+if (isXAccountMatch) {
+  if (!userUid) {
+    setError("このガチャはXアカウント登録者のみ引けます");
     setLoading(false);
-  };
+    return;
+  }
+
+  const userSnap = await getDoc(doc(db, "users", userUid));
+  const user = userSnap.data();
+
+  // ★ 最強 normalize（不可視文字・全角カッコ・全角@・改行すべて除去）
+  function normalizeX(x: string) {
+    return x
+      .toLowerCase()
+      .replace(/[\s\r\n\t]+/g, "")              // 改行・空白・タブ
+      .replace(/[()（）【】［］]/g, "")         // 全角・半角カッコ類
+      .replace(/[@＠]/g, "")                    // 全角・半角 @
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")    // ゼロ幅スペース類
+      .replace(/[^\x20-\x7E]/g, "");            // その他不可視文字
+  }
+
+  const userX = normalizeX(user?.xAccount ?? "");
+
+  if (!userX) {
+    setError("Xアカウントを登録していないため、このガチャは引けません");
+    setLoading(false);
+    return;
+  }
+
+  // ★ ガチャ側リストから「@ を含む行」だけを抽出（名前行を除外）
+  const rawList = (data.xAccountList ?? []).filter((s: string) =>
+    s.includes("@")
+  );
+
+  // ★ normalize
+  const list = rawList.map((s: string) => normalizeX(s));
+
+  // ★ 部分一致（あなたの仕様）
+  const matched = list.some((entry: string) => entry.includes(userX));
+
+  if (!matched) {
+    setError("このガチャは指定されたXアカウントのみ引けます");
+    setLoading(false);
+    return;
+  }
+}
+
+setGacha(data);
+setLoading(false);
+
 
   /* --------------------------------------------------
      ★ ガチャ実行（連打防止付き）
