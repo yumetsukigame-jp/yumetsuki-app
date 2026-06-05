@@ -242,10 +242,13 @@ if (isXAccountMatch) {
     return;
   }
 
-  // ★ ガチャ側リストも normalize
-  const list = (data.xAccountList ?? []).map((s: string) =>
-    normalizeX(s)
+  // ★ ガチャ側リストから「(@xxxx)」形式だけを抽出
+  const rawList = (data.xAccountList ?? []).filter((s: string) =>
+    s.includes("@")
   );
+
+  // ★ normalize
+  const list = rawList.map((s: string) => normalizeX(s));
 
   // ★ 部分一致（あなたの仕様）
   const matched = list.some((entry: string) => entry.includes(userX));
@@ -256,6 +259,7 @@ if (isXAccountMatch) {
     return;
   }
 }
+
 
 
 
