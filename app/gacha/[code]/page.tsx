@@ -223,13 +223,15 @@ if (isXAccountMatch) {
   const userSnap = await getDoc(doc(db, "users", uid));
   const user = userSnap.data();
 
-  // ★ Xアカウント正規化（部分一致を正しく行うため必須）
+  // ★ 最強 normalize（不可視文字・全角カッコ・全角@・改行すべて除去）
   function normalizeX(x: string) {
     return x
-      .trim()
       .toLowerCase()
-      .replace(/^@+/, "")   // 先頭の @ を削除
-      .replace(/\s+/g, ""); // 空白除去
+      .replace(/[\s\r\n\t]+/g, "")              // 改行・空白・タブ
+      .replace(/[()（）【】［］]/g, "")         // 全角・半角カッコ類
+      .replace(/[@＠]/g, "")                    // 全角・半角 @
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")    // ゼロ幅スペース類
+      .replace(/[^\x20-\x7E]/g, "");            // その他不可視文字
   }
 
   const userX = normalizeX(user?.xAccount ?? "");
@@ -254,6 +256,7 @@ if (isXAccountMatch) {
     return;
   }
 }
+
 
 
     /* --------------------------------------------------
