@@ -112,158 +112,161 @@ export default function GachaInner() {
   /* --------------------------------------------------
      ガチャコード確認（Auth 初期化後にのみ実行）
   -------------------------------------------------- */
-  const checkCode = async () => {
-    setError("");
-    setGacha(null);
-    setResult(null);
+const checkCode = async () => {
+  setError("");
+  setGacha(null);
+  setResult(null);
 
-    if (!code.trim()) {
-      setError("コードを入力してください");
-      return;
-    }
+  if (!code.trim()) {
+    setError("コードを入力してください");
+    return;
+  }
 
-    if (!authReady) {
-      setError("ログイン状態を確認中です。少し待ってください。");
-      return;
-    }
+  if (!authReady) {
+    setError("ログイン状態を確認中です。少し待ってください。");
+    return;
+  }
 
-    const userUid = uid;
+  const userUid = uid;
 
-    setLoading(true);
+  setLoading(true);
 
-    const snap = await getDoc(doc(db, "gachaCodes", code.trim()));
+  const snap = await getDoc(doc(db, "gachaCodes", code.trim()));
 
-    if (!snap.exists()) {
-      setError("ガチャが存在しません");
+  if (!snap.exists()) {
+    setError("ガチャが存在しません");
+    setLoading(false);
+    return;
+  }
+
+  const data = snap.data();
+  const flags: string[] = data.publicFlags ?? [];
+
+  const isPublic = flags.includes("public");
+  const isSubscriberOnly = flags.includes("subscriber");
+  const isWinnerOnly = flags.includes("nibuichi_winner");
+  const isXAccountMatch = flags.includes("x_account_match");
+
+  /* --------------------------------------------------
+     公開設定
+  -------------------------------------------------- */
+  if (!isPublic && !userUid) {
+    setError("このガチャは限定公開です（ログインが必要です）");
+    setLoading(false);
+    return;
+  }
+
+  /* --------------------------------------------------
+     サブスク限定
+  -------------------------------------------------- */
+  if (isSubscriberOnly) {
+    if (!userUid) {
+      setError("このガチャはサブスク会員限定です");
       setLoading(false);
       return;
     }
 
-    const data = snap.data();
-    const flags: string[] = data.publicFlags ?? [];
+    const userSnap = await getDoc(doc(db, "users", userUid));
+    const user = userSnap.data();
 
-    const isPublic = flags.includes("public");
-    const isSubscriberOnly = flags.includes("subscriber");
-    const isWinnerOnly = flags.includes("nibuichi_winner");
-    const isXAccountMatch = flags.includes("x_account_match");
+    if (!user?.subscriber) {
+      setError("このガチャはサブスク会員限定です");
+      setLoading(false);
+      return;
+    }
+  }
 
-    /* --------------------------------------------------
-       公開設定
-    -------------------------------------------------- */
-    if (!isPublic && !userUid) {
-      setError("このガチャは限定公開です（ログインが必要です）");
+  /* --------------------------------------------------
+     前日的中者限定
+  -------------------------------------------------- */
+  if (isWinnerOnly) {
+    if (!userUid) {
+      setError("このガチャは前日のニブイチ的中者限定です");
       setLoading(false);
       return;
     }
 
-    /* --------------------------------------------------
-       サブスク限定
-    -------------------------------------------------- */
-    if (isSubscriberOnly) {
-      if (!userUid) {
-        setError("このガチャはサブスク会員限定です");
-        setLoading(false);
-        return;
-      }
+    const prevDay = getYesterdayJST6();
 
-      const userSnap = await getDoc(doc(db, "users", userUid));
-      const user = userSnap.data();
+    const predRef = doc(
+      db,
+      "nibuichi_daily",
+      prevDay,
+      "predictions",
+      userUid
+    );
+    const predSnap = await getDoc(predRef);
 
-      if (!user?.subscriber) {
-        setError("このガチャはサブスク会員限定です");
-        setLoading(false);
-        return;
-      }
-    }
-
-    /* --------------------------------------------------
-       前日的中者限定（Functions と同じ日付ロジック）
-    -------------------------------------------------- */
-    if (isWinnerOnly) {
-      if (!userUid) {
-        setError("このガチャは前日のニブイチ的中者限定です");
-        setLoading(false);
-        return;
-      }
-
-      const prevDay = getYesterdayJST6();
-
-      const predRef = doc(
-        db,
-        "nibuichi_daily",
-        prevDay,
-        "predictions",
-        userUid
+    if (!predSnap.exists()) {
+      setError(
+        `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
       );
-      const predSnap = await getDoc(predRef);
-
-      if (!predSnap.exists()) {
-        setError(
-          `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
-        );
-        setLoading(false);
-        return;
-      }
-
-      const prediction = predSnap.data().prediction;
-      const result = predSnap.data().result;
-
-      if (prediction !== result) {
-        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
-        setLoading(false);
-        return;
-      }
+      setLoading(false);
+      return;
     }
 
-/* --------------------------------------------------
-   Xアカウント一致
--------------------------------------------------- */
-if (isXAccountMatch) {
-  if (!userUid) {
-    setError("このガチャはXアカウント登録者のみ引けます");
-    setLoading(false);
-    return;
+    const prediction = predSnap.data().prediction;
+    const result = predSnap.data().result;
+
+    if (prediction !== result) {
+      setError("このガチャは前日のニブイチ的中者限定です（不的中）");
+      setLoading(false);
+      return;
+    }
   }
 
-  const userSnap = await getDoc(doc(db, "users", userUid));
-  const user = userSnap.data();
+  /* --------------------------------------------------
+     Xアカウント一致
+  -------------------------------------------------- */
+  if (isXAccountMatch) {
+    if (!userUid) {
+      setError("このガチャはXアカウント登録者のみ引けます");
+      setLoading(false);
+      return;
+    }
 
-  // ★ 最強 normalize（不可視文字・全角カッコ・全角@・改行すべて除去）
-  function normalizeX(x: string) {
-    return x
-      .toLowerCase()
-      .replace(/[\s\r\n\t]+/g, "")              // 改行・空白・タブ
-      .replace(/[()（）【】［］]/g, "")         // 全角・半角カッコ類
-      .replace(/[@＠]/g, "")                    // 全角・半角 @
-      .replace(/[\u200B-\u200D\uFEFF]/g, "")    // ゼロ幅スペース類
-      .replace(/[^\x20-\x7E]/g, "");            // その他不可視文字
+    const userSnap = await getDoc(doc(db, "users", userUid));
+    const user = userSnap.data();
+
+    // ★ 最強 normalize
+    function normalizeX(x: string) {
+      return x
+        .toLowerCase()
+        .replace(/[\s\r\n\t]+/g, "")
+        .replace(/[()（）【】［］]/g, "")
+        .replace(/[@＠]/g, "")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/[^\x20-\x7E]/g, "");
+    }
+
+    const userX = normalizeX(user?.xAccount ?? "");
+
+    if (!userX) {
+      setError("Xアカウントを登録していないため、このガチャは引けません");
+      setLoading(false);
+      return;
+    }
+
+    // ★ 名前行を除外
+    const rawList = (data.xAccountList ?? []).filter((s: string) =>
+      s.includes("@")
+    );
+
+    const list = rawList.map((s: string) => normalizeX(s));
+
+    const matched = list.some((entry: string) => entry.includes(userX));
+
+    if (!matched) {
+      setError("このガチャは指定されたXアカウントのみ引けます");
+      setLoading(false);
+      return;
+    }
   }
 
-  const userX = normalizeX(user?.xAccount ?? "");
+  setGacha(data);
+  setLoading(false);
+};
 
-  if (!userX) {
-    setError("Xアカウントを登録していないため、このガチャは引けません");
-    setLoading(false);
-    return;
-  }
-
-  // ★ ガチャ側リストから「@ を含む行」だけを抽出（名前行を除外）
-  const rawList = (data.xAccountList ?? []).filter((s: string) =>
-    s.includes("@")
-  );
-
-  // ★ normalize
-  const list = rawList.map((s: string) => normalizeX(s));
-
-  // ★ 部分一致（あなたの仕様）
-  const matched = list.some((entry: string) => entry.includes(userX));
-
-  if (!matched) {
-    setError("このガチャは指定されたXアカウントのみ引けます");
-    setLoading(false);
-    return;
-  }
-}
 
   /* --------------------------------------------------
      ★ ガチャ実行（連打防止付き）
