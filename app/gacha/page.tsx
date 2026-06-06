@@ -199,7 +199,7 @@ const checkCode = async () => {
 
     if (!predSnap.exists()) {
       setError(
-        `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
+        `このガチャは前日のニブイチ的中者限定です（予想なし）(※日付更新は6-9時の間です。)\n参照日付: ${prevDay}`
       );
       setLoading(false);
       return;
@@ -209,7 +209,7 @@ const checkCode = async () => {
     const result = predSnap.data().result;
 
     if (prediction !== result) {
-      setError("このガチャは前日のニブイチ的中者限定です（不的中）");
+      setError("このガチャは前日のニブイチ的中者限定です（不的中）(※日付更新は6-9時の間です。)");
       setLoading(false);
       return;
     }

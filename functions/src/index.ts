@@ -236,28 +236,47 @@ export const useGachaCode = functions
         }
       }
 
-      if (flags.includes("x_account_match")) {
-        const userRef = db.collection("users").doc(uid);
-        const userSnap = await userRef.get();
-        const userData = userSnap.data();
-        const userX = (userData?.xAccount ?? "").toLowerCase();
-        if (!userX) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "このガチャはXアカウント登録者のみ引けます"
-          );
-        }
-        const list = (gacha.xAccountList ?? []).map((s: string) =>
-          s.toLowerCase()
-        );
-        const matched = list.some((entry: string) => entry.includes(userX));
-        if (!matched) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "このガチャは指定されたXアカウントのみ引けます"
-          );
-        }
-      }
+if (flags.includes("x_account_match")) {
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data();
+
+  // ★ 最強 normalize（フロントと完全一致）
+  function normalizeX(x: string) {
+    return (x ?? "")
+      .toLowerCase()
+      .replace(/[\s\r\n\t]+/g, "")              // 改行・空白・タブ
+      .replace(/[()（）【】［］]/g, "")         // 全角・半角カッコ類
+      .replace(/[@＠]/g, "")                    // 全角・半角 @
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")    // ゼロ幅スペース類
+      .replace(/[^\x20-\x7E]/g, "");            // その他不可視文字
+  }
+
+  const userX = normalizeX(userData?.xAccount);
+
+  if (!userX) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "このガチャはXアカウント登録者のみ引けます"
+    );
+  }
+
+  // ★ 名前行を除外（@ を含む行だけ）
+  const rawList = (gacha.xAccountList ?? []).filter((s: string) =>
+    s.includes("@")
+  );
+
+  const list = rawList.map((s: string) => normalizeX(s));
+
+  const matched = list.some((entry: string) => entry.includes(userX));
+
+  if (!matched) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます"
+    );
+  }
+}
 
       /* ======== ポイント・回数チェック ======== */
 

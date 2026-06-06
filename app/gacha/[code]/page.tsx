@@ -196,7 +196,7 @@ export default function GachaDetailPage() {
 
       if (!predSnap.exists()) {
         setError(
-          `このガチャは前日のニブイチ的中者限定です（予想なし）\n参照日付: ${prevDay}`
+          `このガチャは前日のニブイチ的中者限定です（予想なし）(※日付更新は6-9時の間です。)\n参照日付: ${prevDay}`
         );
         setLoading(false);
         return;
@@ -204,7 +204,7 @@ export default function GachaDetailPage() {
 
       const pdata = predSnap.data();
       if (pdata.prediction !== pdata.result) {
-        setError("このガチャは前日のニブイチ的中者限定です（不的中）");
+        setError("このガチャは前日のニブイチ的中者限定です（不的中）(※日付更新は6-9時の間です。)");
         setLoading(false);
         return;
       }
