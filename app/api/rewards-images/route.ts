@@ -1,4 +1,4 @@
-export const runtime = "nodejs-compat";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { getStorage } from "firebase-admin/storage";
