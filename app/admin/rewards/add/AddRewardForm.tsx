@@ -1,17 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-export default function AddRewardForm({ images }) {
+export default function AddRewardForm() {
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [cost, setCost] = useState(0);
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
+  const [images, setImages] = useState<any[]>([]);
+
+  // Firestore から rewards フォルダの画像一覧を取得
+  useEffect(() => {
+    const load = async () => {
+      const snap = await getDocs(collection(db, "imageMeta"));
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((d) => d.folder === "rewards");
+
+      setImages(list);
+    };
+
+    load();
+  }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -27,7 +42,7 @@ export default function AddRewardForm({ images }) {
       name,
       cost,
       stock,
-      image, // ← フルパスをそのまま保存
+      image, // Firestore の URL をそのまま保存
     });
 
     alert("追加しました！");
@@ -86,11 +101,11 @@ export default function AddRewardForm({ images }) {
           >
             {images.map((img) => (
               <div
-                key={img}
-                onClick={() => setImage(img)}
+                key={img.url}
+                onClick={() => setImage(img.url)}
                 style={{
                   border:
-                    image === img
+                    image === img.url
                       ? "3px solid #4f46e5"
                       : "1px solid #ccc",
                   padding: "5px",
@@ -99,8 +114,8 @@ export default function AddRewardForm({ images }) {
                 }}
               >
                 <img
-                  src={img} // ← 修正ポイント（フルパスをそのまま使う）
-                  alt={img}
+                  src={img.url}
+                  alt={img.prefix}
                   width={100}
                   style={{ borderRadius: "6px" }}
                 />
