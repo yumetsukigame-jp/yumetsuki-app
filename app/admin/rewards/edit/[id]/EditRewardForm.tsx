@@ -37,18 +37,30 @@ export default function EditRewardForm({ id }) {
   // Firestore から reward データを取得（AdminRewardsPage と同じ方式）
   useEffect(() => {
     const fetchReward = async () => {
+      if (!id) {
+        console.log("ID が undefined です");
+        setLoading(false);
+        return;
+      }
+
       const snap = await getDocs(collection(db, "rewards"));
       const list = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       }));
 
-      const target = list.find((r) => r.id === id);
+      const target = list.find(
+        (r) => r.id.normalize("NFC") === id.normalize("NFC")
+      );
+
+      console.log("URL id:", id);
+      console.log("Firestore IDs:", list.map((r) => r.id));
+      console.log("target:", target);
 
       if (target) {
         setName(target.name);
         setCost(target.cost);
-        setImage(target.image); // ← フルURL
+        setImage(target.image);
         setStock(target.stock ?? 0);
       }
 
@@ -65,7 +77,7 @@ export default function EditRewardForm({ id }) {
       name,
       cost,
       stock,
-      image, // ← フルURLをそのまま保存
+      image,
     });
 
     alert("更新しました！");
