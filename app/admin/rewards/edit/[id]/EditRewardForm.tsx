@@ -56,7 +56,7 @@ export default function EditRewardForm({ id }) {
       name,
       cost,
       stock,
-      image, // ← Firestore の URL をそのまま保存
+      image, // ← フル URL をそのまま保存
     });
 
     alert("更新しました！");
