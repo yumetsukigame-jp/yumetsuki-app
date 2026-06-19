@@ -1,7 +1,7 @@
 import EditRewardForm from "./EditRewardForm";
 
 export default function EditRewardPage({ params }) {
-  const { id } = params; // Next.js 16 では await 不要
+  const id = params?.id; // ← これが重要
 
   return <EditRewardForm id={id} />;
 }
