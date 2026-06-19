@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../../../firebase";
-import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import {
+  doc,
+  updateDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function EditRewardForm({ id }) {
@@ -29,18 +34,22 @@ export default function EditRewardForm({ id }) {
     loadImages();
   }, []);
 
-  // Firestore から reward データを取得
+  // Firestore から reward データを取得（AdminRewardsPage と同じ方式）
   useEffect(() => {
     const fetchReward = async () => {
-      const ref = doc(db, "rewards", id);
-      const snap = await getDoc(ref);
+      const snap = await getDocs(collection(db, "rewards"));
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
-      if (snap.exists()) {
-        const data = snap.data();
-        setName(data.name);
-        setCost(data.cost);
-        setImage(data.image); // ← フル URL をそのままセット
-        setStock(data.stock ?? 0);
+      const target = list.find((r) => r.id === id);
+
+      if (target) {
+        setName(target.name);
+        setCost(target.cost);
+        setImage(target.image); // ← フルURL
+        setStock(target.stock ?? 0);
       }
 
       setLoading(false);
@@ -56,7 +65,7 @@ export default function EditRewardForm({ id }) {
       name,
       cost,
       stock,
-      image, // ← フル URL をそのまま保存
+      image, // ← フルURLをそのまま保存
     });
 
     alert("更新しました！");
