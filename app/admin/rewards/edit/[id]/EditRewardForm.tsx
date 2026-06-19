@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../../../firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-export default function EditRewardForm({ id, images }) {
+export default function EditRewardForm({ id }) {
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -13,7 +13,23 @@ export default function EditRewardForm({ id, images }) {
   const [image, setImage] = useState("");
   const [stock, setStock] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [images, setImages] = useState<any[]>([]);
 
+  // Firestore から rewards フォルダの画像一覧を取得
+  useEffect(() => {
+    const loadImages = async () => {
+      const snap = await getDocs(collection(db, "imageMeta"));
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((d) => d.folder === "rewards");
+
+      setImages(list);
+    };
+
+    loadImages();
+  }, []);
+
+  // Firestore から reward データを取得
   useEffect(() => {
     const fetchReward = async () => {
       const ref = doc(db, "rewards", id);
@@ -23,7 +39,7 @@ export default function EditRewardForm({ id, images }) {
         const data = snap.data();
         setName(data.name);
         setCost(data.cost);
-        setImage(data.image.replace("/rewards/", ""));
+        setImage(data.image); // ← フル URL をそのままセット
         setStock(data.stock ?? 0);
       }
 
@@ -40,7 +56,7 @@ export default function EditRewardForm({ id, images }) {
       name,
       cost,
       stock,
-      image: `/rewards/${image}`,
+      image, // ← Firestore の URL をそのまま保存
     });
 
     alert("更新しました！");
@@ -101,11 +117,11 @@ export default function EditRewardForm({ id, images }) {
           >
             {images.map((img) => (
               <div
-                key={img}
-                onClick={() => setImage(img)}
+                key={img.url}
+                onClick={() => setImage(img.url)}
                 style={{
                   border:
-                    image === img
+                    image === img.url
                       ? "3px solid #4f46e5"
                       : "1px solid #ccc",
                   padding: "5px",
@@ -114,8 +130,8 @@ export default function EditRewardForm({ id, images }) {
                 }}
               >
                 <img
-                  src={`/rewards/${img}`}
-                  alt={img}
+                  src={img.url}
+                  alt={img.prefix}
                   width={100}
                   style={{ borderRadius: "6px" }}
                 />
