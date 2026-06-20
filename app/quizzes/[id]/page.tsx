@@ -13,7 +13,6 @@ import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function QuizDetailPage({ params }) {
-  // ★ Next.js 15+ では params は Promise → unwrap 必須
   const { id: quizId } = React.use(params);
 
   const [uid, setUid] = useState<string | null>(null);
@@ -28,6 +27,8 @@ export default function QuizDetailPage({ params }) {
   const [answers, setAnswers] = useState<any[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
   const [open, setOpen] = useState(false);
+
+  const [detailOpen, setDetailOpen] = useState(false); // ★ 山分けポイント＋ハッシュ折りたたみ
 
   /* --------------------------------------------------
      Auth 初期化
@@ -94,7 +95,7 @@ export default function QuizDetailPage({ params }) {
   };
 
   /* --------------------------------------------------
-     回答一覧読み込み（★ displayName + xAccount 対応）
+     回答一覧読み込み（displayName + xAccount）
   -------------------------------------------------- */
   const loadAnswers = async () => {
     setAnswersLoading(true);
@@ -109,7 +110,6 @@ export default function QuizDetailPage({ params }) {
       const uid = d.id;
       const ans = d.data();
 
-      // ★ users コレクションからユーザー情報を取得
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
@@ -191,26 +191,66 @@ export default function QuizDetailPage({ params }) {
       <h2 style={{ fontSize: 20, marginBottom: 10 }}>問題</h2>
       <p style={{ marginBottom: 20 }}>{quiz.question}</p>
 
-      {/* thread 表示（salt は非公開） */}
+      {/* ▼ 山分けポイント（参加価値） */}
       <div
         style={{
-          marginTop: 16,
           padding: 12,
-          background: "#f3f4f6",
+          background: "#eef2ff",
           borderRadius: 8,
+          marginBottom: 16,
         }}
       >
-        <h4 style={{ marginBottom: 8 }}>改ざん防止ハッシュ（thread）</h4>
-        <p style={{ fontSize: 14, wordBreak: "break-all" }}>
-          {quiz.thread}
-        </p>
-
-        <p style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
-          ※ 正解確定前のため salt は非公開です。
-        </p>
+        <strong>このクイズの山分けポイント：</strong>
+        {quiz.rewardPoint} pt
       </div>
 
-      {/* 回答前 */}
+      {/* ▼ 詳細（山分けポイント＋ハッシュ）折りたたみ */}
+      <button
+        onClick={() => setDetailOpen(!detailOpen)}
+        style={{
+          padding: "8px 12px",
+          background: "#4f46e5",
+          color: "white",
+          borderRadius: 6,
+          border: "none",
+          cursor: "pointer",
+          marginBottom: 12,
+        }}
+      >
+        {detailOpen ? "詳細を閉じる" : "詳細（山分けポイント・ハッシュ）"}
+      </button>
+
+      {detailOpen && (
+        <div
+          style={{
+            padding: 12,
+            background: "#f3f4f6",
+            borderRadius: 8,
+            marginBottom: 20,
+          }}
+        >
+          <p><strong>山分けポイント：</strong>{quiz.rewardPoint} pt</p>
+
+          <h4 style={{ marginTop: 12 }}>改ざん防止ハッシュ（thread）</h4>
+          <p style={{ fontSize: 14, wordBreak: "break-all" }}>
+            {quiz.thread}
+          </p>
+
+          {!quiz.archived && (
+            <p style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
+              ※ 正解確定前のため salt は非公開です。
+            </p>
+          )}
+
+          {quiz.archived && (
+            <>
+              <p><strong>salt：</strong>{quiz.salt}</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ▼ 回答前 */}
       {!submitted && (
         <div>
           <input
@@ -243,12 +283,11 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* 回答後 */}
+      {/* ▼ 回答後 */}
       {submitted && (
         <div style={{ marginTop: 20 }}>
           <h3>あなたの回答：{myAnswer}</h3>
 
-          {/* ★ 正解は「確定後（＝アーカイブ後）」にしか表示しない */}
           {quiz.archived && quiz.answer && (
             <div style={{ marginTop: 20 }}>
               <h3>正解：{quiz.answer}</h3>
