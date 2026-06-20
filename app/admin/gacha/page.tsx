@@ -2,20 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/firebase";
+import { functions, db } from "@/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 type Mode = "count" | "prob";
 type ResetType = "none" | "daily";
 
-// ★ 公開設定の型（複数選択）
 type PublicFlag =
   | "public"
   | "limited"
   | "subscriber"
   | "nibuichi_winner"
-  | "x_account_match"; // ★ 追加
+  | "x_account_match";
 
-// ★ 発送ON/OFFを追加
 type FrameInput = {
   label: string;
   maxCount: number | "";
@@ -31,7 +30,6 @@ export default function GachaCreatePage() {
   const [resetType, setResetType] = useState<ResetType>("none");
 
   const [totalCount, setTotalCount] = useState<number | "">("");
-
   const [frames, setFrames] = useState<FrameInput[]>([
     { label: "A", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
     { label: "B", maxCount: "", probability: "", rewardMin: "", rewardMax: "", shippingEnabled: false },
@@ -39,12 +37,9 @@ export default function GachaCreatePage() {
 
   const [cost, setCost] = useState<number | "">(0);
   const [maxPerUser, setMaxPerUser] = useState<number | "">(1);
-  const [expiresAt, setExpiresAt] = useState<string>("");
+  const [expiresAt, setExpiresAt] = useState("");
 
-  // ★ publicFlags（複数選択）
   const [publicFlags, setPublicFlags] = useState<PublicFlag[]>(["public"]);
-
-  // ★ Xアカウント貼り付けテキスト（長文OK）
   const [xAccountText, setXAccountText] = useState("");
 
   const [thumbnail, setThumbnail] = useState<string>("");
@@ -53,11 +48,19 @@ export default function GachaCreatePage() {
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
 
+  // ★ Firebase Storage の画像一覧を Firestore から取得
   useEffect(() => {
-    fetch("/gacha/images.json")
-      .then((res) => res.json())
-      .then((data) => setGachaImages(data))
-      .catch(() => setGachaImages([]));
+    const load = async () => {
+      const snap = await getDocs(collection(db, "imageMeta"));
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((d) => d.folder === "gacha");
+
+      // URL の配列に変換
+      setGachaImages(list.map((d) => d.url));
+    };
+
+    load();
   }, []);
 
   const toggleFlag = (flag: PublicFlag) => {
@@ -165,7 +168,7 @@ export default function GachaCreatePage() {
         mode: mode === "prob" ? "probability" : "count",
         resetType,
         publicFlags,
-        thumbnail,
+        thumbnail, // ← ★ Firebase Storage URL を送信
         point: {
           cost: Number(cost),
           maxPerUser: Number(maxPerUser),
@@ -189,7 +192,6 @@ export default function GachaCreatePage() {
 
         expiresAt,
 
-        // ★ Xアカウント貼り付けテキスト → 配列化して送信
         xAccountList: xAccountText
           .split("\n")
           .map((s) => s.trim())
@@ -268,7 +270,6 @@ export default function GachaCreatePage() {
             前日のニブイチ的中者限定
           </label>
 
-          {/* ★ Xアカウント一致 */}
           <label style={{ marginLeft: 16 }}>
             <input
               type="checkbox"
@@ -284,11 +285,7 @@ export default function GachaCreatePage() {
           <div style={boxStyle}>
             <div style={labelStyle}>Xアカウント一覧（長文貼り付けOK）</div>
             <textarea
-              placeholder={`長文貼り付けOK（貼り付けテキストの中にユーザーのXアカウントが含まれていれば一致）
-例：
-123aaa546
-bbb_xyz
-ccc-999`}
+              placeholder={`長文貼り付けOK`}
               value={xAccountText}
               onChange={(e) => setXAccountText(e.target.value)}
               style={{ ...inputStyle, height: 160, whiteSpace: "pre-wrap" }}
@@ -338,16 +335,16 @@ ccc-999`}
           </label>
         </div>
 
-        {/* サムネイル */}
+        {/* サムネイル画像 */}
         <div style={boxStyle}>
           <div style={labelStyle}>サムネイル画像</div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {gachaImages.map((img) => (
+            {gachaImages.map((url) => (
               <img
-                key={img}
-                src={`/gacha/${img}`}
-                onClick={() => setThumbnail(img)}
+                key={url}
+                src={url}
+                onClick={() => setThumbnail(url)}
                 style={{
                   width: 80,
                   height: 80,
@@ -355,7 +352,9 @@ ccc-999`}
                   borderRadius: 8,
                   cursor: "pointer",
                   border:
-                    thumbnail === img ? "3px solid #2563eb" : "1px solid #ccc",
+                    thumbnail === url
+                      ? "3px solid #2563eb"
+                      : "1px solid #ccc",
                 }}
               />
             ))}
