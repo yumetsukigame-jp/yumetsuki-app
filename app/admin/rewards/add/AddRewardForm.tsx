@@ -5,6 +5,14 @@ import { db } from "../../../../firebase";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
+// 日本語を含む名前から英数字だけのIDを生成する関数
+function generateIdFromName(name: string) {
+  return name
+    .normalize("NFKD")              // 全角 → 半角
+    .replace(/[^\w]/g, "")          // 英数字と _ 以外を削除
+    .toLowerCase();                 // 小文字化
+}
+
 export default function AddRewardForm() {
   const router = useRouter();
 
@@ -36,13 +44,19 @@ export default function AddRewardForm() {
       return;
     }
 
-    const id = name.toLowerCase().replace(/\s+/g, "-");
+    // 日本語名 → 英数字IDへ変換
+    const id = generateIdFromName(name);
+
+    if (!id) {
+      alert("英数字のIDを生成できませんでした。別の名前を試してください。");
+      return;
+    }
 
     await setDoc(doc(db, "rewards", id), {
       name,
-      cost,
-      stock,
-      image, // Firestore の URL をそのまま保存
+      cost: Number(cost),
+      stock: Number(stock),
+      image,
     });
 
     alert("追加しました！");
@@ -60,7 +74,7 @@ export default function AddRewardForm() {
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
         <div>
-          <label>名前</label>
+          <label>名前（日本語OK）</label>
           <input
             type="text"
             value={name}
