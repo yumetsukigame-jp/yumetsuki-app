@@ -9,6 +9,8 @@ export default function QuizListPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({}); // ★ ハッシュ折りたたみ
+
   const fetchQuizzes = async () => {
     const snap = await getDocs(collection(db, "quizzes"));
     const list = snap.docs.map((d) => ({
@@ -25,13 +27,17 @@ export default function QuizListPage() {
     fetchQuizzes();
   }, []);
 
+  const toggleOpen = (id: string) => {
+    setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, marginBottom: 20 }}>ゆめつきクイズ</h1>
 
-      {/* ★ 完了済みクイズへのリンク（元のまま） */}
+      {/* ★ 完了済みクイズへのリンク */}
       <Link
         href="/quizzes/archive"
         style={{
@@ -48,59 +54,93 @@ export default function QuizListPage() {
       </Link>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        {quizzes.map((q) => (
-          <div
-            key={q.id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 8,
-              padding: 16,
-            }}
-          >
-            {/* クイズカード全体をリンクに */}
-            <Link
-              href={`/quizzes/${q.id}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                textDecoration: "none",
-                color: "inherit",
-              }}
-            >
-              <img
-                src={q.thumbnail}
-                alt={q.title}
-                style={{ width: 80, height: 80, objectFit: "cover" }}
-              />
+        {quizzes.map((q) => {
+          const isOpen = openMap[q.id] ?? false;
 
-              <div style={{ flex: 1 }}>
-                <h2 style={{ fontSize: 20 }}>{q.title}</h2>
-                <p style={{ color: "#555" }}>回答回数：{q.maxAnswers}</p>
-              </div>
-            </Link>
-
-            {/* ★ 改ざん防止ハッシュ（thread のみ） */}
+          return (
             <div
+              key={q.id}
               style={{
-                marginTop: 16,
-                padding: 12,
-                background: "#f3f4f6",
+                border: "1px solid #ddd",
                 borderRadius: 8,
+                padding: 16,
               }}
             >
-              <h4 style={{ marginBottom: 8 }}>改ざん防止ハッシュ（thread）</h4>
-              <p style={{ fontSize: 14, wordBreak: "break-all" }}>
-                {q.thread}
-              </p>
+              {/* クイズカード全体をリンクに */}
+              <Link
+                href={`/quizzes/${q.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  textDecoration: "none",
+                  color: "inherit",
+                }}
+              >
+                <img
+                  src={q.thumbnail}
+                  alt={q.title}
+                  style={{ width: 80, height: 80, objectFit: "cover" }}
+                />
 
-              <p style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
-                ※ 正解確定前のため salt は非公開です。
-              </p>
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ fontSize: 20 }}>{q.title}</h2>
+
+                  {/* ★ 山分け前ポイント表示 */}
+                  <p style={{ color: "#444", marginTop: 4 }}>
+                    山分けポイント：<strong>{q.rewardPoint} pt</strong>
+                  </p>
+
+                  <p style={{ color: "#555" }}>回答回数：{q.maxAnswers}</p>
+                </div>
+              </Link>
+
+              {/* ▼ ハッシュ折りたたみ */}
+              <button
+                onClick={() => toggleOpen(q.id)}
+                style={{
+                  marginTop: 12,
+                  padding: "6px 10px",
+                  background: "#4f46e5",
+                  color: "white",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                {isOpen ? "ハッシュを閉じる" : "ハッシュを見る"}
+              </button>
+
+              {isOpen && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    background: "#f3f4f6",
+                    borderRadius: 8,
+                  }}
+                >
+                  <h4 style={{ marginBottom: 8 }}>改ざん防止ハッシュ（thread）</h4>
+                  <p style={{ fontSize: 14, wordBreak: "break-all" }}>
+                    {q.thread}
+                  </p>
+
+                  <p style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
+                    ※ 正解確定前のため salt は非公開です。
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* ▼ ハッシュ値の注釈（一覧ページ下部） */}
+      <p style={{ marginTop: 30, fontSize: 13, color: "#555" }}>
+        ※ thread（改ざん防止ハッシュ）は、クイズの正解と salt を組み合わせて  
+        SHA-256 でハッシュ化した値です。  
+        運営側が後から正解を変更していないことを、誰でも確認できます。
+      </p>
     </div>
   );
 }
