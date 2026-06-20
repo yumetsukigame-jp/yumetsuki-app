@@ -336,6 +336,13 @@ export default function QuizDetailPage({ params }) {
                       ：{a.answer}
                     </div>
                   ))}
+
+                  {/* ▼ ハッシュ値の注釈 */}
+                  <p style={{ marginTop: 20, fontSize: 13, color: "#555" }}>
+                    ※ thread（改ざん防止ハッシュ）は、クイズの正解と salt を組み合わせて  
+                    SHA-256 でハッシュ化した値です。  
+                    運営側が後から正解を変更していないことを、誰でも確認できます。
+                  </p>
                 </div>
               )}
             </div>
