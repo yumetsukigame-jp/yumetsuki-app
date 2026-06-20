@@ -27,7 +27,7 @@ export default function AddRewardForm() {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  the [cost, setCost] = useState(0);
+  const [cost, setCost] = useState(0);   // ← 修正済み（the → const）
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
   const [images, setImages] = useState<any[]>([]);
