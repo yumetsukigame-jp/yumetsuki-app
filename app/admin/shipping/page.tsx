@@ -9,6 +9,8 @@ import {
   updateDoc,
   addDoc,
   getDoc,
+  deleteDoc,
+  Timestamp,
 } from "firebase/firestore";
 
 export default function ShippingAdminPage() {
@@ -35,7 +37,7 @@ export default function ShippingAdminPage() {
       const uid = d.id;
       const rewardData = d.data();
 
-      // ★ users コレクションからユーザー情報を取得（ニックネーム含む）
+      // ★ users コレクションからユーザー情報を取得
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
@@ -61,13 +63,20 @@ export default function ShippingAdminPage() {
     }
 
     // ★ 未発送 → 発送済み の順
-    // ★ 同じ発送状態なら timestamp の降順（新しい順）
+    // ★ 同じ発送状態なら timestamp の降順
     data.sort((a, b) => {
       if (a.shipped !== b.shipped) {
         return a.shipped ? 1 : -1;
       }
-      const tA = a.timestamp?.toDate()?.getTime() ?? 0;
-      const tB = b.timestamp?.toDate()?.getTime() ?? 0;
+
+      const tA = a.timestamp?.toDate
+        ? a.timestamp.toDate().getTime()
+        : new Date(a.timestamp).getTime();
+
+      const tB = b.timestamp?.toDate
+        ? b.timestamp.toDate().getTime()
+        : new Date(b.timestamp).getTime();
+
       return tB - tA;
     });
 
@@ -84,7 +93,7 @@ export default function ShippingAdminPage() {
     const ref = doc(db, "selectedRewards", uid);
 
     if (!shipped) {
-      const shippedAt = new Date();
+      const shippedAt = Timestamp.now(); // ← Firestore Timestamp に統一
 
       await updateDoc(ref, {
         shipped: true,
@@ -127,6 +136,13 @@ export default function ShippingAdminPage() {
   // ★ ページ分割
   const paginatedList = list.slice((page - 1) * perPage, page * perPage);
 
+  // ★ Timestamp / Date 両対応
+  const formatDate = (value: any) => {
+    if (!value) return "日時不明";
+    if (value.toDate) return value.toDate().toLocaleString();
+    return new Date(value).toLocaleString();
+  };
+
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
       <h1 style={{ fontSize: "24px", marginBottom: "20px" }}>
@@ -147,7 +163,7 @@ export default function ShippingAdminPage() {
                 background: item.shipped ? "#f5f5f5" : "#fffbe6",
               }}
             >
-              {/* ▼▼▼ ヘッダー（アイコン＋発送物名＋ニックネーム＋X） ▼▼▼ */}
+              {/* ▼▼▼ ヘッダー ▼▼▼ */}
               <div
                 onClick={() => toggleOpen(item.uid)}
                 style={{
@@ -158,7 +174,6 @@ export default function ShippingAdminPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  {/* ★ アイコン（小） */}
                   {item.image && (
                     <img
                       src={item.image}
@@ -173,20 +188,17 @@ export default function ShippingAdminPage() {
                   )}
 
                   <div>
-                    {/* 発送物名 */}
                     <strong>{item.name}</strong>
                     <br />
 
-                    {/* ニックネーム＋Xアカウント */}
                     <span style={{ fontSize: "13px", color: "#444" }}>
                       {item.userNickname}（{item.userX}）
                     </span>
                     <br />
 
-                    {/* 発送状態 */}
                     <span style={{ fontSize: "12px", color: "#666" }}>
                       {item.shipped
-                        ? `発送済み：${item.shippedAt?.toDate().toLocaleString()}`
+                        ? `発送済み：${formatDate(item.shippedAt)}`
                         : "未発送"}
                     </span>
                   </div>
@@ -196,13 +208,12 @@ export default function ShippingAdminPage() {
               </div>
               {/* ▲▲▲ ヘッダーここまで ▲▲▲ */}
 
-              {/* ▼▼▼ 詳細（開閉） ▼▼▼ */}
+              {/* ▼▼▼ 詳細 ▼▼▼ */}
               {isOpen && (
                 <div style={{ marginTop: "12px" }}>
                   <p><strong>ニックネーム：</strong> {item.userNickname}</p>
                   <p><strong>X：</strong> {item.userX}</p>
 
-                  {/* Xアカウント確定 */}
                   <p>
                     <strong>Xアカウント確定：</strong>{" "}
                     {item.xAccountConfirmed ? (
@@ -226,7 +237,7 @@ export default function ShippingAdminPage() {
 
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
                   <p><strong>ポイント：</strong> {item.cost} pt</p>
-                  <p><strong>選択日時：</strong> {item.timestamp?.toDate().toLocaleString()}</p>
+                  <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
                   <button
                     onClick={() => toggleShipped(item.uid, item.shipped, item)}

@@ -10,6 +10,7 @@ import {
   updateDoc,
   doc,
   deleteDoc,
+  Timestamp,
 } from "firebase/firestore";
 
 export default function ShippingHistoryPage() {
@@ -19,7 +20,10 @@ export default function ShippingHistoryPage() {
   const [sortKey, setSortKey] = useState("dateDesc");
 
   const fetchHistory = async () => {
-    const q = query(collection(db, "shippingHistory"), orderBy("shippedAt", "desc"));
+    const q = query(
+      collection(db, "shippingHistory"),
+      orderBy("shippedAt", "desc")
+    );
     const snap = await getDocs(q);
 
     const list = snap.docs.map((d) => ({
@@ -41,12 +45,14 @@ export default function ShippingHistoryPage() {
 
     await updateDoc(ref, {
       shipped: true,
-      shippedAt: new Date(),
+      shippedAt: Timestamp.now(), // ← Firestore Timestamp に統一
     });
 
     setHistory((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, shipped: true, shippedAt: new Date() } : item
+        item.id === id
+          ? { ...item, shipped: true, shippedAt: Timestamp.now() }
+          : item
       )
     );
   };
@@ -65,10 +71,17 @@ export default function ShippingHistoryPage() {
     setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Timestamp / Date 両対応の変換
+  const toMillis = (value: any) => {
+    if (!value) return 0;
+    if (value.toDate) return value.toDate().getTime();
+    return new Date(value).getTime();
+  };
+
   // 並べ替え
   const sortedHistory = [...history].sort((a, b) => {
-    const tA = a.shippedAt?.toDate()?.getTime() ?? 0;
-    const tB = b.shippedAt?.toDate()?.getTime() ?? 0;
+    const tA = toMillis(a.shippedAt);
+    const tB = toMillis(b.shippedAt);
 
     switch (sortKey) {
       case "dateAsc":
@@ -87,6 +100,12 @@ export default function ShippingHistoryPage() {
         return 0;
     }
   });
+
+  const formatDate = (value: any) => {
+    if (!value) return "日時不明";
+    if (value.toDate) return value.toDate().toLocaleString();
+    return new Date(value).toLocaleString();
+  };
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
@@ -151,21 +170,16 @@ export default function ShippingHistoryPage() {
                   )}
 
                   <div>
-                    {/* 発送物名 */}
                     <strong>{item.rewardName}</strong>
                     <br />
 
-                    {/* ニックネーム＋Xアカウント */}
                     <span style={{ fontSize: "13px", color: "#444" }}>
                       {item.userNickname ?? "名無し"}（{item.userX ?? "不明"}）
                     </span>
                     <br />
 
-                    {/* 発送日時 */}
                     <span style={{ fontSize: "12px", color: "#666" }}>
-                      {item.shippedAt?.toDate
-                        ? item.shippedAt.toDate().toLocaleString()
-                        : "日時不明"}
+                      {formatDate(item.shippedAt)}
                     </span>
                   </div>
                 </div>

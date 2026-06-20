@@ -1,5 +1,5 @@
 "use client";
-
+console.log("EditRewardForm received id:", id);
 import { useEffect, useState } from "react";
 import { db } from "../../../../../firebase";
 import {

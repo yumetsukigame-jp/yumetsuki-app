@@ -13,11 +13,21 @@ function generateIdFromName(name: string) {
     .toLowerCase();                 // 小文字化
 }
 
+// ★ 英数字IDが生成できなかった場合のランダムID
+function generateRandomId(length = 12) {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < length; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
 export default function AddRewardForm() {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [cost, setCost] = useState(0);
+  the [cost, setCost] = useState(0);
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
   const [images, setImages] = useState<any[]>([]);
@@ -45,14 +55,15 @@ export default function AddRewardForm() {
     }
 
     // 日本語名 → 英数字IDへ変換
-    const id = generateIdFromName(name);
+    let id = generateIdFromName(name);
 
+    // ★ 英数字が1文字も生成されなかった場合はランダムIDを使う
     if (!id) {
-      alert("英数字のIDを生成できませんでした。別の名前を試してください。");
-      return;
+      id = generateRandomId();
     }
 
     await setDoc(doc(db, "rewards", id), {
+      id,
       name,
       cost: Number(cost),
       stock: Number(stock),

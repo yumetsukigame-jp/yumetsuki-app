@@ -8,7 +8,8 @@ import {
   query,
   orderBy,
   updateDoc,
-  doc
+  doc,
+  Timestamp,
 } from "firebase/firestore";
 
 export default function ShippingHistoryPage() {
@@ -36,21 +37,29 @@ export default function ShippingHistoryPage() {
     fetchHistory();
   }, []);
 
+  // 発送済みにする
   const markAsShipped = async (id) => {
     const ref = doc(db, "shippingHistory", id);
 
+    const shippedAt = Timestamp.now(); // ← Firestore Timestamp に統一
+
     await updateDoc(ref, {
       shipped: true,
-      shippedAt: new Date(),
+      shippedAt,
     });
 
     setHistory((prev) =>
       prev.map((item) =>
-        item.id === id
-          ? { ...item, shipped: true, shippedAt: new Date() }
-          : item
+        item.id === id ? { ...item, shipped: true, shippedAt } : item
       )
     );
+  };
+
+  // Timestamp / Date 両対応
+  const formatDate = (value) => {
+    if (!value) return "不明";
+    if (value.toDate) return value.toDate().toLocaleString();
+    return new Date(value).toLocaleString();
   };
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
@@ -111,9 +120,7 @@ export default function ShippingHistoryPage() {
 
               <p>
                 <strong>依頼日時：</strong>{" "}
-                {item.requestedAt?.toDate
-                  ? item.requestedAt.toDate().toLocaleString()
-                  : "不明"}
+                {formatDate(item.requestedAt)}
               </p>
 
               <p>
@@ -126,9 +133,7 @@ export default function ShippingHistoryPage() {
               {item.shippedAt && (
                 <p>
                   <strong>発送日時：</strong>{" "}
-                  {item.shippedAt?.toDate
-                    ? item.shippedAt.toDate().toLocaleString()
-                    : "不明"}
+                  {formatDate(item.shippedAt)}
                 </p>
               )}
             </div>
