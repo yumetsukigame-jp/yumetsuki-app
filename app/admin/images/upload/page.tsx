@@ -40,6 +40,7 @@ export default function ImageUploadPage() {
     "rewards",
     "memories",
     "orica",
+    "quiz",
     "misc",
   ];
 
