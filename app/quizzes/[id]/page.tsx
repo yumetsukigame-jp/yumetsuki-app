@@ -94,7 +94,7 @@ export default function QuizDetailPage({ params }) {
   };
 
   /* --------------------------------------------------
-     回答一覧読み込み
+     回答一覧読み込み（★ displayName + xAccount 対応）
   -------------------------------------------------- */
   const loadAnswers = async () => {
     setAnswersLoading(true);
@@ -103,10 +103,31 @@ export default function QuizDetailPage({ params }) {
       collection(db, "quizzes", quizId, "answers")
     );
 
-    const list = snap.docs.map((d) => ({
-      uid: d.id,
-      ...d.data(),
-    }));
+    const list: any[] = [];
+
+    for (const d of snap.docs) {
+      const uid = d.id;
+      const ans = d.data();
+
+      // ★ users コレクションからユーザー情報を取得
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      const userData = userSnap.exists()
+        ? userSnap.data()
+        : {
+            displayName: "名無し",
+            xAccount: "未登録",
+          };
+
+      list.push({
+        uid,
+        answer: ans.answer,
+        createdAt: ans.createdAt,
+        userNickname: userData.displayName ?? "名無し",
+        userX: userData.xAccount ?? "未登録",
+      });
+    }
 
     setAnswers(list);
     setAnswersLoading(false);
@@ -270,7 +291,10 @@ export default function QuizDetailPage({ params }) {
                         borderBottom: "1px solid #eee",
                       }}
                     >
-                      <strong>{a.uid}</strong>：{a.answer}
+                      <strong>
+                        {a.userNickname}（{a.userX}）
+                      </strong>
+                      ：{a.answer}
                     </div>
                   ))}
                 </div>

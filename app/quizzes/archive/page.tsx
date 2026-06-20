@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
 
 export default function QuizArchivePage() {
@@ -29,14 +29,41 @@ export default function QuizArchivePage() {
     fetchQuizzes();
   }, []);
 
+  /* --------------------------------------------------
+     回答一覧読み込み（★ displayName + xAccount 対応）
+  -------------------------------------------------- */
   const loadAnswers = async (quizId: string) => {
     setAnswersLoading((prev) => ({ ...prev, [quizId]: true }));
 
-    const snap = await getDocs(collection(db, "quizzes_archive", quizId, "answers"));
-    const list = snap.docs.map((d) => ({
-      uid: d.id,
-      ...d.data(),
-    }));
+    const snap = await getDocs(
+      collection(db, "quizzes_archive", quizId, "answers")
+    );
+
+    const list: any[] = [];
+
+    for (const d of snap.docs) {
+      const uid = d.id;
+      const ans = d.data();
+
+      // ★ users コレクションからユーザー情報を取得
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      const userData = userSnap.exists()
+        ? userSnap.data()
+        : {
+            displayName: "名無し",
+            xAccount: "未登録",
+          };
+
+      list.push({
+        uid,
+        answer: ans.answer,
+        createdAt: ans.createdAt,
+        userNickname: userData.displayName ?? "名無し",
+        userX: userData.xAccount ?? "未登録",
+      });
+    }
 
     setAnswers((prev) => ({ ...prev, [quizId]: list }));
     setAnswersLoading((prev) => ({ ...prev, [quizId]: false }));
@@ -161,7 +188,10 @@ export default function QuizArchivePage() {
                           borderBottom: "1px solid #eee",
                         }}
                       >
-                        <strong>{a.uid}</strong>：{a.answer}
+                        <strong>
+                          {a.userNickname}（{a.userX}）
+                        </strong>
+                        ：{a.answer}
                       </div>
                     ))}
                   </div>
