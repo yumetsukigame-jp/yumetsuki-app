@@ -221,7 +221,15 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
-      {/* 🆕 画像管理（追加部分） */}
+      {/* 🆕 クイズ管理（追加部分） */}
+      <Section title="🧠 クイズ管理">
+        <MenuLink href="/admin/quizzes">クイズ一覧</MenuLink>
+        <MenuLink href="/admin/quizzes/add">クイズを作成</MenuLink>
+        <MenuLink href="/quizzes/archive">完了済みクイズ一覧</MenuLink>
+        <MenuLink href="/quizzes/ranking">クイズランキング</MenuLink>
+      </Section>
+
+      {/* 画像管理 */}
       <Section title="🖼 画像管理">
         <MenuLink href="/admin/images/upload">画像アップロード</MenuLink>
         <MenuLink href="/admin/images">画像一覧</MenuLink>

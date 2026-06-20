@@ -1087,3 +1087,93 @@ export const getNibuichiUserStats = functions
    ★ imageProcessor（そのまま re-export）
 ============================================================ */
 export * from "./imageProcessor";
+
+/* ============================================================
+   クイズ正答者ポイント分配（salt + thread 対応版）
+============================================================ */
+
+export const confirmQuizAnswer = functions.https.onCall(async (data, context) => {
+  const quizId = data.quizId;
+  if (!quizId) {
+    throw new functions.https.HttpsError("invalid-argument", "quizId が必要です");
+  }
+
+  const quizRef = db.collection("quizzes").doc(quizId);
+  const quizSnap = await quizRef.get();
+
+  if (!quizSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "クイズが存在しません");
+  }
+
+  const quiz = quizSnap.data()!;
+  const correctAnswer = quiz.answer;
+  const rewardPoint = quiz.rewardPoint;
+
+  if (!correctAnswer) {
+    throw new functions.https.HttpsError("failed-precondition", "正解が設定されていません");
+  }
+
+  // ★ salt と thread（改ざん防止用）も取得
+  const salt = quiz.salt ?? "";
+  const thread = quiz.thread ?? "";
+
+  // ★ 回答一覧を取得
+  const answersRef = quizRef.collection("answers");
+  const answersSnap = await answersRef.get();
+
+  const correctUsers: string[] = [];
+
+  answersSnap.forEach((doc) => {
+    const ans = doc.data();
+    if (ans.answer === correctAnswer) {
+      correctUsers.push(doc.id); // uid
+    }
+  });
+
+  // ★ 山分けポイント計算
+  let perUser = 0;
+  if (correctUsers.length > 0) {
+    perUser = Math.floor(rewardPoint / correctUsers.length);
+  }
+
+  // ★ 正解者にポイント付与（バッチ）
+  const batch = db.batch();
+
+  correctUsers.forEach((uid) => {
+    const userRef = db.collection("users").doc(uid);
+    batch.update(userRef, {
+      points: FieldValue.increment(perUser),   // ← v2 に統一
+    });
+  });
+
+  await batch.commit();
+
+  // ★ アーカイブへ移動（salt と thread も含める）
+  const archiveRef = db.collection("quizzes_archive").doc(quizId);
+  await archiveRef.set({
+    ...quiz,
+    salt,
+    thread,
+    archivedAt: Timestamp.now(),              // ← v2 に統一
+  });
+
+  // ★ 回答もコピー
+  const archiveAnswersRef = archiveRef.collection("answers");
+
+  const copyBatch = db.batch();
+  answersSnap.forEach((doc) => {
+    copyBatch.set(archiveAnswersRef.doc(doc.id), doc.data());
+  });
+  await copyBatch.commit();
+
+  // ★ 元のクイズを削除
+  await quizRef.delete();
+
+  return {
+    success: true,
+    correctUsers,
+    perUser,
+    salt,
+    thread,
+  };
+});

@@ -251,7 +251,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* nickname と points は loading 完了後に必ず正しい値 */}
       <h2 style={{ marginBottom: "10px" }}>
         {nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
@@ -326,6 +325,19 @@ export default function Home() {
         </MenuButton>
         <MenuButton href="/history" color="#2563eb">
           発送履歴を見る
+        </MenuButton>
+      </Section>
+
+      {/* 🧠 クイズ（★追加セクション） */}
+      <Section title="クイズ" color="#0ea5e9">
+        <MenuButton href="/quizzes" color="#0ea5e9">
+          クイズ一覧を見る
+        </MenuButton>
+        <MenuButton href="/quizzes/archive" color="#0ea5e9">
+          完了済みクイズを見る
+        </MenuButton>
+        <MenuButton href="/quizzes/ranking" color="#0ea5e9">
+          クイズランキングを見る
         </MenuButton>
       </Section>
 
