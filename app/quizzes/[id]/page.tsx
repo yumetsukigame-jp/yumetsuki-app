@@ -240,13 +240,6 @@ export default function QuizDetailPage({ params }) {
             <p style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
               ※ 正解確定前のため salt は非公開です。
             </p>
-            
-           {/* ▼ ハッシュ値の注釈 */}
-                  <p style={{ marginTop: 20, fontSize: 13, color: "#555" }}>
-                    ※ thread（改ざん防止ハッシュ）は、クイズの正解と salt を組み合わせて  
-                    SHA-256 でハッシュ化した値です。  
-                    運営側が後から正解を変更していないことを、誰でも確認できます。
-                  </p>
           )}
 
           {quiz.archived && (
@@ -254,6 +247,13 @@ export default function QuizDetailPage({ params }) {
               <p><strong>salt：</strong>{quiz.salt}</p>
             </>
           )}
+
+          {/* ▼ ハッシュ値の説明文（ここに移動） */}
+          <p style={{ marginTop: 12, fontSize: 13, color: "#555" }}>
+            ※ thread（改ざん防止ハッシュ）は、クイズの正解と salt を組み合わせて  
+            SHA-256 でハッシュ化した値です。  
+            運営側が後から正解を変更していないことを、誰でも確認できます。
+          </p>
         </div>
       )}
 
@@ -343,7 +343,6 @@ export default function QuizDetailPage({ params }) {
                       ：{a.answer}
                     </div>
                   ))}
-
                 </div>
               )}
             </div>
