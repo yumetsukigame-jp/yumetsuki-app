@@ -9,7 +9,7 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [xAccount, setXAccount] = useState("");
-  const [xAccountConfirmed, setXAccountConfirmed] = useState(false); // ★ 追加
+  const [xAccountConfirmed, setXAccountConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function ProfilePage() {
         setName(data.name ?? "");
         setDisplayName(data.displayName ?? "");
         setXAccount(data.xAccount ?? "");
-        setXAccountConfirmed(data.xAccountConfirmed ?? false); // ★ 追加
+        setXAccountConfirmed(data.xAccountConfirmed ?? false);
       }
 
       setLoading(false);
@@ -38,10 +38,25 @@ export default function ProfilePage() {
     const user = auth.currentUser;
     if (!user) return;
 
+    // ★ 必須チェック
+    if (!displayName.trim()) {
+      alert("ニックネームを入力してください");
+      return;
+    }
+
+    if (!xAccount.trim()) {
+      alert("Xアカウントを入力してください");
+      return;
+    }
+
+    if (!xAccount.startsWith("@")) {
+      alert("Xアカウントは @ から入力してください");
+      return;
+    }
+
     await updateDoc(doc(db, "users", user.uid), {
       name,
       displayName,
-      // ★ xAccountConfirmed が true の場合は xAccount を更新しない
       ...(xAccountConfirmed ? {} : { xAccount }),
     });
 
@@ -78,8 +93,8 @@ export default function ProfilePage() {
           marginBottom: "20px",
         }}
       >
-        ・「名前」は本名などを入力できますが、外部には表示されません。<br />
-        ・「ニックネーム」は外部に表示される名前です（基本はXアカウント名を推奨）。<br />
+        ・「名前」は外部に表示されません。<br />
+        ・「ニックネーム」は外部に表示される名前です。<br />
         ・ニックネームが空の場合は X アカウント名が表示されます。
       </p>
 
@@ -104,13 +119,22 @@ export default function ProfilePage() {
         />
 
         {/* ニックネーム */}
-        <input
-          type="text"
-          placeholder="ニックネーム（外部表示）"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          style={inputStyle}
-        />
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            placeholder="ニックネーム（外部表示）"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            style={inputStyle}
+          />
+
+          {/* ★ 未入力なら警告 */}
+          {!displayName.trim() && (
+            <p style={{ color: "#dc2626", fontSize: 13, marginTop: 4, textAlign: "left" }}>
+              ニックネームを入力してください
+            </p>
+          )}
+        </div>
 
         {/* Xアカウント */}
         <div style={{ width: "100%" }}>
@@ -119,7 +143,7 @@ export default function ProfilePage() {
             placeholder="Xアカウント（@から）"
             value={xAccount}
             onChange={(e) => setXAccount(e.target.value)}
-            disabled={xAccountConfirmed} // ★ 確定済みなら編集不可
+            disabled={xAccountConfirmed}
             style={{
               ...inputStyle,
               background: xAccountConfirmed ? "#e5e7eb" : "white",
@@ -127,7 +151,14 @@ export default function ProfilePage() {
             }}
           />
 
-          {/* ★ 確定済みなら注意文を表示 */}
+          {/* ★ 未入力なら警告 */}
+          {!xAccount.trim() && (
+            <p style={{ color: "#dc2626", fontSize: 13, marginTop: 4, textAlign: "left" }}>
+              Xアカウントを入力してください
+            </p>
+          )}
+
+          {/* ★ 確定済みなら注意文 */}
           {xAccountConfirmed && (
             <p
               style={{

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/firebase";
+import { auth, db } from "@/firebase";
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
 } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -16,8 +17,30 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Firestore からユーザーデータ取得
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        setMessage("ユーザーデータが存在しません");
+        return;
+      }
+
+      const userData = userSnap.data();
+
+      // ★ displayName が未設定ならプロフィール設定へ誘導
+      if (!userData.displayName || userData.displayName.trim() === "") {
+        alert("ニックネームが未設定です。プロフィールを設定してください。");
+        router.push("/profile");
+        return;
+      }
+
+      // 通常ログイン
       router.push("/");
+
     } catch (error) {
       console.error(error);
       setMessage("ログインに失敗しました");
