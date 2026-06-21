@@ -1089,7 +1089,7 @@ export const getNibuichiUserStats = functions
 export * from "./imageProcessor";
 
 /* ============================================================
-   クイズ正答者ポイント分配（salt + thread 対応版）
+   クイズ正答者ポイント分配（確定処理 完全版）
 ============================================================ */
 
 export const confirmQuizAnswer = functions.https.onCall(async (data, context) => {
@@ -1108,14 +1108,22 @@ export const confirmQuizAnswer = functions.https.onCall(async (data, context) =>
   const quiz = quizSnap.data()!;
   const correctAnswer = quiz.answer;
   const rewardPoint = quiz.rewardPoint;
+  const explanation = quiz.explanation ?? "";
 
   if (!correctAnswer) {
     throw new functions.https.HttpsError("failed-precondition", "正解が設定されていません");
   }
 
-  // ★ salt と thread（改ざん防止用）も取得
-  const salt = quiz.salt ?? "";
-  const thread = quiz.thread ?? "";
+  // ★ salt と thread は AddQuizPage で生成済みのものをそのまま使う
+  const salt = quiz.salt;
+  const thread = quiz.thread;
+
+  if (!salt || !thread) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "salt または thread が存在しません（古いクイズの可能性があります）"
+    );
+  }
 
   // ★ 回答一覧を取得
   const answersRef = quizRef.collection("answers");
@@ -1142,28 +1150,31 @@ export const confirmQuizAnswer = functions.https.onCall(async (data, context) =>
   correctUsers.forEach((uid) => {
     const userRef = db.collection("users").doc(uid);
     batch.update(userRef, {
-      points: FieldValue.increment(perUser),   // ← v2 に統一
+      points: FieldValue.increment(perUser),
     });
   });
 
   await batch.commit();
 
-  // ★ アーカイブへ移動（salt と thread も含める）
+  // ★ アーカイブへ移動（salt/thread/explanation も含める）
   const archiveRef = db.collection("quizzes_archive").doc(quizId);
   await archiveRef.set({
     ...quiz,
+    explanation,
     salt,
     thread,
-    archivedAt: Timestamp.now(),              // ← v2 に統一
+    archived: true,
+    archivedAt: Timestamp.now(),
   });
 
   // ★ 回答もコピー
   const archiveAnswersRef = archiveRef.collection("answers");
-
   const copyBatch = db.batch();
+
   answersSnap.forEach((doc) => {
     copyBatch.set(archiveAnswersRef.doc(doc.id), doc.data());
   });
+
   await copyBatch.commit();
 
   // ★ 元のクイズを削除

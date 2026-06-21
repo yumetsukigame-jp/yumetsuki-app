@@ -10,6 +10,8 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import Link from "next/link";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/firebase"; // ★ 追加：Functions 呼び出し用
 
 export default function AdminQuizListPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -29,6 +31,34 @@ export default function AdminQuizListPage() {
     fetchQuizzes();
   }, []);
 
+  /* --------------------------------------------------
+     ★ 解答確定（Cloud Functions 呼び出し）
+  -------------------------------------------------- */
+  const confirmQuiz = async (id: string) => {
+    if (
+      !confirm(
+        "このクイズの解答を確定しますか？\n正解者へのポイント付与とアーカイブ移動が行われます。"
+      )
+    )
+      return;
+
+    try {
+      const fn = httpsCallable(functions, "confirmQuizAnswer");
+      const res = await fn({ quizId: id });
+
+      console.log("confirmQuizAnswer result:", res.data);
+
+      alert("解答を確定しました！");
+      fetchQuizzes(); // 最新状態に更新
+    } catch (e) {
+      console.error(e);
+      alert("解答確定に失敗しました");
+    }
+  };
+
+  /* --------------------------------------------------
+     ★ アーカイブ（旧仕様：今後は非推奨）
+  -------------------------------------------------- */
   const archiveQuiz = async (id: string) => {
     if (!confirm("このクイズをアーカイブしますか？")) return;
 
@@ -91,6 +121,7 @@ export default function AdminQuizListPage() {
               display: "flex",
               alignItems: "center",
               gap: 16,
+              flexWrap: "wrap", // ★ スマホで崩れにくくする
             }}
           >
             <img
@@ -99,7 +130,7 @@ export default function AdminQuizListPage() {
               style={{ width: 80, height: 80, objectFit: "cover" }}
             />
 
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: 20 }}>{q.title}</h2>
               <p>回答回数：{q.maxAnswers}</p>
               <p>アーカイブ：{q.archived ? "はい" : "いいえ"}</p>
@@ -119,7 +150,22 @@ export default function AdminQuizListPage() {
               編集
             </Link>
 
-            {/* アーカイブ */}
+            {/* ★ 解答確定ボタン（新規追加） */}
+            <button
+              onClick={() => confirmQuiz(q.id)}
+              style={{
+                padding: "8px 12px",
+                background: "#2563eb",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              解答確定
+            </button>
+
+            {/* アーカイブ（旧仕様） */}
             <button
               onClick={() => archiveQuiz(q.id)}
               style={{
@@ -134,7 +180,7 @@ export default function AdminQuizListPage() {
               アーカイブ
             </button>
 
-            {/* ★ 削除ボタン */}
+            {/* 削除 */}
             <button
               onClick={() => deleteQuiz(q.id)}
               style={{
