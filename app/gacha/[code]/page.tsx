@@ -254,7 +254,7 @@ if (isXAccountMatch) {
   const matched = list.some((entry: string) => entry.includes(userX));
 
   if (!matched) {
-    setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます");
+    setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます。登録Xアカウントをご確認ください。");
     setLoading(false);
     return;
   }

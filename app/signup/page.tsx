@@ -16,8 +16,15 @@ export default function SignupPage() {
   const router = useRouter();
 
   const handleSignup = async () => {
-    if (!email || !password) {
-      alert("メールアドレスとパスワードを入力してください");
+    // ★ 必須チェック（すべて必須）
+    if (!name || !displayName || !xAccount || !email || !password) {
+      alert("すべての項目を入力してください");
+      return;
+    }
+
+    // Xアカウントは @ から始まる必要がある
+    if (!xAccount.startsWith("@")) {
+      alert("Xアカウントは @ から入力してください");
       return;
     }
 

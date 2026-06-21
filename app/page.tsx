@@ -210,7 +210,7 @@ export default function Home() {
         <span style={{ fontWeight: "bold" }}>{points} pt</span>
       </h1>
 
-      {/* 🟡 今日のニブイチ */}
+      {/* 🎯 今日のニブイチ */}
       <Section title="今日のニブイチ" color="#eab308" icon="🟡">
         <MenuButton href="/nibuichi" color="#eab308">
           今日のニブイチに参加する
@@ -223,7 +223,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🟣 ガチャ */}
+      {/* 🎰 ガチャ */}
       <Section title="ガチャ" color="#a855f7" icon="🟣">
         <MenuButton href="/gacha/list" color="#a855f7">
           ガチャ一覧を見る
@@ -236,7 +236,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🔵 ポイント */}
+      {/* 📦 ポイント */}
       <Section title="ポイント関連" color="#2563eb" icon="🔵">
         <MenuButton href="/code" color="#2563eb">
           コード入力でポイント獲得
@@ -262,7 +262,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🟢 アカウント（全部折りたたみ） */}
+      {/* 👤 アカウント（全部折りたたみ） */}
       <Section title="アカウント" color="#16a34a" icon="🟢" forceCollapseAll={true}>
         <MenuButton href="/archive" color="#16a34a">
           書庫を見る

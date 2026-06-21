@@ -270,7 +270,7 @@ export default function PublicGachaListPage() {
                   if (isLimited) {
                     const uid = auth.currentUser?.uid;
                     if (!uid) {
-                      alert("このガチャは限定公開です（コード入力が必要です）");
+                      alert("このガチャは限定公開です（コード入力が必要です）トップページの【ガチャを引く】より実行してください。");
                       return;
                     }
 
@@ -282,7 +282,7 @@ export default function PublicGachaListPage() {
                     const snap = await getDoc(historyRef);
 
                     if (!snap.exists()) {
-                      alert("このガチャは限定公開です（コード入力が必要です）");
+                      alert("このガチャは限定公開です（コード入力が必要です）トップページの【ガチャを引く】より実行してください。");
                       return;
                     }
                   }
