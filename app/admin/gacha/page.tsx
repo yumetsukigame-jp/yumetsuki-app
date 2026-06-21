@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
-import { functions, db } from "@/firebase";
+import { functions, db, storage } from "@/firebase";
 import { collection, getDocs } from "firebase/firestore";
+import { getDownloadURL, ref } from "firebase/storage";
 
 type Mode = "count" | "prob";
 type ResetType = "none" | "daily";
@@ -48,7 +49,7 @@ export default function GachaCreatePage() {
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
 
-  // ★ Firebase Storage の画像一覧を Firestore から取得
+  // ★ Firestore の imageMeta から path を取得し、Storage から正しい URL を取得する
   useEffect(() => {
     const load = async () => {
       const snap = await getDocs(collection(db, "imageMeta"));
@@ -56,8 +57,19 @@ export default function GachaCreatePage() {
         .map((d) => d.data())
         .filter((d) => d.folder === "gacha");
 
-      // URL の配列に変換
-      setGachaImages(list.map((d) => d.url));
+      const urls = await Promise.all(
+        list.map(async (d) => {
+          try {
+            const storageRef = ref(storage, d.path);
+            return await getDownloadURL(storageRef); // ★ 正しい URL を取得
+          } catch (e) {
+            console.error("URL取得失敗:", d.path, e);
+            return d.url; // fallback（壊れていても一応返す）
+          }
+        })
+      );
+
+      setGachaImages(urls);
     };
 
     load();
@@ -168,7 +180,7 @@ export default function GachaCreatePage() {
         mode: mode === "prob" ? "probability" : "count",
         resetType,
         publicFlags,
-        thumbnail, // ← ★ Firebase Storage URL を送信
+        thumbnail, // ★ getDownloadURL で取得した正しい URL
         point: {
           cost: Number(cost),
           maxPerUser: Number(maxPerUser),
@@ -230,7 +242,7 @@ export default function GachaCreatePage() {
           style={inputStyle}
         />
 
-        {/* ★ 公開設定 */}
+        {/* 公開設定 */}
         <div style={boxStyle}>
           <div style={labelStyle}>公開設定（複数選択可）</div>
 
@@ -280,7 +292,7 @@ export default function GachaCreatePage() {
           </label>
         </div>
 
-        {/* ★ Xアカウント貼り付け欄 */}
+        {/* Xアカウント貼り付け欄 */}
         {publicFlags.includes("x_account_match") && (
           <div style={boxStyle}>
             <div style={labelStyle}>Xアカウント一覧（長文貼り付けOK）</div>
@@ -474,7 +486,7 @@ export default function GachaCreatePage() {
                 style={{ ...inputStyle, flex: 1 }}
               />
 
-              {/* ★ 発送ON/OFF */}
+              {/* 発送ON/OFF */}
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
