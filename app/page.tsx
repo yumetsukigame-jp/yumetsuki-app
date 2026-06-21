@@ -1,11 +1,11 @@
 "use client";
 
+import React from "react";
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 
 /* --------------------------------------------------
@@ -27,8 +27,6 @@ function getTodayJST6() {
 }
 
 export default function Home() {
-  const router = useRouter();
-
   /* --------------------------------------------------
      Auth 状態
   -------------------------------------------------- */
@@ -53,10 +51,8 @@ export default function Home() {
   const [totalLose, setTotalLose] = useState(0);
   const [totalBakuado, setTotalBakuado] = useState(0);
 
-  const [loading, setLoading] = useState(true);
-
   /* --------------------------------------------------
-     ① Auth 初期化（uid だけセット）
+     ① Auth 初期化
   -------------------------------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -67,16 +63,19 @@ export default function Home() {
   }, []);
 
   /* --------------------------------------------------
-     ② uid が確定してから Firestore を読む
+     ② uid が変わったら nickname をリセット（重要）
+  -------------------------------------------------- */
+  useEffect(() => {
+    setNickname(undefined);
+    setPoints(undefined);
+  }, [uid]);
+
+  /* --------------------------------------------------
+     ③ Firestore 読み込み（uid が null の間は絶対に動かさない）
   -------------------------------------------------- */
   useEffect(() => {
     if (!authReady) return;
-
-    // 未ログイン
-    if (!uid) {
-      setLoading(false);
-      return;
-    }
+    if (!uid) return;
 
     const load = async () => {
       const today = getTodayJST6();
@@ -90,15 +89,19 @@ export default function Home() {
       if (userSnap.exists()) {
         const u = userSnap.data();
 
+        // ★ displayName が空文字 or null の場合は読み込み中に戻す
+        if (!u.displayName || u.displayName.trim() === "") {
+          setNickname(undefined);
+        } else {
+          setNickname(u.displayName);
+        }
+
         setPoints(u.points ?? 0);
-        setNickname(u.displayName ?? "名無し");
         setXAccount(u.xAccount ?? undefined);
         setSubscriber(u.subscriber === true);
       } else {
-        setPoints(0);
-        setNickname("名無し");
-        setXAccount(undefined);
-        setSubscriber(false);
+        // ★ users ドキュメントが無い場合も読み込み中に戻す
+        setNickname(undefined);
       }
 
       /* --- 今日の予想 --- */
@@ -130,17 +133,15 @@ export default function Home() {
         setTotalBakuado(bakuado);
         setTotalBattle(win + draw + lose + bakuado);
       }
-
-      setLoading(false);
     };
 
     load();
   }, [authReady, uid]);
 
   /* --------------------------------------------------
-     Auth 初期化前は絶対に UI を動かさない
+     読み込み中（nickname が undefined の間は絶対に描画しない）
   -------------------------------------------------- */
-  if (!authReady) {
+  if (!authReady || !uid || nickname === undefined) {
     return (
       <div style={{ padding: 20, textAlign: "center" }}>
         読み込み中…
@@ -149,59 +150,7 @@ export default function Home() {
   }
 
   /* --------------------------------------------------
-     Firestore 読み込み前も UI を描画しない（最重要）
-  -------------------------------------------------- */
-  if (loading) {
-    return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        読み込み中…
-      </div>
-    );
-  }
-
-  /* --------------------------------------------------
-     未ログイン
-  -------------------------------------------------- */
-  if (!uid) {
-    return (
-      <div style={{ padding: "20px", textAlign: "center" }}>
-        <p style={{ fontSize: "18px", marginBottom: "12px" }}>
-          ログインしていません。
-        </p>
-
-        <a href="/login" style={{ display: "block", marginBottom: 20 }}>
-          <img
-            src="/yumeapp.webp"
-            alt="ログインページへ"
-            style={{
-              width: "100%",
-              maxWidth: 320,
-              borderRadius: 12,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-              cursor: "pointer",
-              display: "block",
-              margin: "0 auto",
-            }}
-          />
-        </a>
-
-        <a
-          href="/login"
-          style={{
-            color: "#2563eb",
-            fontSize: "18px",
-            display: "block",
-            marginBottom: 20,
-          }}
-        >
-          ログインページへ
-        </a>
-      </div>
-    );
-  }
-
-  /* --------------------------------------------------
-     ログイン済み画面
+     ニブイチ表示
   -------------------------------------------------- */
   let nibuichiStatus = "未参加";
 
@@ -262,35 +211,7 @@ export default function Home() {
       </h1>
 
       {/* 🟡 今日のニブイチ */}
-      <Section title="今日のニブイチ" color="#eab308">
-        <div
-          style={{
-            padding: "12px",
-            background: "#fef9c3",
-            borderRadius: "8px",
-            fontSize: "18px",
-            fontWeight: "bold",
-            textAlign: "center",
-          }}
-        >
-          {nibuichiStatus}
-        </div>
-
-        <div
-          style={{
-            marginTop: "12px",
-            padding: "12px",
-            background: "#fef3c7",
-            borderRadius: "8px",
-            fontSize: "16px",
-            textAlign: "center",
-            fontWeight: "bold",
-          }}
-        >
-          【現戦績】{totalBattle}戦
-          ({totalWin}勝/{totalDraw}分/{totalLose}負/{totalBakuado}爆アド)
-        </div>
-
+      <Section title="今日のニブイチ" color="#eab308" icon="🟡">
         <MenuButton href="/nibuichi" color="#eab308">
           今日のニブイチに参加する
         </MenuButton>
@@ -303,7 +224,7 @@ export default function Home() {
       </Section>
 
       {/* 🟣 ガチャ */}
-      <Section title="ガチャ" color="#a855f7">
+      <Section title="ガチャ" color="#a855f7" icon="🟣">
         <MenuButton href="/gacha/list" color="#a855f7">
           ガチャ一覧を見る
         </MenuButton>
@@ -316,7 +237,7 @@ export default function Home() {
       </Section>
 
       {/* 🔵 ポイント */}
-      <Section title="ポイント関連" color="#2563eb">
+      <Section title="ポイント関連" color="#2563eb" icon="🔵">
         <MenuButton href="/code" color="#2563eb">
           コード入力でポイント獲得
         </MenuButton>
@@ -328,8 +249,8 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🧠 クイズ（★追加セクション） */}
-      <Section title="クイズ" color="#0ea5e9">
+      {/* 🧠 クイズ */}
+      <Section title="クイズ" color="#0ea5e9" icon="🧠">
         <MenuButton href="/quizzes" color="#0ea5e9">
           クイズ一覧を見る
         </MenuButton>
@@ -341,8 +262,8 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🟢 アカウント */}
-      <Section title="アカウント" color="#16a34a">
+      {/* 🟢 アカウント（全部折りたたみ） */}
+      <Section title="アカウント" color="#16a34a" icon="🟢" forceCollapseAll={true}>
         <MenuButton href="/archive" color="#16a34a">
           書庫を見る
         </MenuButton>
@@ -350,34 +271,6 @@ export default function Home() {
           プロフィールを編集する
         </MenuButton>
       </Section>
-
-      {/* 🟣 ゆめつき本舗リンク */}
-      <div style={{ marginTop: 40, textAlign: "center" }}>
-        <a
-          href="https://yumetsuki.base.shop"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: "block" }}
-        >
-          <img
-            src="/honpo.webp"
-            alt="ゆめつき本舗HPはこちら"
-            style={{
-              width: "100%",
-              maxWidth: 320,
-              borderRadius: 12,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-              cursor: "pointer",
-              display: "block",
-              margin: "0 auto",
-            }}
-          />
-        </a>
-
-        <p style={{ marginTop: 8, fontWeight: "bold" }}>
-          ゆめつき本舗HPはこちら
-        </p>
-      </div>
 
       {/* 🔴 管理者 */}
       <div
@@ -402,9 +295,17 @@ export default function Home() {
 }
 
 /* ------------------------------
-   セクションコンポーネント
+   セクションコンポーネント（アイコン + 折りたたみ対応）
 ------------------------------ */
-function Section({ title, color, children }: any) {
+function Section({ title, color, icon, children, forceCollapseAll = false }: any) {
+  const [open, setOpen] = useState(false);
+
+  const items = React.Children.toArray(children);
+  const firstItem = items[0];
+  const restItems = items.slice(1);
+
+  const showFirst = !forceCollapseAll;
+
   return (
     <div
       style={{
@@ -416,9 +317,44 @@ function Section({ title, color, children }: any) {
         textAlign: "left",
       }}
     >
-      <h3 style={{ color, marginBottom: "12px" }}>{title}</h3>
+      {/* タイトル + 折り畳みボタン */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {icon && <span style={{ fontSize: "20px" }}>{icon}</span>}
+          <h3 style={{ color, margin: 0 }}>{title}</h3>
+        </div>
+
+        {(forceCollapseAll || restItems.length > 0) && (
+          <button
+            onClick={() => setOpen(!open)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "16px",
+              color,
+              padding: "4px 8px",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <span style={{ fontSize: "20px" }}>{open ? "▲" : "▼"}</span>
+            <span style={{ fontSize: "12px" }}>詳細メニュー表示</span>
+          </button>
+        )}
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {children}
+        {showFirst && firstItem}
+        {open && (forceCollapseAll ? items : restItems)}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
 import { auth, db, functions } from "@/firebase";
 import {
@@ -24,7 +25,6 @@ export default function AdminTopPage() {
   const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(null);
 
   const [running, setRunning] = useState(false);
-
   const [pendingShipping, setPendingShipping] = useState<number>(0);
 
   const [openAuto, setOpenAuto] = useState(false);
@@ -136,8 +136,8 @@ export default function AdminTopPage() {
     >
       <h1 style={{ textAlign: "center" }}>管理者トップページ</h1>
 
-      {/* 発送状況 */}
-      <Section title="📦 発送状況">
+      {/* 📦 発送状況（常に展開） */}
+      <Section title="📦 発送状況" alwaysOpen>
         {pendingShipping > 0 ? (
           <div style={statusBox}>
             発送が必要なアイテムが <b>{pendingShipping}</b> 件あります
@@ -147,7 +147,7 @@ export default function AdminTopPage() {
         )}
       </Section>
 
-      {/* 自動更新ステータス */}
+      {/* ⏱ 自動更新ステータス（既存 UI） */}
       <div style={{ marginTop: "32px" }}>
         <h2
           onClick={() => setOpenAuto((v) => !v)}
@@ -185,35 +185,35 @@ export default function AdminTopPage() {
         )}
       </div>
 
-      {/* ユーザー管理 */}
-      <Section title="👤 ユーザー管理">
-        <MenuLink href="/admin/users">ユーザー管理</MenuLink>
-        <MenuLink href="/admin/history">ポイント履歴</MenuLink>
-      </Section>
-
-      {/* ニブイチ管理 */}
-      <Section title="🎯 ニブイチ管理">
+      {/* 🎯 ニブイチ管理（最初の1つだけ常に表示） */}
+      <Section title="🎯 ニブイチ管理" showFirstOnly>
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
         <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
         <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
-      {/* コード管理 */}
-      <Section title="🔑 コード管理">
+      {/* 👤 ユーザー管理（全部折りたたむ） */}
+      <Section title="👤 ユーザー管理" forceCollapseAll>
+        <MenuLink href="/admin/users">ユーザー管理</MenuLink>
+        <MenuLink href="/admin/history">ポイント履歴</MenuLink>
+      </Section>
+
+      {/* 🔑 コード管理 */}
+      <Section title="🔑 コード管理" forceCollapseAll>
         <MenuLink href="/admin/codes">コード一覧</MenuLink>
         <MenuLink href="/admin/create-code">新しいコードを発行</MenuLink>
       </Section>
 
-      {/* ガチャ管理 */}
-      <Section title="🎰 ガチャ管理">
+      {/* 🎰 ガチャ管理 */}
+      <Section title="🎰 ガチャ管理" forceCollapseAll>
         <MenuLink href="/admin/gacha">ガチャコード発行</MenuLink>
         <MenuLink href="/admin/gacha/manage">ガチャ管理（一覧・編集）</MenuLink>
         <MenuLink href="/admin/gacha/list">ガチャアーカイブ</MenuLink>
         <MenuLink href="/admin/gacha/results">ガチャ結果一覧</MenuLink>
       </Section>
 
-      {/* 発送管理 */}
-      <Section title="📦 発送管理">
+      {/* 📦 発送管理 */}
+      <Section title="📦 発送管理" forceCollapseAll>
         <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
         <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
         <MenuLink href="/admin/shipping">発送管理（発送物確認）</MenuLink>
@@ -221,16 +221,16 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
-      {/* 🆕 クイズ管理（追加部分） */}
-      <Section title="🧠 クイズ管理">
+      {/* 🧠 クイズ管理 */}
+      <Section title="🧠 クイズ管理" forceCollapseAll>
         <MenuLink href="/admin/quizzes">クイズ一覧</MenuLink>
         <MenuLink href="/admin/quizzes/add">クイズを作成</MenuLink>
         <MenuLink href="/quizzes/archive">完了済みクイズ一覧</MenuLink>
         <MenuLink href="/quizzes/ranking">クイズランキング</MenuLink>
       </Section>
 
-      {/* 画像管理 */}
-      <Section title="🖼 画像管理">
+      {/* 🖼 画像管理 */}
+      <Section title="🖼 画像管理" forceCollapseAll>
         <MenuLink href="/admin/images/upload">画像アップロード</MenuLink>
         <MenuLink href="/admin/images">画像一覧</MenuLink>
       </Section>
@@ -239,23 +239,74 @@ export default function AdminTopPage() {
 }
 
 /* ------------------------------
-   セクション
+   セクション（折りたたみ対応）
 ------------------------------ */
-function Section({ title, children }) {
+function Section({
+  title,
+  children,
+  alwaysOpen = false,
+  showFirstOnly = false,
+  forceCollapseAll = false,
+}) {
+  const [open, setOpen] = useState(false);
+
+  const items = React.Children.toArray(children);
+  const firstItem = items[0];
+  const restItems = items.slice(1);
+
+  // 発送状況 → 常に展開
+  if (alwaysOpen) {
+    return (
+      <div style={{ marginTop: "32px" }}>
+        <h2
+          style={{
+            marginBottom: "12px",
+            borderLeft: "6px solid #2563eb",
+            paddingLeft: "10px",
+          }}
+        >
+          {title}
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {items}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ marginTop: "32px" }}>
-      <h2
+      <div
+        onClick={() => setOpen(!open)}
         style={{
           marginBottom: "12px",
           borderLeft: "6px solid #2563eb",
           paddingLeft: "10px",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          userSelect: "none",
         }}
       >
-        {title}
-      </h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {children}
+        <h2 style={{ margin: 0 }}>{title}</h2>
+        <span style={{ fontSize: 20 }}>{open ? "▲" : "▼"}</span>
       </div>
+
+      {/* ニブイチ管理 → 最初の1つだけ常に表示 */}
+      {showFirstOnly && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {firstItem}
+          {open && restItems}
+        </div>
+      )}
+
+      {/* その他 → 全部折りたたむ */}
+      {forceCollapseAll && open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {items}
+        </div>
+      )}
     </div>
   );
 }

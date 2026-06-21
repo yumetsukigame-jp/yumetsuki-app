@@ -1,12 +1,13 @@
-import * as functions from "firebase-functions";
-import { initializeApp } from "firebase-admin/app";
+import * as functions from "firebase-functions";  // ★これを一番上に追加
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { initializeApp } from "firebase-admin/app";
 
 initializeApp({
   storageBucket: "point-app-1f854.appspot.com",
 });
 
 const db = getFirestore();
+
 
 /* ============================================================
    共通：JST 時刻ユーティリティ（6時切り替え対応版）
@@ -1089,102 +1090,90 @@ export const getNibuichiUserStats = functions
 export * from "./imageProcessor";
 
 /* ============================================================
-   クイズ正答者ポイント分配（確定処理 完全版）
+   クイズ正答者ポイント分配（V2 完全版）
 ============================================================ */
 
-export const confirmQuizAnswer = functions.https.onCall(async (data, context) => {
-  const quizId = data.quizId;
-  if (!quizId) {
-    throw new functions.https.HttpsError("invalid-argument", "quizId が必要です");
-  }
+export const confirmQuizAnswer = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    try {
+      const quizId = data.quizId;
+      if (!quizId) {
+        throw new functions.https.HttpsError("invalid-argument", "quizId が必要です");
+      }
 
-  const quizRef = db.collection("quizzes").doc(quizId);
-  const quizSnap = await quizRef.get();
+      const quizRef = db.collection("quizzes").doc(quizId);
+      const quizSnap = await quizRef.get();
 
-  if (!quizSnap.exists) {
-    throw new functions.https.HttpsError("not-found", "クイズが存在しません");
-  }
+      if (!quizSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "クイズが存在しません");
+      }
 
-  const quiz = quizSnap.data()!;
-  const correctAnswer = quiz.answer;
-  const rewardPoint = quiz.rewardPoint;
-  const explanation = quiz.explanation ?? "";
+      const quiz = quizSnap.data()!;
+      const correctAnswer = quiz.answer;
+      const rewardPoint = quiz.rewardPoint;
+      const explanation = quiz.explanation ?? "";
 
-  if (!correctAnswer) {
-    throw new functions.https.HttpsError("failed-precondition", "正解が設定されていません");
-  }
+      if (!correctAnswer) {
+        throw new functions.https.HttpsError("failed-precondition", "正解が設定されていません");
+      }
 
-  // ★ salt と thread は AddQuizPage で生成済みのものをそのまま使う
-  const salt = quiz.salt;
-  const thread = quiz.thread;
+      const salt = quiz.salt ?? `salt_${quizId}`;
+      const thread = quiz.thread ?? `thread_${quizId}`;
 
-  if (!salt || !thread) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "salt または thread が存在しません（古いクイズの可能性があります）"
-    );
-  }
+      const answersRef = quizRef.collection("answers");
+      const answersSnap = await answersRef.get();
 
-  // ★ 回答一覧を取得
-  const answersRef = quizRef.collection("answers");
-  const answersSnap = await answersRef.get();
+      const correctUsers: string[] = [];
+      answersSnap.forEach((doc) => {
+        const ans = doc.data();
+        if (ans.answer === correctAnswer) {
+          correctUsers.push(doc.id);
+        }
+      });
 
-  const correctUsers: string[] = [];
+      let perUser = 0;
+      if (correctUsers.length > 0) {
+        perUser = Math.floor(rewardPoint / correctUsers.length);
+      }
 
-  answersSnap.forEach((doc) => {
-    const ans = doc.data();
-    if (ans.answer === correctAnswer) {
-      correctUsers.push(doc.id); // uid
+      const batch = db.batch();
+      correctUsers.forEach((uid) => {
+        const userRef = db.collection("users").doc(uid);
+        batch.update(userRef, {
+          points: FieldValue.increment(perUser),
+        });
+      });
+      await batch.commit();
+
+      const archiveRef = db.collection("quizzes_archive").doc(quizId);
+      await archiveRef.set({
+        ...quiz,
+        explanation,
+        salt,
+        thread,
+        archived: true,
+        archivedAt: Timestamp.now(),
+      });
+
+      const archiveAnswersRef = archiveRef.collection("answers");
+      const copyBatch = db.batch();
+      answersSnap.forEach((doc) => {
+        copyBatch.set(archiveAnswersRef.doc(doc.id), doc.data());
+      });
+      await copyBatch.commit();
+
+      await quizRef.delete();
+
+      return {
+        success: true,
+        correctUsers,
+        perUser,
+        salt,
+        thread,
+      };
+    } catch (err: any) {
+      console.error("confirmQuizAnswer ERROR:", err);
+      throw new functions.https.HttpsError("internal", "内部エラーが発生しました");
     }
   });
-
-  // ★ 山分けポイント計算
-  let perUser = 0;
-  if (correctUsers.length > 0) {
-    perUser = Math.floor(rewardPoint / correctUsers.length);
-  }
-
-  // ★ 正解者にポイント付与（バッチ）
-  const batch = db.batch();
-
-  correctUsers.forEach((uid) => {
-    const userRef = db.collection("users").doc(uid);
-    batch.update(userRef, {
-      points: FieldValue.increment(perUser),
-    });
-  });
-
-  await batch.commit();
-
-  // ★ アーカイブへ移動（salt/thread/explanation も含める）
-  const archiveRef = db.collection("quizzes_archive").doc(quizId);
-  await archiveRef.set({
-    ...quiz,
-    explanation,
-    salt,
-    thread,
-    archived: true,
-    archivedAt: Timestamp.now(),
-  });
-
-  // ★ 回答もコピー
-  const archiveAnswersRef = archiveRef.collection("answers");
-  const copyBatch = db.batch();
-
-  answersSnap.forEach((doc) => {
-    copyBatch.set(archiveAnswersRef.doc(doc.id), doc.data());
-  });
-
-  await copyBatch.commit();
-
-  // ★ 元のクイズを削除
-  await quizRef.delete();
-
-  return {
-    success: true,
-    correctUsers,
-    perUser,
-    salt,
-    thread,
-  };
-});
