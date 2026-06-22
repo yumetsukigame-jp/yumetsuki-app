@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -52,18 +51,24 @@ export default function Home() {
   const [totalBakuado, setTotalBakuado] = useState(0);
 
   /* --------------------------------------------------
-     ① Auth 初期化
+     ① Auth 初期化（未ログインなら即ログイン画面へ）
   -------------------------------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
-      setUid(user?.uid ?? null);
+      if (!user) {
+        // ★ 未ログインなら即ログイン画面へ
+        window.location.href = "/login";
+        return;
+      }
+
+      setUid(user.uid);
       setAuthReady(true);
     });
     return () => unsub();
   }, []);
 
   /* --------------------------------------------------
-     ② uid が変わったら nickname をリセット（重要）
+     ② uid が変わったら nickname をリセット
   -------------------------------------------------- */
   useEffect(() => {
     setNickname(undefined);
@@ -89,7 +94,6 @@ export default function Home() {
       if (userSnap.exists()) {
         const u = userSnap.data();
 
-        // ★ displayName が空文字 or null の場合は読み込み中に戻す
         if (!u.displayName || u.displayName.trim() === "") {
           setNickname(undefined);
         } else {
@@ -100,7 +104,6 @@ export default function Home() {
         setXAccount(u.xAccount ?? undefined);
         setSubscriber(u.subscriber === true);
       } else {
-        // ★ users ドキュメントが無い場合も読み込み中に戻す
         setNickname(undefined);
       }
 
@@ -139,12 +142,17 @@ export default function Home() {
   }, [authReady, uid]);
 
   /* --------------------------------------------------
-     読み込み中（nickname が undefined の間は絶対に描画しない）
+     読み込み中（nickname が undefined の間は描画しない）
   -------------------------------------------------- */
   if (!authReady || !uid || nickname === undefined) {
     return (
       <div style={{ padding: 20, textAlign: "center" }}>
         読み込み中…
+        <br />
+        {/* ★ 念のためログインリンクも表示 */}
+        <a href="/login" style={{ color: "#2563eb" }}>
+          ログインはこちら
+        </a>
       </div>
     );
   }
@@ -224,7 +232,7 @@ export default function Home() {
       </Section>
 
       {/* 🎰 ガチャ */}
-      <Section title="🎰 ガチャ" color="#a855f7" >
+      <Section title="🎰 ガチャ" color="#a855f7">
         <MenuButton href="/gacha/list" color="#a855f7">
           ガチャ一覧を見る
         </MenuButton>
@@ -262,7 +270,7 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 👤 アカウント（全部折りたたみ） */}
+      {/* 👤 アカウント */}
       <Section title="👤 アカウント" color="#16a34a" forceCollapseAll={true}>
         <MenuButton href="/archive" color="#16a34a">
           書庫を見る
@@ -295,7 +303,7 @@ export default function Home() {
 }
 
 /* ------------------------------
-   セクションコンポーネント（アイコン + 折りたたみ対応）
+   セクションコンポーネント
 ------------------------------ */
 function Section({ title, color, icon, children, forceCollapseAll = false }: any) {
   const [open, setOpen] = useState(false);

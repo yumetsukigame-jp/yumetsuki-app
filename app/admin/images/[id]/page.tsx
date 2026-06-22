@@ -30,6 +30,7 @@ export default function ImageDetailPage() {
     "character-select",
     "rewards",
     "memories",
+    "quiz",
     "misc",
   ];
 
