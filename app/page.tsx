@@ -229,9 +229,14 @@ export default function Home() {
   }}
 >
   <div style={{ marginBottom: "4px" }}>{nibuichiStatus}</div>
+  {/* 1行目：総戦績 */}
   <div>
-    【現戦績】{totalBattle}戦（{totalWin}勝 / {totalDraw}分 / {totalLose}負 /{" "}
-    {totalBakuado}爆アド）
+    【現戦績】{totalBattle}戦
+  </div>
+
+  {/* 2行目：内訳 */}
+  <div>
+    {totalWin}勝 / {totalDraw}分 / {totalLose}負 / {totalBakuado}爆アド
   </div>
 </div>
 
