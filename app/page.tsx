@@ -56,7 +56,6 @@ export default function Home() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        // ★ 未ログインなら即ログイン画面へ
         window.location.href = "/login";
         return;
       }
@@ -76,7 +75,7 @@ export default function Home() {
   }, [uid]);
 
   /* --------------------------------------------------
-     ③ Firestore 読み込み（uid が null の間は絶対に動かさない）
+     ③ Firestore 読み込み
   -------------------------------------------------- */
   useEffect(() => {
     if (!authReady) return;
@@ -142,14 +141,13 @@ export default function Home() {
   }, [authReady, uid]);
 
   /* --------------------------------------------------
-     読み込み中（nickname が undefined の間は描画しない）
+     読み込み中
   -------------------------------------------------- */
   if (!authReady || !uid || nickname === undefined) {
     return (
       <div style={{ padding: 20, textAlign: "center" }}>
         読み込み中…
         <br />
-        {/* ★ 念のためログインリンクも表示 */}
         <a href="/login" style={{ color: "#2563eb" }}>
           ログインはこちら
         </a>
@@ -212,24 +210,46 @@ export default function Home() {
         {nickname}
         {xAccount && <span style={{ color: "#555" }}>（{xAccount}）</span>}
       </h2>
+{/* 現在のポイント */}
+<h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
+  現在のポイント：
+  <span style={{ fontWeight: "bold" }}>{points} pt</span>
+</h1>
 
-      <h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
-        現在のポイント：
-        <span style={{ fontWeight: "bold" }}>{points} pt</span>
-      </h1>
+{/* ★★★ 戦績をここに常時表示 ★★★ */}
+<div
+  style={{
+    background: "#fef9c3",
+    padding: "10px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+    fontWeight: "bold",
+    color: "#854d0e",
+    textAlign: "center",
+  }}
+>
+  <div style={{ marginBottom: "4px" }}>{nibuichiStatus}</div>
+  <div>
+    【現戦績】{totalBattle}戦（{totalWin}勝 / {totalDraw}分 / {totalLose}負 /{" "}
+    {totalBakuado}爆アド）
+  </div>
+</div>
 
-      {/* 🎯 今日のニブイチ */}
-      <Section title="🎯 今日のニブイチ" color="#eab308">
-        <MenuButton href="/nibuichi" color="#eab308">
-          今日のニブイチに参加する
-        </MenuButton>
-        <MenuButton href="/nibuichi/ranking" color="#eab308">
-          ランキングを見る
-        </MenuButton>
-        <MenuButton href="/nibuichi/history" color="#eab308">
-          自分の結果履歴を見る
-        </MenuButton>
-      </Section>
+{/* 🎯 今日のニブイチ */}
+<Section title="🎯 今日のニブイチ" color="#eab308">
+  {/* ★ 初期表示は「参加ボタン」だけ */}
+  <MenuButton href="/nibuichi" color="#eab308">
+    今日のニブイチに参加する
+  </MenuButton>
+
+  {/* ★ 折りたたみ部分 */}
+  <MenuButton href="/nibuichi/ranking" color="#eab308">
+    ランキングを見る
+  </MenuButton>
+  <MenuButton href="/nibuichi/history" color="#eab308">
+    自分の結果履歴を見る
+  </MenuButton>
+</Section>
 
       {/* 🎰 ガチャ */}
       <Section title="🎰 ガチャ" color="#a855f7">
