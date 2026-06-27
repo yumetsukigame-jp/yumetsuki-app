@@ -163,7 +163,125 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, marginBottom: 20 }}>クイズ編集</h1>
 
-      {/* 省略（フォーム部分はそのまま） */}
+      <form
+        onSubmit={handleSave}
+        style={{ display: "flex", flexDirection: "column", gap: 16 }}
+      >
+        {/* タイトル */}
+        <div>
+          <label>タイトル</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* サムネイル */}
+        <div>
+          <label>サムネイル画像</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+            {images.map((img) => (
+              <div
+                key={img.url}
+                onClick={() => setThumbnail(img.url)}
+                style={{
+                  border: thumbnail === img.url ? "3px solid #4f46e5" : "1px solid #ccc",
+                  padding: 5,
+                  borderRadius: 8,
+                  cursor: "pointer",
+                }}
+              >
+                <img
+                  src={img.url}
+                  alt={img.prefix}
+                  width={100}
+                  style={{ borderRadius: 6 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 問題文 */}
+        <div>
+          <label>問題文</label>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            style={{ ...inputStyle, height: 120 }}
+          />
+        </div>
+
+        {/* 正解 */}
+        <div>
+          <label>正解</label>
+          <input
+            type="text"
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* 解説 */}
+        <div>
+          <label>解説</label>
+          <textarea
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+            style={{ ...inputStyle, height: 120 }}
+          />
+        </div>
+
+        {/* salt と thread */}
+        <div>
+          <label>スレッド値（改ざん防止用）</label>
+          <p>salt：{salt}</p>
+          <p>thread（SHA-256）：{thread}</p>
+        </div>
+
+        {/* 山分けポイント */}
+        <div>
+          <label>山分けポイント</label>
+          <input
+            type="number"
+            value={rewardPoint}
+            onChange={(e) =>
+              setRewardPoint(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            style={inputStyle}
+          />
+        </div>
+
+        {/* 回答回数 */}
+        <div>
+          <label>回答回数</label>
+          <input
+            type="number"
+            value={maxAnswers}
+            onChange={(e) =>
+              setMaxAnswers(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            style={inputStyle}
+          />
+        </div>
+
+        <button
+          type="submit"
+          style={{
+            padding: "12px",
+            background: "#4f46e5",
+            color: "white",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          保存する
+        </button>
+      </form>
 
       <button
         onClick={resetAnswers}
@@ -197,3 +315,10 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
     </div>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+};
