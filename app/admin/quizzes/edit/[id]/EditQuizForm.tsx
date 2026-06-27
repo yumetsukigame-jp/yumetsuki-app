@@ -1,329 +1,333 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { db } from "@/firebase";
+import React, { useEffect, useState } from "react";
+import { db, auth } from "@/firebase";
 import {
   doc,
   getDoc,
-  updateDoc,
+  setDoc,
+  addDoc,
   collection,
   getDocs,
+  updateDoc,
 } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
 
-/* --------------------------------------------------
-   ランダム英数字生成
--------------------------------------------------- */
-function randomString(len = 12) {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let s = "";
-  for (let i = 0; i < len; i++) {
-    s += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return s;
-}
+export default function QuizDetailPage({ params }) {
+  const { id: quizId } = React.use(params);
 
-/* --------------------------------------------------
-   SHA-256 ハッシュ生成
--------------------------------------------------- */
-async function sha256(text: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+  const [uid, setUid] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
-export default function EditQuizForm({ quizId }: { quizId: string }) {
-  const router = useRouter();
-
+  const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [title, setTitle] = useState("");
-  const [thumbnail, setThumbnail] = useState("");
-  const [images, setImages] = useState<any[]>([]);
+  const [myAnswers, setMyAnswers] = useState<any[]>([]); // ★ 過去回答（履歴）
+  const [newAnswer, setNewAnswer] = useState(""); // ★ 新規回答入力欄
 
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [explanation, setExplanation] = useState("");
+  const [answers, setAnswers] = useState<any[]>([]);
+  const [answersLoading, setAnswersLoading] = useState(false);
 
-  const [rewardPoint, setRewardPoint] = useState<number | "">(1000);
-  const [maxAnswers, setMaxAnswers] = useState<number | "">(1);
+  const [open, setOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
-  const [salt, setSalt] = useState("");
-  const [thread, setThread] = useState("");
-
-  const [originalAnswer, setOriginalAnswer] = useState("");
-
-  const [newAnswerCount, setNewAnswerCount] = useState(0); // ★ 新規回答数
+  /* --------------------------------------------------
+     Auth 初期化
+  -------------------------------------------------- */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
 
   /* --------------------------------------------------
      クイズ読み込み
   -------------------------------------------------- */
   useEffect(() => {
+    if (!authReady) return;
+
     const load = async () => {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
       if (!snap.exists) {
-        alert("クイズが存在しません");
-        router.push("/admin/quizzes");
+        setQuiz(null);
+        setLoading(false);
         return;
       }
 
       const data = snap.data();
+      setQuiz(data);
 
-      setTitle(data.title);
-      setThumbnail(data.thumbnail);
-      setQuestion(data.question);
-      setAnswer(data.answer ?? "");
-      setExplanation(data.explanation ?? "");
-      setRewardPoint(data.rewardPoint);
-      setMaxAnswers(data.maxAnswers);
+      // ★ 自分の過去回答（items）を取得
+      if (uid) {
+        const itemsSnap = await getDocs(
+          collection(db, "quizzes", quizId, "answers", uid, "items")
+        );
 
-      setSalt(data.salt ?? "");
-      setThread(data.thread ?? "");
-
-      setOriginalAnswer(data.answer ?? "");
-
-      setNewAnswerCount(data.newAnswerCount ?? 0);
-
-      // 画像一覧
-      const imgSnap = await getDocs(collection(db, "imageMeta"));
-      const list = imgSnap.docs
-        .map((d) => d.data())
-        .filter((d) => d.folder === "quiz");
-
-      setImages(list);
+        const list = itemsSnap.docs.map((d) => d.data());
+        setMyAnswers(list);
+      }
 
       setLoading(false);
     };
 
     load();
-  }, [quizId, router]);
+  }, [authReady, uid, quizId]);
 
   /* --------------------------------------------------
-     保存処理
+     新規回答送信（複数回答対応）
   -------------------------------------------------- */
-  const handleSave = async (e: any) => {
-    e.preventDefault();
-
-    let newSalt = salt;
-    let newThread = thread;
-
-    // ★ 正解が変更された場合のみ再生成
-    if (answer !== originalAnswer) {
-      newSalt = randomString(12);
-      newThread = await sha256(`${answer}-${newSalt}`);
+  const submitAnswer = async () => {
+    if (!newAnswer.trim()) {
+      alert("回答を入力してください");
+      return;
     }
 
+    // ★ 新規回答を items に追加
+    await addDoc(
+      collection(db, "quizzes", quizId, "answers", uid!, "items"),
+      {
+        answer: newAnswer,
+        createdAt: new Date(),
+      }
+    );
+
+    // ★ newAnswerCount を増やす（今回のラウンドの回答数）
     await updateDoc(doc(db, "quizzes", quizId), {
-      title,
-      thumbnail,
-      question,
-      answer,
-      explanation,
-      rewardPoint: Number(rewardPoint),
-      maxAnswers: Number(maxAnswers),
-      salt: newSalt,
-      thread: newThread,
+      newAnswerCount: quiz.newAnswerCount + 1,
     });
 
-    alert("更新しました！");
-    router.push("/admin/quizzes");
+    // ★ ローカル状態の quiz も更新（回答欄が消える）
+    setQuiz({
+      ...quiz,
+      newAnswerCount: quiz.newAnswerCount + 1,
+    });
+
+    // ★ ローカルの過去回答も更新
+    setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
+
+    setNewAnswer("");
+
+    alert("回答しました！");
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（新規回答数だけをリセット）
-     過去回答（items）は消さない
--------------------------------------------------- */
-  const resetAnswers = async () => {
-    if (!confirm("回答回数をリセットしますか？")) return;
-
-    await updateDoc(doc(db, "quizzes", quizId), {
-      newAnswerCount: 0,
-    });
-
-    alert("回答回数をリセットしました（過去回答は保持されます）");
-  };
-
-  /* --------------------------------------------------
-     アーカイブ移動
+     回答一覧読み込み（全ユーザー）
   -------------------------------------------------- */
-  const archiveQuiz = async () => {
-    if (!confirm("このクイズをアーカイブしますか？")) return;
+  const loadAnswers = async () => {
+    setAnswersLoading(true);
 
-    await updateDoc(doc(db, "quizzes", quizId), {
-      archived: true,
-    });
+    const usersSnap = await getDocs(
+      collection(db, "quizzes", quizId, "answers")
+    );
 
-    alert("アーカイブしました");
-    router.push("/admin/quizzes");
+    const allAnswers: any[] = [];
+
+    for (const userDoc of usersSnap.docs) {
+      const userId = userDoc.id;
+
+      const itemsSnap = await getDocs(
+        collection(db, "quizzes", quizId, "answers", userId, "items")
+      );
+
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+
+      const userData = userSnap.exists()
+        ? userSnap.data()
+        : { displayName: "名無し", xAccount: "未登録" };
+
+      itemsSnap.forEach((item) => {
+        allAnswers.push({
+          uid: userId,
+          answer: item.data().answer,
+          createdAt: item.data().createdAt,
+          userNickname: userData.displayName ?? "名無し",
+          userX: userData.xAccount ?? "未登録",
+        });
+      });
+    }
+
+    setAnswers(allAnswers);
+    setAnswersLoading(false);
   };
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
 
-  return (
-    <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>クイズ編集</h1>
+    if (next && answers.length === 0) {
+      loadAnswers();
+    }
+  };
 
-      <form
-        onSubmit={handleSave}
-        style={{ display: "flex", flexDirection: "column", gap: 16 }}
-      >
-        {/* タイトル */}
-        <div>
-          <label>タイトル</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={inputStyle}
-          />
-        </div>
+  /* --------------------------------------------------
+     ローディング
+  -------------------------------------------------- */
+  if (!authReady || loading) {
+    return <p style={{ padding: 20 }}>読み込み中…</p>;
+  }
 
-        {/* サムネイル */}
-        <div>
-          <label>サムネイル画像</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
-            {images.map((img) => (
-              <div
-                key={img.url}
-                onClick={() => setThumbnail(img.url)}
-                style={{
-                  border: thumbnail === img.url ? "3px solid #4f46e5" : "1px solid #ccc",
-                  padding: 5,
-                  borderRadius: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <img
-                  src={img.url}
-                  alt={img.prefix}
-                  width={100}
-                  style={{ borderRadius: 6 }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+  /* --------------------------------------------------
+     終了済み
+  -------------------------------------------------- */
+  if (!quiz) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>このクイズは終了しました</h2>
+        <p>結果は完了済みクイズ一覧から確認できます。</p>
 
-        {/* 問題文 */}
-        <div>
-          <label>問題文</label>
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            style={{ ...inputStyle, height: 120 }}
-          />
-        </div>
-
-        {/* 正解 */}
-        <div>
-          <label>正解</label>
-          <input
-            type="text"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            style={inputStyle}
-          />
-        </div>
-
-        {/* 解説 */}
-        <div>
-          <label>解説</label>
-          <textarea
-            value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
-            style={{ ...inputStyle, height: 120 }}
-          />
-        </div>
-
-        {/* salt と thread */}
-        <div>
-          <label>スレッド値（改ざん防止用）</label>
-          <p>salt：{salt}</p>
-          <p>thread（SHA-256）：{thread}</p>
-        </div>
-
-        {/* 山分けポイント */}
-        <div>
-          <label>山分けポイント</label>
-          <input
-            type="number"
-            value={rewardPoint}
-            onChange={(e) =>
-              setRewardPoint(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            style={inputStyle}
-          />
-        </div>
-
-        {/* 回答回数 */}
-        <div>
-          <label>回答回数（新規回答可能数）</label>
-          <input
-            type="number"
-            value={maxAnswers}
-            onChange={(e) =>
-              setMaxAnswers(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            style={inputStyle}
-          />
-        </div>
-
-        <button
-          type="submit"
+        <Link
+          href="/quizzes/archive"
           style={{
-            padding: "12px",
+            display: "inline-block",
+            marginTop: 20,
+            padding: "8px 12px",
             background: "#4f46e5",
             color: "white",
             borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
+            textDecoration: "none",
           }}
         >
-          保存する
-        </button>
-      </form>
+          完了済みクイズを見る
+        </Link>
+      </div>
+    );
+  }
 
-      <button
-        onClick={resetAnswers}
+  /* --------------------------------------------------
+     UI
+  -------------------------------------------------- */
+  return (
+    <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 24, marginBottom: 20 }}>{quiz.title}</h1>
+
+      <img
+        src={quiz.thumbnail}
+        style={{ width: "100%", borderRadius: 12, marginBottom: 20 }}
+      />
+
+      <h2 style={{ fontSize: 20, marginBottom: 10 }}>問題</h2>
+      <p style={{ marginBottom: 20 }}>{quiz.question}</p>
+
+      {/* ▼ 山分けポイント */}
+      <div
         style={{
-          marginTop: 20,
-          padding: "10px 16px",
-          background: "#f59e0b",
-          color: "white",
+          padding: 12,
+          background: "#eef2ff",
           borderRadius: 8,
-          border: "none",
-          cursor: "pointer",
+          marginBottom: 16,
         }}
       >
-        回答回数をリセット（過去回答は保持）
-      </button>
+        <strong>このクイズの山分けポイント：</strong>
+        {quiz.rewardPoint} pt
+      </div>
 
-      <button
-        onClick={archiveQuiz}
-        style={{
-          marginTop: 10,
-          padding: "10px 16px",
-          background: "#ef4444",
-          color: "white",
-          borderRadius: 8,
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        アーカイブへ移動
-      </button>
+      {/* ▼ 自分の過去回答（履歴） */}
+      {myAnswers.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <h3>あなたの過去の回答</h3>
+          {myAnswers.map((a, i) => (
+            <p key={i}>・{a.answer}</p>
+          ))}
+        </div>
+      )}
+
+      {/* ▼ 新規回答フォーム（newAnswerCount で判定） */}
+      {quiz.newAnswerCount < quiz.maxAnswers && (
+        <div>
+          <input
+            type="text"
+            placeholder="新しい回答"
+            value={newAnswer}
+            onChange={(e) => setNewAnswer(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid #ccc",
+              marginBottom: 12,
+            }}
+          />
+
+          <button
+            onClick={submitAnswer}
+            style={{
+              padding: "12px",
+              background: "#4f46e5",
+              color: "white",
+              borderRadius: 8,
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            回答する
+          </button>
+        </div>
+      )}
+
+      {/* ▼ 他人の回答一覧（自分が回答可能な状態では非表示） */}
+      {quiz.newAnswerCount >= quiz.maxAnswers && (
+        <>
+          <button
+            onClick={toggleOpen}
+            style={{
+              marginTop: 20,
+              padding: "8px 12px",
+              background: "#2563eb",
+              color: "white",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {open ? "回答一覧を閉じる" : "他の人の回答を見る"}
+          </button>
+
+          {open && (
+            <div style={{ marginTop: 16 }}>
+              {answersLoading && <p>読み込み中…</p>}
+
+              {!answersLoading && (
+                <div>
+                  <p>回答数：{answers.length}件</p>
+
+                  {answers.map((a, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "8px 12px",
+                        borderBottom: "1px solid #eee",
+                      }}
+                    >
+                      <strong>
+                        {a.userNickname}（{a.userX}）
+                      </strong>
+                      ：{a.answer}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ▼ アーカイブ後の正解表示 */}
+      {quiz.archived && quiz.answer && (
+        <div style={{ marginTop: 20 }}>
+          <h3>正解：{quiz.answer}</h3>
+          {quiz.explanation && (
+            <p style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+              {quiz.explanation}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #ccc",
-};
