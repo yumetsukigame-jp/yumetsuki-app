@@ -51,7 +51,6 @@ export default function QuizDetailPage({ params }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      // ★ 修正済み：exists() → exists
       if (!snap.exists) {
         setQuiz(null);
         setLoading(false);
@@ -60,14 +59,13 @@ export default function QuizDetailPage({ params }) {
 
       const data = snap.data();
 
-      // ★ newAnswerCount が無い既存クイズにも対応
       if (data.newAnswerCount === undefined) {
         data.newAnswerCount = 0;
       }
 
       setQuiz(data);
 
-      // ★ 自分の過去回答（items）
+      // ★ 自分の過去回答
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
@@ -91,7 +89,6 @@ export default function QuizDetailPage({ params }) {
       return;
     }
 
-    // ★ 新規回答を items に追加
     await addDoc(
       collection(db, "quizzes", quizId, "answers", uid!, "items"),
       {
@@ -100,18 +97,15 @@ export default function QuizDetailPage({ params }) {
       }
     );
 
-    // ★ Firestore の newAnswerCount を増やす
     await updateDoc(doc(db, "quizzes", quizId), {
       newAnswerCount: quiz.newAnswerCount + 1,
     });
 
-    // ★ ローカル状態も更新（回答欄が消える）
     setQuiz({
       ...quiz,
       newAnswerCount: quiz.newAnswerCount + 1,
     });
 
-    // ★ 過去回答をローカル更新
     setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
 
     setNewAnswer("");
@@ -218,7 +212,6 @@ export default function QuizDetailPage({ params }) {
       <h2 style={{ fontSize: 20, marginBottom: 10 }}>問題</h2>
       <p style={{ marginBottom: 20 }}>{quiz.question}</p>
 
-      {/* ▼ 山分けポイント */}
       <div
         style={{
           padding: 12,
@@ -241,8 +234,8 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 新規回答フォーム（回答可能なときだけ） */}
-      {quiz.newAnswerCount < quiz.maxAnswers && (
+      {/* ▼ 新規回答フォーム（自分が回答可能なときだけ） */}
+      {myAnswers.length < quiz.maxAnswers && (
         <div>
           <input
             type="text"
@@ -274,8 +267,8 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 他人の回答一覧（回答可能な間は非表示） */}
-      {quiz.newAnswerCount >= quiz.maxAnswers && (
+      {/* ▼ 他人の回答一覧（自分が回答し終わったら表示） */}
+      {myAnswers.length >= quiz.maxAnswers && (
         <>
           <button
             onClick={toggleOpen}
