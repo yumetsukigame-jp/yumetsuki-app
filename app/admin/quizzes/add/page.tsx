@@ -106,9 +106,10 @@ export default function AddQuizForm() {
       explanation,
       rewardPoint: Number(rewardPoint),
       maxAnswers: Number(maxAnswers),
-      salt,        // ★追加
-      thread,      // ★追加
+      salt,
+      thread,
       archived: false,
+      newAnswerCount: 0,   // ★ 新規回答数の初期化（今回の仕様で追加）
       createdAt: serverTimestamp(),
     });
 
