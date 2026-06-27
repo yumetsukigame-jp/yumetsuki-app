@@ -17,25 +17,32 @@ export default function ShippingAdminPage() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ★ 発送済みカードの開閉状態
-  const [openMap, setOpenMap] = useState<{ [uid: string]: boolean }>({});
-
-  // ★ ページネーション
+  const [openMap, setOpenMap] = useState<{ [id: string]: boolean }>({});
   const [page, setPage] = useState(1);
   const perPage = 10;
 
-  const toggleOpen = (uid: string) => {
-    setOpenMap((prev) => ({ ...prev, [uid]: !prev[uid] }));
+  const toggleOpen = (id: string) => {
+    setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  /* --------------------------------------------------
+     データ取得（selectedRewards → shippingHistory）
+  -------------------------------------------------- */
   const fetchData = async () => {
     const snap = await getDocs(collection(db, "selectedRewards"));
 
     const data: any[] = [];
 
     for (const d of snap.docs) {
-      const uid = d.id;
+      const rewardId = d.id;          // ★ ドキュメントID（uidではない）
       const rewardData = d.data();
+
+      const uid = rewardData.uid;     // ★ 正しいユーザーID
+
+      if (!uid) {
+        console.warn("selectedRewards に uid がありません:", rewardId);
+        continue;
+      }
 
       // ★ users コレクションからユーザー情報を取得
       const userRef = doc(db, "users", uid);
@@ -52,7 +59,8 @@ export default function ShippingAdminPage() {
           };
 
       data.push({
-        uid,
+        id: rewardId,               // ★ rewardId を保持
+        uid,                        // ★ 正しいユーザーID
         ...rewardData,
         userName: userData.name ?? "不明",
         userEmail: userData.email ?? "不明",
@@ -63,7 +71,6 @@ export default function ShippingAdminPage() {
     }
 
     // ★ 未発送 → 発送済み の順
-    // ★ 同じ発送状態なら timestamp の降順
     data.sort((a, b) => {
       if (a.shipped !== b.shipped) {
         return a.shipped ? 1 : -1;
@@ -88,12 +95,14 @@ export default function ShippingAdminPage() {
     fetchData();
   }, []);
 
-  // ★ 発送済みフラグ切り替え ＋ 履歴保存
-  const toggleShipped = async (uid: string, shipped: boolean, item: any) => {
-    const ref = doc(db, "selectedRewards", uid);
+  /* --------------------------------------------------
+     発送済みフラグ切り替え ＋ 履歴保存
+  -------------------------------------------------- */
+  const toggleShipped = async (rewardId: string, shipped: boolean, item: any) => {
+    const ref = doc(db, "selectedRewards", rewardId);
 
     if (!shipped) {
-      const shippedAt = Timestamp.now(); // ← Firestore Timestamp に統一
+      const shippedAt = Timestamp.now();
 
       await updateDoc(ref, {
         shipped: true,
@@ -102,7 +111,8 @@ export default function ShippingAdminPage() {
 
       // ★ 発送履歴に保存
       await addDoc(collection(db, "shippingHistory"), {
-        uid,
+        rewardId,
+        uid: item.uid,
         rewardName: item.name,
         cost: item.cost,
         image: item.image,
@@ -122,7 +132,9 @@ export default function ShippingAdminPage() {
     fetchData();
   };
 
-  // ★ Xアカウント確定
+  /* --------------------------------------------------
+     Xアカウント確定
+  -------------------------------------------------- */
   const confirmXAccount = async (uid: string) => {
     const userRef = doc(db, "users", uid);
     await updateDoc(userRef, {
@@ -133,10 +145,8 @@ export default function ShippingAdminPage() {
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
-  // ★ ページ分割
   const paginatedList = list.slice((page - 1) * perPage, page * perPage);
 
-  // ★ Timestamp / Date 両対応
   const formatDate = (value: any) => {
     if (!value) return "日時不明";
     if (value.toDate) return value.toDate().toLocaleString();
@@ -151,11 +161,11 @@ export default function ShippingAdminPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         {paginatedList.map((item) => {
-          const isOpen = openMap[item.uid] ?? !item.shipped;
+          const isOpen = openMap[item.id] ?? !item.shipped;
 
           return (
             <div
-              key={item.uid}
+              key={item.id}
               style={{
                 border: "1px solid #ddd",
                 borderRadius: "8px",
@@ -163,9 +173,9 @@ export default function ShippingAdminPage() {
                 background: item.shipped ? "#f5f5f5" : "#fffbe6",
               }}
             >
-              {/* ▼▼▼ ヘッダー ▼▼▼ */}
+              {/* ▼ ヘッダー */}
               <div
-                onClick={() => toggleOpen(item.uid)}
+                onClick={() => toggleOpen(item.id)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -190,12 +200,10 @@ export default function ShippingAdminPage() {
                   <div>
                     <strong>{item.name}</strong>
                     <br />
-
                     <span style={{ fontSize: "13px", color: "#444" }}>
                       {item.userNickname}（{item.userX}）
                     </span>
                     <br />
-
                     <span style={{ fontSize: "12px", color: "#666" }}>
                       {item.shipped
                         ? `発送済み：${formatDate(item.shippedAt)}`
@@ -206,9 +214,8 @@ export default function ShippingAdminPage() {
 
                 <div style={{ fontSize: "20px" }}>{isOpen ? "▲" : "▼"}</div>
               </div>
-              {/* ▲▲▲ ヘッダーここまで ▲▲▲ */}
 
-              {/* ▼▼▼ 詳細 ▼▼▼ */}
+              {/* ▼ 詳細 */}
               {isOpen && (
                 <div style={{ marginTop: "12px" }}>
                   <p><strong>ニックネーム：</strong> {item.userNickname}</p>
@@ -240,7 +247,7 @@ export default function ShippingAdminPage() {
                   <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
                   <button
-                    onClick={() => toggleShipped(item.uid, item.shipped, item)}
+                    onClick={() => toggleShipped(item.id, item.shipped, item)}
                     style={{
                       marginTop: "12px",
                       padding: "10px 16px",
@@ -256,7 +263,6 @@ export default function ShippingAdminPage() {
                   </button>
                 </div>
               )}
-              {/* ▲▲▲ 詳細ここまで ▲▲▲ */}
             </div>
           );
         })}

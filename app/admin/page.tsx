@@ -29,6 +29,9 @@ export default function AdminTopPage() {
 
   const [openAuto, setOpenAuto] = useState(false);
 
+  /* --------------------------------------------------
+     ログ読み込み
+  -------------------------------------------------- */
   const loadLogs = async () => {
     try {
       const q = query(
@@ -63,18 +66,33 @@ export default function AdminTopPage() {
     }
   };
 
+  /* --------------------------------------------------
+     未発送数読み込み（selectedRewards）
+  -------------------------------------------------- */
   const loadPendingShipping = async () => {
     try {
-      const col = collection(db, "selectedRewards");
-      const q = query(col, where("shipped", "==", false));
-      const snap = await getDocs(q);
+      const snap = await getDocs(collection(db, "selectedRewards"));
 
-      setPendingShipping(snap.size);
+      let count = 0;
+
+      snap.forEach((d) => {
+        const rewardData = d.data();
+
+        // ★ shipped が false のものをカウント
+        if (rewardData.shipped === false) {
+          count++;
+        }
+      });
+
+      setPendingShipping(count);
     } catch (e) {
       console.error("loadPendingShipping error:", e);
     }
   };
 
+  /* --------------------------------------------------
+     手動リセット
+  -------------------------------------------------- */
   const runManual = async (type: "gacha" | "nibuichi") => {
     if (running) return;
     setRunning(true);
@@ -99,6 +117,9 @@ export default function AdminTopPage() {
     setRunning(false);
   };
 
+  /* --------------------------------------------------
+     管理者チェック
+  -------------------------------------------------- */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -147,7 +168,7 @@ export default function AdminTopPage() {
         )}
       </Section>
 
-      {/* ⏱ 自動更新ステータス（既存 UI） */}
+      {/* ⏱ 自動更新ステータス */}
       <div style={{ marginTop: "32px" }}>
         <h2
           onClick={() => setOpenAuto((v) => !v)}
@@ -185,14 +206,14 @@ export default function AdminTopPage() {
         )}
       </div>
 
-      {/* 🎯 ニブイチ管理（最初の1つだけ常に表示） */}
+      {/* 🎯 ニブイチ管理 */}
       <Section title="🎯 ニブイチ管理" showFirstOnly>
         <MenuLink href="/admin/nibuichi">ニブイチ管理トップ</MenuLink>
         <MenuLink href="/admin/nibuichi/edit-stats">総合戦績の修正</MenuLink>
         <MenuLink href="/admin/nibuichi/history">日別履歴 & 予想一覧</MenuLink>
       </Section>
 
-      {/* 👤 ユーザー管理（全部折りたたむ） */}
+      {/* 👤 ユーザー管理 */}
       <Section title="👤 ユーザー管理" forceCollapseAll>
         <MenuLink href="/admin/users">ユーザー管理</MenuLink>
         <MenuLink href="/admin/history">ポイント履歴</MenuLink>
@@ -254,7 +275,6 @@ function Section({
   const firstItem = items[0];
   const restItems = items.slice(1);
 
-  // 発送状況 → 常に展開
   if (alwaysOpen) {
     return (
       <div style={{ marginTop: "32px" }}>
@@ -293,7 +313,6 @@ function Section({
         <span style={{ fontSize: 20 }}>{open ? "▲" : "▼"}</span>
       </div>
 
-      {/* ニブイチ管理 → 最初の1つだけ常に表示 */}
       {showFirstOnly && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {firstItem}
@@ -301,7 +320,6 @@ function Section({
         </div>
       )}
 
-      {/* その他 → 全部折りたたむ */}
       {forceCollapseAll && open && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {items}
