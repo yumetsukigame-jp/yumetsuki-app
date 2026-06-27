@@ -93,7 +93,7 @@ export default function RewardPage() {
        ② selectedRewards に保存（uid を必ず含める）
     -------------------------------------------------- */
     await setDoc(doc(db, "selectedRewards", uid), {
-      uid,                     // ★ 必須（ShippingAdminPage が使う）
+      uid,                     // ★ 必須
       rewardId: reward.id,
       name: reward.name,
       cost: reward.cost,
@@ -146,6 +146,7 @@ export default function RewardPage() {
               border: "1px solid #ccc",
               padding: "10px",
               marginBottom: "10px",
+              borderRadius: "8px",
             }}
           >
             {/* 画像表示 */}
@@ -166,7 +167,23 @@ export default function RewardPage() {
             <p>必要ポイント: {reward.cost}</p>
             <p>在庫: {reward.stock}</p>
 
-            <button onClick={() => handleSelect(reward)}>
+            {/* ★ 改善したボタン（①のデザイン） */}
+            <button
+              onClick={() => handleSelect(reward)}
+              style={{
+                padding: "12px 20px",
+                background: "#4f46e5",
+                color: "white",
+                borderRadius: "8px",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "16px",
+                fontWeight: "bold",
+                width: "100%",
+                marginTop: "10px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
+              }}
+            >
               この商品を選ぶ
             </button>
           </div>
