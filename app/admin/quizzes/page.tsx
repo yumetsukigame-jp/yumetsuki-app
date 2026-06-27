@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/firebase"; // ★ 追加：Functions 呼び出し用
+import { functions } from "@/firebase"; // Functions 呼び出し用
 
 export default function AdminQuizListPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -49,7 +49,7 @@ export default function AdminQuizListPage() {
       console.log("confirmQuizAnswer result:", res.data);
 
       alert("解答を確定しました！");
-      fetchQuizzes(); // 最新状態に更新
+      fetchQuizzes();
     } catch (e) {
       console.error(e);
       alert("解答確定に失敗しました");
@@ -57,16 +57,17 @@ export default function AdminQuizListPage() {
   };
 
   /* --------------------------------------------------
-     ★ アーカイブ（旧仕様：今後は非推奨）
+     ★ 回答回数リセット（newAnswerCount のみ 0 にする）
+     過去回答（items）は保持
   -------------------------------------------------- */
-  const archiveQuiz = async (id: string) => {
-    if (!confirm("このクイズをアーカイブしますか？")) return;
+  const resetAnswerCount = async (id: string) => {
+    if (!confirm("回答回数をリセットしますか？\n過去回答は保持されます。")) return;
 
     await updateDoc(doc(db, "quizzes", id), {
-      archived: true,
+      newAnswerCount: 0,
     });
 
-    alert("アーカイブしました");
+    alert("回答回数をリセットしました！");
     fetchQuizzes();
   };
 
@@ -121,7 +122,7 @@ export default function AdminQuizListPage() {
               display: "flex",
               alignItems: "center",
               gap: 16,
-              flexWrap: "wrap", // ★ スマホで崩れにくくする
+              flexWrap: "wrap",
             }}
           >
             <img
@@ -133,6 +134,7 @@ export default function AdminQuizListPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: 20 }}>{q.title}</h2>
               <p>回答回数：{q.maxAnswers}</p>
+              <p>現在の回答数（newAnswerCount）：{q.newAnswerCount ?? 0}</p>
               <p>アーカイブ：{q.archived ? "はい" : "いいえ"}</p>
             </div>
 
@@ -150,7 +152,7 @@ export default function AdminQuizListPage() {
               編集
             </Link>
 
-            {/* ★ 解答確定ボタン（新規追加） */}
+            {/* ★ 解答確定 */}
             <button
               onClick={() => confirmQuiz(q.id)}
               style={{
@@ -165,9 +167,9 @@ export default function AdminQuizListPage() {
               解答確定
             </button>
 
-            {/* アーカイブ（旧仕様） */}
+            {/* ★ 回答回数リセット（新規追加） */}
             <button
-              onClick={() => archiveQuiz(q.id)}
+              onClick={() => resetAnswerCount(q.id)}
               style={{
                 padding: "8px 12px",
                 background: "#f59e0b",
@@ -177,7 +179,7 @@ export default function AdminQuizListPage() {
                 cursor: "pointer",
               }}
             >
-              アーカイブ
+              回答回数リセット
             </button>
 
             {/* 削除 */}
