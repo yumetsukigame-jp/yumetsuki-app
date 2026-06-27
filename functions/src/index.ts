@@ -1090,7 +1090,7 @@ export const getNibuichiUserStats = functions
 export * from "./imageProcessor";
 
 /* ============================================================
-   クイズ正答者ポイント分配（V2 完全版）
+   クイズ正答者ポイント分配（複数回答対応 完全版）
 ============================================================ */
 
 export const confirmQuizAnswer = functions
@@ -1121,17 +1121,33 @@ export const confirmQuizAnswer = functions
       const salt = quiz.salt ?? `salt_${quizId}`;
       const thread = quiz.thread ?? `thread_${quizId}`;
 
+      /* --------------------------------------------------
+         ★ 全ユーザーの複数回答を取得
+      -------------------------------------------------- */
       const answersRef = quizRef.collection("answers");
-      const answersSnap = await answersRef.get();
+      const usersSnap = await answersRef.get();
 
       const correctUsers: string[] = [];
-      answersSnap.forEach((doc) => {
-        const ans = doc.data();
-        if (ans.answer === correctAnswer) {
-          correctUsers.push(doc.id);
-        }
-      });
 
+      for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+
+        const itemsSnap = await answersRef
+          .doc(uid)
+          .collection("items")
+          .get();
+
+        itemsSnap.forEach((item) => {
+          const ans = item.data().answer;
+          if (ans === correctAnswer) {
+            correctUsers.push(uid);
+          }
+        });
+      }
+
+      /* --------------------------------------------------
+         ★ 山分けポイント計算
+      -------------------------------------------------- */
       let perUser = 0;
       if (correctUsers.length > 0) {
         perUser = Math.floor(rewardPoint / correctUsers.length);
@@ -1146,6 +1162,9 @@ export const confirmQuizAnswer = functions
       });
       await batch.commit();
 
+      /* --------------------------------------------------
+         ★ アーカイブへクイズ本体をコピー
+      -------------------------------------------------- */
       const archiveRef = db.collection("quizzes_archive").doc(quizId);
       await archiveRef.set({
         ...quiz,
@@ -1156,22 +1175,45 @@ export const confirmQuizAnswer = functions
         archivedAt: Timestamp.now(),
       });
 
+      /* --------------------------------------------------
+         ★ 複数回答をアーカイブ側へコピー
+      -------------------------------------------------- */
       const archiveAnswersRef = archiveRef.collection("answers");
-      const copyBatch = db.batch();
-      answersSnap.forEach((doc) => {
-        copyBatch.set(archiveAnswersRef.doc(doc.id), doc.data());
-      });
-      await copyBatch.commit();
+
+      for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+
+        const itemsSnap = await answersRef
+          .doc(uid)
+          .collection("items")
+          .get();
+
+        for (const item of itemsSnap.docs) {
+          await archiveAnswersRef
+            .doc(uid)
+            .collection("items")
+            .doc(item.id)
+            .set(item.data());
+        }
+      }
 
       /* --------------------------------------------------
-         ★ 元の answers サブコレクションを削除
+         ★ 元の answers/{uid}/items を削除
       -------------------------------------------------- */
-      const originalAnswersSnap = await answersRef.get();
-      const deleteBatch = db.batch();
-      originalAnswersSnap.forEach((doc) => {
-        deleteBatch.delete(doc.ref);
-      });
-      await deleteBatch.commit();
+      for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+
+        const itemsSnap = await answersRef
+          .doc(uid)
+          .collection("items")
+          .get();
+
+        const deleteBatch = db.batch();
+        itemsSnap.forEach((item) => {
+          deleteBatch.delete(item.ref);
+        });
+        await deleteBatch.commit();
+      }
 
       /* --------------------------------------------------
          ★ 最後にクイズ本体を削除
