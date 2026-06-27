@@ -56,6 +56,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   const [originalAnswer, setOriginalAnswer] = useState("");
 
+  const [newAnswerCount, setNewAnswerCount] = useState(0); // ★ 新規回答数
+
   /* --------------------------------------------------
      クイズ読み込み
   -------------------------------------------------- */
@@ -64,7 +66,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      if (!snap.exists()) {
+      if (!snap.exists) {
         alert("クイズが存在しません");
         router.push("/admin/quizzes");
         return;
@@ -84,6 +86,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       setThread(data.thread ?? "");
 
       setOriginalAnswer(data.answer ?? "");
+
+      setNewAnswerCount(data.newAnswerCount ?? 0);
 
       // 画像一覧
       const imgSnap = await getDocs(collection(db, "imageMeta"));
@@ -131,16 +135,17 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数だけリセット（回答は消さない）
-  -------------------------------------------------- */
+     ★ 回答回数リセット（新規回答数だけをリセット）
+     過去回答（items）は消さない
+-------------------------------------------------- */
   const resetAnswers = async () => {
     if (!confirm("回答回数をリセットしますか？")) return;
 
     await updateDoc(doc(db, "quizzes", quizId), {
-      answerCount: 0,
+      newAnswerCount: 0,
     });
 
-    alert("回答回数をリセットしました");
+    alert("回答回数をリセットしました（過去回答は保持されます）");
   };
 
   /* --------------------------------------------------
@@ -257,7 +262,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
         {/* 回答回数 */}
         <div>
-          <label>回答回数</label>
+          <label>回答回数（新規回答可能数）</label>
           <input
             type="number"
             value={maxAnswers}
@@ -295,7 +300,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           cursor: "pointer",
         }}
       >
-        回答回数をリセット
+        回答回数をリセット（過去回答は保持）
       </button>
 
       <button

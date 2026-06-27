@@ -9,6 +9,7 @@ import {
   addDoc,
   collection,
   getDocs,
+  updateDoc,
 } from "firebase/firestore";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
@@ -22,9 +23,8 @@ export default function QuizDetailPage({ params }) {
   const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [myAnswers, setMyAnswers] = useState<any[]>([]); // ★ 自分の回答一覧
-  const [myAnswerCount, setMyAnswerCount] = useState(0); // ★ 自分の回答数
-  const [newAnswer, setNewAnswer] = useState(""); // ★ 新しい回答入力欄
+  const [myAnswers, setMyAnswers] = useState<any[]>([]); // ★ 過去回答（履歴）
+  const [newAnswer, setNewAnswer] = useState(""); // ★ 新規回答入力欄
 
   const [answers, setAnswers] = useState<any[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function QuizDetailPage({ params }) {
       const data = snap.data();
       setQuiz(data);
 
-      // ★ 自分の回答一覧を取得（複数回答対応）
+      // ★ 自分の過去回答（items）を取得
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
@@ -70,7 +70,6 @@ export default function QuizDetailPage({ params }) {
 
         const list = itemsSnap.docs.map((d) => d.data());
         setMyAnswers(list);
-        setMyAnswerCount(list.length);
       }
 
       setLoading(false);
@@ -80,7 +79,7 @@ export default function QuizDetailPage({ params }) {
   }, [authReady, uid, quizId]);
 
   /* --------------------------------------------------
-     回答送信（複数回答対応）
+     新規回答送信（複数回答対応）
   -------------------------------------------------- */
   const submitAnswer = async () => {
     if (!newAnswer.trim()) {
@@ -88,6 +87,7 @@ export default function QuizDetailPage({ params }) {
       return;
     }
 
+    // ★ 新規回答を items に追加
     await addDoc(
       collection(db, "quizzes", quizId, "answers", uid!, "items"),
       {
@@ -96,10 +96,15 @@ export default function QuizDetailPage({ params }) {
       }
     );
 
-    setMyAnswerCount(myAnswerCount + 1);
-    setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
+    // ★ newAnswerCount を増やす（今回のラウンドの回答数）
+    await updateDoc(doc(db, "quizzes", quizId), {
+      newAnswerCount: quiz.newAnswerCount + 1,
+    });
 
+    // ★ ローカル状態更新
+    setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
     setNewAnswer("");
+
     alert("回答しました！");
   };
 
@@ -215,7 +220,7 @@ export default function QuizDetailPage({ params }) {
         {quiz.rewardPoint} pt
       </div>
 
-      {/* ▼ 自分の過去回答一覧 */}
+      {/* ▼ 自分の過去回答（履歴） */}
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <h3>あなたの過去の回答</h3>
@@ -225,8 +230,8 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 回答フォーム（回答可能回数が残っている場合のみ表示） */}
-      {myAnswerCount < quiz.maxAnswers && (
+      {/* ▼ 新規回答フォーム（newAnswerCount で判定） */}
+      {quiz.newAnswerCount < quiz.maxAnswers && (
         <div>
           <input
             type="text"
