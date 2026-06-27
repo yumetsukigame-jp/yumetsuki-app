@@ -322,46 +322,60 @@ const checkCode = async () => {
   };
 
   /* --------------------------------------------------
-     発送処理
-  -------------------------------------------------- */
-  const handleShipping = async () => {
-    if (!uid) {
-      alert("ログインが必要です");
-      return;
-    }
+   発送処理（ガチャ）
+-------------------------------------------------- */
+const handleShipping = async () => {
+  if (!uid) {
+    alert("ログインが必要です");
+    return;
+  }
 
-    if (!result) {
-      alert("結果がありません");
-      return;
-    }
+  if (!result) {
+    alert("結果がありません");
+    return;
+  }
 
-    const frameName = result.frame;
-    const rewardPoints = result.reward;
+  const frameName = result.frame;
+  const rewardPoints = result.reward;
 
-    const rewardData = {
-      rewardId: `gacha_${code}_${Date.now()}`,
-      name: `${frameName}（ガチャ）`,
-      cost: rewardPoints,
-      image: "/rewards/gacha.webp",
-      timestamp: new Date(),
-      shipped: false,
-    };
+  // ★ ユーザー情報取得（発送管理で必要）
+  const userSnap = await getDoc(doc(db, "users", uid));
+  const userData = userSnap.data() ?? {};
 
-    await setDoc(doc(db, "selectedRewards", uid), rewardData);
+  const rewardData = {
+    uid,                                // ★ 必須
+    rewardId: `gacha_${code}_${Date.now()}`,
+    name: `${frameName}（ガチャ）`,
+    cost: rewardPoints,
+    image: "/rewards/gacha.webp",
+    timestamp: new Date(),
+    shipped: false,
 
-    await setDoc(doc(collection(db, "shippingHistory")), {
-      uid,
-      ...rewardData,
-      requestedAt: new Date(),
-    });
-
-    await updateDoc(doc(db, "users", uid), {
-      points: increment(-rewardPoints),
-    });
-
-    alert("発送物を作成しました！");
-    router.push("/reward/complete");
+    // ★ 発送管理で必要なユーザー情報
+    userName: userData.name ?? "",
+    userEmail: userData.email ?? "",
+    userX: userData.xAccount ?? "",
+    userNickname: userData.displayName ?? "",
+    xAccountConfirmed: userData.xAccountConfirmed ?? false,
   };
+
+  // ★ selectedRewards に保存（発送管理が参照する）
+  await setDoc(doc(db, "selectedRewards", uid), rewardData);
+
+  // ★ shippingHistory に履歴保存
+  await setDoc(doc(collection(db, "shippingHistory")), {
+    ...rewardData,
+    requestedAt: new Date(),
+  });
+
+  // ★ ポイント減算
+  await updateDoc(doc(db, "users", uid), {
+    points: increment(-rewardPoints),
+  });
+
+  alert("発送物を作成しました！");
+  router.push("/reward/complete");
+};
 
   /* --------------------------------------------------
      1リール（縦3段）
