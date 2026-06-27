@@ -11,13 +11,13 @@ export default function ShippingStatsPage() {
   const fetchStats = async () => {
     const snap = await getDocs(collection(db, "shippingHistory"));
 
-    const countMap: any = {};
+    const countMap: Record<string, number> = {};
 
     snap.docs.forEach((d) => {
       const data = d.data();
 
-      // ★ ガチャも通常景品も rewardName だけで区別する
-      const name = data.rewardName || "不明なアイテム";
+      // ★ ガチャは name、通常景品は rewardName
+      const name = data.rewardName || data.name || "不明なアイテム";
 
       if (!countMap[name]) {
         countMap[name] = 0;
