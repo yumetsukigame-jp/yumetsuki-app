@@ -2,21 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
 
 export default function QuizRankingPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 折りたたみ状態
   const [openQuizId, setOpenQuizId] = useState<string | null>(null);
 
-  // 回答読み込み状態
   const [answers, setAnswers] = useState<Record<string, any[]>>({});
   const [answersLoading, setAnswersLoading] = useState<Record<string, boolean>>({});
 
-  // ★ 完了済みクイズを取得 → 回答数順に並び替え
+  /* --------------------------------------------------
+     完了済みクイズを取得 → 回答数順に並び替え
+     ★ 複数回答対応：answers/{uid}/items を全部数える
+  -------------------------------------------------- */
   const fetchQuizzes = async () => {
     const snap = await getDocs(collection(db, "quizzes_archive"));
     const list = snap.docs.map((d) => ({
@@ -24,13 +25,24 @@ export default function QuizRankingPage() {
       ...d.data(),
     }));
 
-    // 回答数を取得するために answers コレクションを読む
     const withCounts = await Promise.all(
       list.map(async (q) => {
-        const ansSnap = await getDocs(collection(db, "quizzes_archive", q.id, "answers"));
+        let totalAnswers = 0;
+
+        const usersSnap = await getDocs(
+          collection(db, "quizzes_archive", q.id, "answers")
+        );
+
+        for (const userDoc of usersSnap.docs) {
+          const itemsSnap = await getDocs(
+            collection(db, "quizzes_archive", q.id, "answers", userDoc.id, "items")
+          );
+          totalAnswers += itemsSnap.size;
+        }
+
         return {
           ...q,
-          answerCount: ansSnap.size,
+          answerCount: totalAnswers,
         };
       })
     );
@@ -46,17 +58,44 @@ export default function QuizRankingPage() {
     fetchQuizzes();
   }, []);
 
-  // ★ 折りたたみを開いた瞬間に回答を読み込む
+  /* --------------------------------------------------
+     回答一覧読み込み（複数回答対応）
+  -------------------------------------------------- */
   const loadAnswers = async (quizId: string) => {
     setAnswersLoading((prev) => ({ ...prev, [quizId]: true }));
 
-    const snap = await getDocs(collection(db, "quizzes_archive", quizId, "answers"));
-    const list = snap.docs.map((d) => ({
-      uid: d.id,
-      ...d.data(),
-    }));
+    const usersSnap = await getDocs(
+      collection(db, "quizzes_archive", quizId, "answers")
+    );
 
-    setAnswers((prev) => ({ ...prev, [quizId]: list }));
+    const allAnswers: any[] = [];
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+
+      const itemsSnap = await getDocs(
+        collection(db, "quizzes_archive", quizId, "answers", uid, "items")
+      );
+
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      const userData = userSnap.exists()
+        ? userSnap.data()
+        : { displayName: "名無し", xAccount: "未登録" };
+
+      itemsSnap.forEach((item) => {
+        allAnswers.push({
+          uid,
+          answer: item.data().answer,
+          createdAt: item.data().createdAt,
+          userNickname: userData.displayName ?? "名無し",
+          userX: userData.xAccount ?? "未登録",
+        });
+      });
+    }
+
+    setAnswers((prev) => ({ ...prev, [quizId]: allAnswers }));
     setAnswersLoading((prev) => ({ ...prev, [quizId]: false }));
   };
 
@@ -68,7 +107,6 @@ export default function QuizRankingPage() {
 
     setOpenQuizId(quizId);
 
-    // 初回だけ読み込む
     if (!answers[quizId]) {
       loadAnswers(quizId);
     }
@@ -142,14 +180,10 @@ export default function QuizRankingPage() {
             {/* 折りたたみ部分 */}
             {openQuizId === q.id && (
               <div style={{ marginTop: 16, paddingLeft: 8 }}>
-
-                {/* 読み込み中 */}
                 {answersLoading[q.id] && <p>読み込み中…</p>}
 
-                {/* 読み込み完了 */}
                 {!answersLoading[q.id] && (
                   <div>
-                    {/* ★ クイズ詳細情報 */}
                     <h3 style={{ marginTop: 10 }}>正解：{q.answer}</h3>
 
                     {q.explanation && (
@@ -162,20 +196,22 @@ export default function QuizRankingPage() {
                       山分けポイント：{q.rewardPoint}pt
                     </p>
 
-                    {/* ★ 回答一覧 */}
                     <p style={{ marginTop: 16 }}>
                       回答一覧（{answers[q.id]?.length ?? 0}件）
                     </p>
 
-                    {answers[q.id]?.map((a) => (
+                    {answers[q.id]?.map((a, i) => (
                       <div
-                        key={a.uid}
+                        key={`${a.uid}-${i}`}
                         style={{
                           padding: "8px 12px",
                           borderBottom: "1px solid #eee",
                         }}
                       >
-                        <strong>{a.uid}</strong>：{a.answer}
+                        <strong>
+                          {a.userNickname}（{a.userX}）
+                        </strong>
+                        ：{a.answer}
                       </div>
                     ))}
                   </div>
