@@ -1163,6 +1163,19 @@ export const confirmQuizAnswer = functions
       });
       await copyBatch.commit();
 
+      /* --------------------------------------------------
+         ★ 元の answers サブコレクションを削除
+      -------------------------------------------------- */
+      const originalAnswersSnap = await answersRef.get();
+      const deleteBatch = db.batch();
+      originalAnswersSnap.forEach((doc) => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
+
+      /* --------------------------------------------------
+         ★ 最後にクイズ本体を削除
+      -------------------------------------------------- */
       await quizRef.delete();
 
       return {
