@@ -30,22 +30,26 @@ export default function QuizArchivePage() {
   }, []);
 
   /* --------------------------------------------------
-     回答一覧読み込み（★ displayName + xAccount 対応）
+     回答一覧読み込み（複数回答対応）
   -------------------------------------------------- */
   const loadAnswers = async (quizId: string) => {
     setAnswersLoading((prev) => ({ ...prev, [quizId]: true }));
 
-    const snap = await getDocs(
+    const usersSnap = await getDocs(
       collection(db, "quizzes_archive", quizId, "answers")
     );
 
-    const list: any[] = [];
+    const allAnswers: any[] = [];
 
-    for (const d of snap.docs) {
-      const uid = d.id;
-      const ans = d.data();
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
 
-      // ★ users コレクションからユーザー情報を取得
+      // ★ 複数回答 items を取得
+      const itemsSnap = await getDocs(
+        collection(db, "quizzes_archive", quizId, "answers", uid, "items")
+      );
+
+      // ★ ユーザー情報取得
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
@@ -56,16 +60,19 @@ export default function QuizArchivePage() {
             xAccount: "未登録",
           };
 
-      list.push({
-        uid,
-        answer: ans.answer,
-        createdAt: ans.createdAt,
-        userNickname: userData.displayName ?? "名無し",
-        userX: userData.xAccount ?? "未登録",
+      // ★ items をすべて push
+      itemsSnap.forEach((item) => {
+        allAnswers.push({
+          uid,
+          answer: item.data().answer,
+          createdAt: item.data().createdAt,
+          userNickname: userData.displayName ?? "名無し",
+          userX: userData.xAccount ?? "未登録",
+        });
       });
     }
 
-    setAnswers((prev) => ({ ...prev, [quizId]: list }));
+    setAnswers((prev) => ({ ...prev, [quizId]: allAnswers }));
     setAnswersLoading((prev) => ({ ...prev, [quizId]: false }));
   };
 
@@ -180,9 +187,9 @@ export default function QuizArchivePage() {
                       回答数：{answers[q.id]?.length ?? 0}件
                     </p>
 
-                    {answers[q.id]?.map((a) => (
+                    {answers[q.id]?.map((a, i) => (
                       <div
-                        key={a.uid}
+                        key={`${a.uid}-${i}`}
                         style={{
                           padding: "8px 12px",
                           borderBottom: "1px solid #eee",
