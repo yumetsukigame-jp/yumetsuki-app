@@ -18,7 +18,9 @@ export default function RewardPage() {
   const [points, setPoints] = useState<number | null>(null);
   const router = useRouter();
 
-  // ★ ユーザーのポイント取得（onAuthStateChanged で確実に取得）
+  /* --------------------------------------------------
+     ユーザーのポイント取得
+  -------------------------------------------------- */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
@@ -34,7 +36,9 @@ export default function RewardPage() {
     return () => unsubscribe();
   }, []);
 
-  // 商品一覧取得
+  /* --------------------------------------------------
+     商品一覧取得
+  -------------------------------------------------- */
   useEffect(() => {
     const fetchRewards = async () => {
       const querySnapshot = await getDocs(collection(db, "rewards"));
@@ -48,7 +52,9 @@ export default function RewardPage() {
     fetchRewards();
   }, []);
 
-  // 発送物を選択
+  /* --------------------------------------------------
+     発送物を選択
+  -------------------------------------------------- */
   const handleSelect = async (reward: any) => {
     if (points === null) return;
 
@@ -67,7 +73,7 @@ export default function RewardPage() {
 
     const uid = user.uid;
 
-    // ★ ユーザー情報を Firestore から取得（名前・Xアカウント）
+    // ユーザー情報取得
     const userRef = doc(db, "users", uid);
     const userSnap = await getDoc(userRef);
 
@@ -76,13 +82,18 @@ export default function RewardPage() {
 
     const newPoints = points - reward.cost;
 
-    // ① ユーザーポイントを減らす
+    /* --------------------------------------------------
+       ① ユーザーポイントを減らす
+    -------------------------------------------------- */
     await updateDoc(doc(db, "users", uid), {
       points: newPoints,
     });
 
-    // ② selectedRewards に保存（ユーザーが現在選んでいる商品）
+    /* --------------------------------------------------
+       ② selectedRewards に保存（uid を必ず含める）
+    -------------------------------------------------- */
     await setDoc(doc(db, "selectedRewards", uid), {
+      uid,                     // ★ 必須（ShippingAdminPage が使う）
       rewardId: reward.id,
       name: reward.name,
       cost: reward.cost,
@@ -91,28 +102,33 @@ export default function RewardPage() {
       shipped: false,
     });
 
-    // ③ 在庫を減らす
+    /* --------------------------------------------------
+       ③ 在庫を減らす
+    -------------------------------------------------- */
     await updateDoc(doc(db, "rewards", reward.id), {
       stock: reward.stock - 1,
     });
 
-    // ★ ④ shippingHistory に履歴として保存（ユーザー名・Xアカウント付き）
+    /* --------------------------------------------------
+       ④ shippingHistory に履歴保存
+    -------------------------------------------------- */
     await setDoc(doc(collection(db, "shippingHistory")), {
-      uid: uid,
+      uid,
       rewardId: reward.id,
       name: reward.name,
       cost: reward.cost,
       image: reward.image ?? null,
       requestedAt: new Date(),
       shipped: false,
-      userName: userName,
-      userX: userX,
+      userName,
+      userX,
     });
 
-    // ⑤ ポイントを画面に反映
+    /* --------------------------------------------------
+       ⑤ ポイントを画面に反映
+    -------------------------------------------------- */
     setPoints(newPoints);
 
-    // 完了画面へ
     router.push("/reward/complete");
   };
 
