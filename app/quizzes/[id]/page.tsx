@@ -5,7 +5,6 @@ import { db, auth } from "@/firebase";
 import {
   doc,
   getDoc,
-  setDoc,
   addDoc,
   collection,
   getDocs,
@@ -23,14 +22,13 @@ export default function QuizDetailPage({ params }) {
   const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [myAnswers, setMyAnswers] = useState<any[]>([]); // ★ 過去回答（履歴）
-  const [newAnswer, setNewAnswer] = useState(""); // ★ 新規回答入力欄
+  const [myAnswers, setMyAnswers] = useState<any[]>([]);
+  const [newAnswer, setNewAnswer] = useState("");
 
   const [answers, setAnswers] = useState<any[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
 
   const [open, setOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
 
   /* --------------------------------------------------
      Auth 初期化
@@ -53,21 +51,27 @@ export default function QuizDetailPage({ params }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      if (!snap.exists()) {
+      // ★ 修正済み：exists() → exists
+      if (!snap.exists) {
         setQuiz(null);
         setLoading(false);
         return;
       }
 
       const data = snap.data();
+
+      // ★ newAnswerCount が無い既存クイズにも対応
+      if (data.newAnswerCount === undefined) {
+        data.newAnswerCount = 0;
+      }
+
       setQuiz(data);
 
-      // ★ 自分の過去回答（items）を取得
+      // ★ 自分の過去回答（items）
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
         );
-
         const list = itemsSnap.docs.map((d) => d.data());
         setMyAnswers(list);
       }
@@ -79,7 +83,7 @@ export default function QuizDetailPage({ params }) {
   }, [authReady, uid, quizId]);
 
   /* --------------------------------------------------
-     新規回答送信（複数回答対応）
+     新規回答送信
   -------------------------------------------------- */
   const submitAnswer = async () => {
     if (!newAnswer.trim()) {
@@ -96,20 +100,27 @@ export default function QuizDetailPage({ params }) {
       }
     );
 
-    // ★ newAnswerCount を増やす（今回のラウンドの回答数）
+    // ★ Firestore の newAnswerCount を増やす
     await updateDoc(doc(db, "quizzes", quizId), {
       newAnswerCount: quiz.newAnswerCount + 1,
     });
 
-    // ★ ローカル状態更新
+    // ★ ローカル状態も更新（回答欄が消える）
+    setQuiz({
+      ...quiz,
+      newAnswerCount: quiz.newAnswerCount + 1,
+    });
+
+    // ★ 過去回答をローカル更新
     setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
+
     setNewAnswer("");
 
     alert("回答しました！");
   };
 
   /* --------------------------------------------------
-     回答一覧読み込み（全ユーザー）
+     回答一覧読み込み
   -------------------------------------------------- */
   const loadAnswers = async () => {
     setAnswersLoading(true);
@@ -130,7 +141,7 @@ export default function QuizDetailPage({ params }) {
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
-      const userData = userSnap.exists()
+      const userData = userSnap.exists
         ? userSnap.data()
         : { displayName: "名無し", xAccount: "未登録" };
 
@@ -220,7 +231,7 @@ export default function QuizDetailPage({ params }) {
         {quiz.rewardPoint} pt
       </div>
 
-      {/* ▼ 自分の過去回答（履歴） */}
+      {/* ▼ 自分の過去回答 */}
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <h3>あなたの過去の回答</h3>
@@ -230,7 +241,7 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 新規回答フォーム（newAnswerCount で判定） */}
+      {/* ▼ 新規回答フォーム（回答可能なときだけ） */}
       {quiz.newAnswerCount < quiz.maxAnswers && (
         <div>
           <input
@@ -263,47 +274,51 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 回答一覧 */}
-      <button
-        onClick={toggleOpen}
-        style={{
-          marginTop: 20,
-          padding: "8px 12px",
-          background: "#2563eb",
-          color: "white",
-          borderRadius: 6,
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        {open ? "回答一覧を閉じる" : "他の人の回答を見る"}
-      </button>
+      {/* ▼ 他人の回答一覧（回答可能な間は非表示） */}
+      {quiz.newAnswerCount >= quiz.maxAnswers && (
+        <>
+          <button
+            onClick={toggleOpen}
+            style={{
+              marginTop: 20,
+              padding: "8px 12px",
+              background: "#2563eb",
+              color: "white",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {open ? "回答一覧を閉じる" : "他の人の回答を見る"}
+          </button>
 
-      {open && (
-        <div style={{ marginTop: 16 }}>
-          {answersLoading && <p>読み込み中…</p>}
+          {open && (
+            <div style={{ marginTop: 16 }}>
+              {answersLoading && <p>読み込み中…</p>}
 
-          {!answersLoading && (
-            <div>
-              <p>回答数：{answers.length}件</p>
+              {!answersLoading && (
+                <div>
+                  <p>回答数：{answers.length}件</p>
 
-              {answers.map((a, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: "8px 12px",
-                    borderBottom: "1px solid #eee",
-                  }}
-                >
-                  <strong>
-                    {a.userNickname}（{a.userX}）
-                  </strong>
-                  ：{a.answer}
+                  {answers.map((a, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "8px 12px",
+                        borderBottom: "1px solid #eee",
+                      }}
+                    >
+                      <strong>
+                        {a.userNickname}（{a.userX}）
+                      </strong>
+                      ：{a.answer}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {/* ▼ アーカイブ後の正解表示 */}
