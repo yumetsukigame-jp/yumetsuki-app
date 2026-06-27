@@ -134,7 +134,7 @@ export default function AdminQuizListPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: 20 }}>{q.title}</h2>
               <p>回答回数：{q.maxAnswers}</p>
-              <p>現在の回答数（newAnswerCount）：{q.newAnswerCount ?? 0}</p>
+              <p>現在の回答数：{q.newAnswerCount ?? 0}</p>
               <p>アーカイブ：{q.archived ? "はい" : "いいえ"}</p>
             </div>
 
