@@ -56,7 +56,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   const [originalAnswer, setOriginalAnswer] = useState("");
 
-  const [newAnswerCount, setNewAnswerCount] = useState(0); // ★ 新規回答数
+  const [newAnswerCount, setNewAnswerCount] = useState(0);
 
   /* --------------------------------------------------
      クイズ読み込み
@@ -66,8 +66,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      // ★ 修正：exists() → exists
-      if (!snap.exists) {
+      // ★ 修正：exists → exists()
+      if (!snap.exists()) {
         alert("クイズが存在しません");
         router.push("/admin/quizzes");
         return;
@@ -88,10 +88,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
       setOriginalAnswer(data.answer ?? "");
 
-      // ★ newAnswerCount が存在しない既存クイズにも対応
       setNewAnswerCount(data.newAnswerCount ?? 0);
 
-      // 画像一覧
       const imgSnap = await getDocs(collection(db, "imageMeta"));
       const list = imgSnap.docs
         .map((d) => d.data())
@@ -114,7 +112,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
     let newSalt = salt;
     let newThread = thread;
 
-    // ★ 正解が変更された場合のみ再生成
     if (answer !== originalAnswer) {
       newSalt = randomString(12);
       newThread = await sha256(`${answer}-${newSalt}`);
@@ -130,7 +127,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       maxAnswers: Number(maxAnswers),
       salt: newSalt,
       thread: newThread,
-      newAnswerCount, // ★ 消えないように保存
+      newAnswerCount,
     });
 
     alert("更新しました！");
@@ -138,17 +135,19 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（新規回答数だけをリセット）
-     過去回答（items）は消さない
+     ★ 回答回数リセット（A方式：maxAnswers もリセット）
+     過去回答（items）は保持する
   -------------------------------------------------- */
   const resetAnswers = async () => {
     if (!confirm("回答回数をリセットしますか？")) return;
 
     await updateDoc(doc(db, "quizzes", quizId), {
       newAnswerCount: 0,
+      maxAnswers: 0, // ★ 追加：回答上限をリセット
     });
 
     setNewAnswerCount(0);
+    setMaxAnswers(0); // ★ UI側も更新
 
     alert("回答回数をリセットしました（過去回答は保持されます）");
   };
@@ -177,7 +176,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
         onSubmit={handleSave}
         style={{ display: "flex", flexDirection: "column", gap: 16 }}
       >
-        {/* タイトル */}
         <div>
           <label>タイトル</label>
           <input
@@ -188,7 +186,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
-        {/* サムネイル */}
         <div>
           <label>サムネイル画像</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
@@ -214,7 +211,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           </div>
         </div>
 
-        {/* 問題文 */}
         <div>
           <label>問題文</label>
           <textarea
@@ -224,7 +220,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
-        {/* 正解 */}
         <div>
           <label>正解</label>
           <input
@@ -235,7 +230,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
-        {/* 解説 */}
         <div>
           <label>解説</label>
           <textarea
@@ -245,14 +239,12 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
-        {/* salt と thread */}
         <div>
           <label>スレッド値（改ざん防止用）</label>
           <p>salt：{salt}</p>
           <p>thread（SHA-256）：{thread}</p>
         </div>
 
-        {/* 山分けポイント */}
         <div>
           <label>山分けポイント</label>
           <input
@@ -265,7 +257,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
-        {/* 回答回数 */}
         <div>
           <label>回答回数（新規回答可能数）</label>
           <input
