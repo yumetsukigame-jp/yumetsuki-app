@@ -60,23 +60,8 @@ export default function AdminQuizListPage() {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（newAnswerCount のみ 0）
-     過去回答は保持
-  -------------------------------------------------- */
-  const resetAnswerCount = async (id: string) => {
-    if (!confirm("回答回数をリセットしますか？\n過去回答は保持されます。")) return;
-
-    await updateDoc(doc(db, "quizzes", id), {
-      newAnswerCount: 0,
-    });
-
-    alert("回答回数をリセットしました！");
-    fetchQuizzes();
-  };
-
-  /* --------------------------------------------------
      ★ ラウンドを進める（round + 1）
-     過去回答は保持、新しいラウンド開始
+     newAnswerCount は新ラウンドなので 0 に戻す
   -------------------------------------------------- */
   const nextRound = async (id: string, currentRound: number) => {
     if (!confirm(`ラウンドを進めますか？\n現在: ${currentRound} → 次: ${currentRound + 1}`))
@@ -84,7 +69,7 @@ export default function AdminQuizListPage() {
 
     await updateDoc(doc(db, "quizzes", id), {
       round: currentRound + 1,
-      newAnswerCount: 0, // 新しいラウンドなので回答数リセット
+      newAnswerCount: 0, // ★ 新しいラウンドなので回答数リセット
     });
 
     alert("新しいラウンドを開始しました！");
@@ -186,21 +171,6 @@ export default function AdminQuizListPage() {
               }}
             >
               解答確定
-            </button>
-
-            {/* ★ 回答回数リセット */}
-            <button
-              onClick={() => resetAnswerCount(q.id)}
-              style={{
-                padding: "8px 12px",
-                background: "#f59e0b",
-                color: "white",
-                borderRadius: 6,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              回答回数リセット
             </button>
 
             {/* ★ ラウンドを進める */}
