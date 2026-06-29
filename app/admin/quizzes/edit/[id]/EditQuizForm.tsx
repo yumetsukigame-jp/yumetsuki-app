@@ -11,6 +11,9 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
+/* --------------------------------------------------
+   ランダム英数字生成
+-------------------------------------------------- */
 function randomString(len = 12) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let s = "";
@@ -20,6 +23,9 @@ function randomString(len = 12) {
   return s;
 }
 
+/* --------------------------------------------------
+   SHA-256 ハッシュ生成
+-------------------------------------------------- */
 async function sha256(text: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
@@ -51,6 +57,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   const [originalAnswer, setOriginalAnswer] = useState("");
 
   const [newAnswerCount, setNewAnswerCount] = useState(0);
+
   const [round, setRound] = useState(1); // ★ 新規追加
 
   /* --------------------------------------------------
@@ -84,7 +91,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
       setNewAnswerCount(data.newAnswerCount ?? 0);
 
-      setRound(data.round ?? 1); // ★ 追加
+      setRound(data.round ?? 1); // ★ ラウンド読み込み
 
       const imgSnap = await getDocs(collection(db, "imageMeta"));
       const list = imgSnap.docs
@@ -124,7 +131,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       salt: newSalt,
       thread: newThread,
       newAnswerCount,
-      round, // ★ 保存
+      round, // ★ ラウンド保存
     });
 
     alert("更新しました！");
@@ -169,12 +176,13 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
-      <h1>クイズ編集</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 20 }}>クイズ編集</h1>
 
       <form
         onSubmit={handleSave}
         style={{ display: "flex", flexDirection: "column", gap: 16 }}
       >
+        {/* タイトル */}
         <div>
           <label>タイトル</label>
           <input
@@ -185,9 +193,10 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* サムネイル */}
         <div>
           <label>サムネイル画像</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
             {images.map((img) => (
               <div
                 key={img.url}
@@ -199,12 +208,18 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
                   cursor: "pointer",
                 }}
               >
-                <img src={img.url} width={100} style={{ borderRadius: 6 }} />
+                <img
+                  src={img.url}
+                  alt={img.prefix}
+                  width={100}
+                  style={{ borderRadius: 6 }}
+                />
               </div>
             ))}
           </div>
         </div>
 
+        {/* 問題文 */}
         <div>
           <label>問題文</label>
           <textarea
@@ -214,6 +229,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* 正解 */}
         <div>
           <label>正解</label>
           <input
@@ -224,6 +240,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* 解説 */}
         <div>
           <label>解説</label>
           <textarea
@@ -233,6 +250,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* 山分けポイント */}
         <div>
           <label>山分けポイント</label>
           <input
@@ -245,6 +263,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* 回答回数 */}
         <div>
           <label>回答回数（新規回答可能数）</label>
           <input
@@ -257,6 +276,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           />
         </div>
 
+        {/* ラウンド表示 */}
         <div>
           <label>現在のラウンド</label>
           <p>{round}</p>
@@ -310,4 +330,9 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   );
 }
 
-const inputStyle:
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 10,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+};
