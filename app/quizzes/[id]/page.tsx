@@ -23,6 +23,7 @@ export default function QuizDetailPage({ params }) {
   const [loading, setLoading] = useState(true);
 
   const [myAnswers, setMyAnswers] = useState<any[]>([]);
+  const [myCurrentRoundAnswers, setMyCurrentRoundAnswers] = useState<any[]>([]);
   const [newAnswer, setNewAnswer] = useState("");
 
   const [answers, setAnswers] = useState<any[]>([]);
@@ -70,11 +71,18 @@ export default function QuizDetailPage({ params }) {
           collection(db, "quizzes", quizId, "answers", uid, "items")
         );
 
-        const list = itemsSnap.docs
-          .map((d) => d.data())
-          .filter((a) => (a.round ?? 0) <= data.round); // ★ 新しい条件
+        const allMyAnswers = itemsSnap.docs.map((d) => d.data());
 
-        setMyAnswers(list);
+        const visibleAnswers = allMyAnswers.filter(
+          (a) => (a.round ?? 0) <= data.round
+        );
+
+        const currentRoundAnswers = allMyAnswers.filter(
+          (a) => (a.round ?? 0) === data.round
+        );
+
+        setMyAnswers(visibleAnswers);
+        setMyCurrentRoundAnswers(currentRoundAnswers);
       }
 
       setLoading(false);
@@ -105,15 +113,19 @@ export default function QuizDetailPage({ params }) {
       newAnswerCount: quiz.newAnswerCount + 1,
     });
 
+    const newItem = {
+      answer: newAnswer,
+      createdAt: new Date(),
+      round: quiz.round ?? 0,
+    };
+
+    setMyAnswers([...myAnswers, newItem]);
+    setMyCurrentRoundAnswers([...myCurrentRoundAnswers, newItem]);
+
     setQuiz({
       ...quiz,
       newAnswerCount: quiz.newAnswerCount + 1,
     });
-
-    setMyAnswers([
-      ...myAnswers,
-      { answer: newAnswer, createdAt: new Date(), round: quiz.round ?? 0 },
-    ]);
 
     setNewAnswer("");
 
@@ -222,8 +234,8 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 新規回答フォーム */}
-      {myAnswers.length < quiz.maxAnswers && (
+      {/* ▼ 新規回答フォーム（現在ラウンドの回答数で判定） */}
+      {myCurrentRoundAnswers.length < quiz.maxAnswers && (
         <div>
           <input
             type="text"
@@ -255,8 +267,8 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 他人の回答一覧 */}
-      {myAnswers.length >= quiz.maxAnswers && (
+      {/* ▼ 他人の回答一覧（現在ラウンドの回答が maxAnswers に達したら） */}
+      {myCurrentRoundAnswers.length >= quiz.maxAnswers && (
         <>
           <button
             onClick={toggleOpen}
