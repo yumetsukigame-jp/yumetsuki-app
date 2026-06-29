@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/firebase";
+import { db, functions } from "@/firebase";
 import {
   collection,
   getDocs,
@@ -11,7 +11,6 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/firebase"; // Functions 呼び出し用
 
 export default function AdminQuizListPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -19,10 +18,14 @@ export default function AdminQuizListPage() {
 
   const fetchQuizzes = async () => {
     const snap = await getDocs(collection(db, "quizzes"));
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const list = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        round: data.round ?? 0, // ★ round が無い既存クイズは 0 として扱う
+      };
+    });
     setQuizzes(list);
     setLoading(false);
   };
@@ -57,8 +60,8 @@ export default function AdminQuizListPage() {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（newAnswerCount のみ 0 にする）
-     過去回答（items）は保持
+     ★ 回答回数リセット（newAnswerCount のみ 0）
+     過去回答は保持
   -------------------------------------------------- */
   const resetAnswerCount = async (id: string) => {
     if (!confirm("回答回数をリセットしますか？\n過去回答は保持されます。")) return;
@@ -68,6 +71,23 @@ export default function AdminQuizListPage() {
     });
 
     alert("回答回数をリセットしました！");
+    fetchQuizzes();
+  };
+
+  /* --------------------------------------------------
+     ★ ラウンドを進める（round + 1）
+     過去回答は保持、新しいラウンド開始
+  -------------------------------------------------- */
+  const nextRound = async (id: string, currentRound: number) => {
+    if (!confirm(`ラウンドを進めますか？\n現在: ${currentRound} → 次: ${currentRound + 1}`))
+      return;
+
+    await updateDoc(doc(db, "quizzes", id), {
+      round: currentRound + 1,
+      newAnswerCount: 0, // 新しいラウンドなので回答数リセット
+    });
+
+    alert("新しいラウンドを開始しました！");
     fetchQuizzes();
   };
 
@@ -133,8 +153,9 @@ export default function AdminQuizListPage() {
 
             <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: 20 }}>{q.title}</h2>
-              <p>回答回数：{q.maxAnswers}</p>
-              <p>現在の回答数：{q.newAnswerCount ?? 0}</p>
+              <p>ラウンド：{q.round}</p>
+              <p>回答可能数：{q.maxAnswers}</p>
+              <p>現在ラウンドの回答数：{q.newAnswerCount ?? 0}</p>
               <p>アーカイブ：{q.archived ? "はい" : "いいえ"}</p>
             </div>
 
@@ -167,7 +188,7 @@ export default function AdminQuizListPage() {
               解答確定
             </button>
 
-            {/* ★ 回答回数リセット（新規追加） */}
+            {/* ★ 回答回数リセット */}
             <button
               onClick={() => resetAnswerCount(q.id)}
               style={{
@@ -180,6 +201,21 @@ export default function AdminQuizListPage() {
               }}
             >
               回答回数リセット
+            </button>
+
+            {/* ★ ラウンドを進める */}
+            <button
+              onClick={() => nextRound(q.id, q.round)}
+              style={{
+                padding: "8px 12px",
+                background: "#7c3aed",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              ラウンドを進める
             </button>
 
             {/* 削除 */}
