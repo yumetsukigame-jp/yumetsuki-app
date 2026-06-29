@@ -59,12 +59,12 @@ export default function QuizDetailPage({ params }) {
 
       const data = snap.data();
 
-      // ★ round がない既存クイズは round=0 として扱う
+      // ★ round が無い既存クイズは 0 として扱う
       data.round = data.round ?? 0;
 
       setQuiz(data);
 
-      // ★ 自分の過去回答（現在の round のみ）
+      // ★ 自分の過去回答（round <= quiz.round）
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
@@ -72,7 +72,7 @@ export default function QuizDetailPage({ params }) {
 
         const list = itemsSnap.docs
           .map((d) => d.data())
-          .filter((a) => (a.round ?? 0) === data.round); // ★ round が無い回答は 0 として扱う
+          .filter((a) => (a.round ?? 0) <= data.round); // ★ 新しい条件
 
         setMyAnswers(list);
       }
@@ -150,7 +150,8 @@ export default function QuizDetailPage({ params }) {
         const itemData = item.data();
         const itemRound = itemData.round ?? 0;
 
-        if (itemRound === (quiz.round ?? 0)) {
+        // ★ round <= quiz.round の回答だけ表示
+        if (itemRound <= (quiz.round ?? 0)) {
           allAnswers.push({
             uid: userId,
             answer: itemData.answer,
@@ -211,10 +212,10 @@ export default function QuizDetailPage({ params }) {
         {quiz.rewardPoint} pt
       </div>
 
-      {/* ▼ 自分の過去回答（現在のラウンドのみ） */}
+      {/* ▼ 自分の過去回答（round <= quiz.round） */}
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <h3>あなたの過去の回答（現在のラウンド）</h3>
+          <h3>あなたの過去の回答</h3>
           {myAnswers.map((a, i) => (
             <p key={i}>・{a.answer}</p>
           ))}
