@@ -11,9 +11,6 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-/* --------------------------------------------------
-   ランダム英数字生成
--------------------------------------------------- */
 function randomString(len = 12) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let s = "";
@@ -23,9 +20,6 @@ function randomString(len = 12) {
   return s;
 }
 
-/* --------------------------------------------------
-   SHA-256 ハッシュ生成
--------------------------------------------------- */
 async function sha256(text: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
@@ -57,6 +51,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   const [originalAnswer, setOriginalAnswer] = useState("");
 
   const [newAnswerCount, setNewAnswerCount] = useState(0);
+  const [round, setRound] = useState(1); // ★ 新規追加
 
   /* --------------------------------------------------
      クイズ読み込み
@@ -66,7 +61,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      // ★ 修正：exists → exists()
       if (!snap.exists()) {
         alert("クイズが存在しません");
         router.push("/admin/quizzes");
@@ -89,6 +83,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       setOriginalAnswer(data.answer ?? "");
 
       setNewAnswerCount(data.newAnswerCount ?? 0);
+
+      setRound(data.round ?? 1); // ★ 追加
 
       const imgSnap = await getDocs(collection(db, "imageMeta"));
       const list = imgSnap.docs
@@ -128,6 +124,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       salt: newSalt,
       thread: newThread,
       newAnswerCount,
+      round, // ★ 保存
     });
 
     alert("更新しました！");
@@ -135,21 +132,23 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（A方式：maxAnswers もリセット）
-     過去回答（items）は保持する
+     ★ 回答回数リセット（ラウンド制）
+     過去回答は保持し、新しいラウンドを開始する
   -------------------------------------------------- */
   const resetAnswers = async () => {
-    if (!confirm("回答回数をリセットしますか？")) return;
+    if (!confirm("新しいラウンドを開始しますか？")) return;
+
+    const nextRound = round + 1;
 
     await updateDoc(doc(db, "quizzes", quizId), {
       newAnswerCount: 0,
-      maxAnswers: 0, // ★ 追加：回答上限をリセット
+      round: nextRound, // ★ ラウンドを進める
     });
 
     setNewAnswerCount(0);
-    setMaxAnswers(0); // ★ UI側も更新
+    setRound(nextRound);
 
-    alert("回答回数をリセットしました（過去回答は保持されます）");
+    alert("新しいラウンドを開始しました（過去回答は保持されます）");
   };
 
   /* --------------------------------------------------
@@ -170,7 +169,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>クイズ編集</h1>
+      <h1>クイズ編集</h1>
 
       <form
         onSubmit={handleSave}
@@ -188,7 +187,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
         <div>
           <label>サムネイル画像</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {images.map((img) => (
               <div
                 key={img.url}
@@ -200,12 +199,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
                   cursor: "pointer",
                 }}
               >
-                <img
-                  src={img.url}
-                  alt={img.prefix}
-                  width={100}
-                  style={{ borderRadius: 6 }}
-                />
+                <img src={img.url} width={100} style={{ borderRadius: 6 }} />
               </div>
             ))}
           </div>
@@ -240,12 +234,6 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
         </div>
 
         <div>
-          <label>スレッド値（改ざん防止用）</label>
-          <p>salt：{salt}</p>
-          <p>thread（SHA-256）：{thread}</p>
-        </div>
-
-        <div>
           <label>山分けポイント</label>
           <input
             type="number"
@@ -267,6 +255,11 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
             }
             style={inputStyle}
           />
+        </div>
+
+        <div>
+          <label>現在のラウンド</label>
+          <p>{round}</p>
         </div>
 
         <button
@@ -296,7 +289,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
           cursor: "pointer",
         }}
       >
-        回答回数をリセット（過去回答は保持）
+        新しいラウンドを開始（過去回答は保持）
       </button>
 
       <button
@@ -317,9 +310,4 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #ccc",
-};
+const inputStyle:

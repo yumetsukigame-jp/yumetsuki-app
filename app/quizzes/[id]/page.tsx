@@ -51,7 +51,6 @@ export default function QuizDetailPage({ params }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      // ★ 修正ポイント：exists → exists()
       if (!snap.exists()) {
         setQuiz(null);
         setLoading(false);
@@ -60,18 +59,21 @@ export default function QuizDetailPage({ params }) {
 
       const data = snap.data();
 
-      if (data.newAnswerCount === undefined) {
-        data.newAnswerCount = 0;
-      }
+      // ★ round がない既存クイズにも対応
+      if (data.round === undefined) data.round = 1;
 
       setQuiz(data);
 
-      // ★ 自分の過去回答
+      // ★ 自分の過去回答（現在の round のみ）
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
         );
-        const list = itemsSnap.docs.map((d) => d.data());
+
+        const list = itemsSnap.docs
+          .map((d) => d.data())
+          .filter((a) => a.round === data.round); // ★ ここが重要
+
         setMyAnswers(list);
       }
 
@@ -95,6 +97,7 @@ export default function QuizDetailPage({ params }) {
       {
         answer: newAnswer,
         createdAt: new Date(),
+        round: quiz.round, // ★ 現在のラウンド番号を保存
       }
     );
 
@@ -107,7 +110,10 @@ export default function QuizDetailPage({ params }) {
       newAnswerCount: quiz.newAnswerCount + 1,
     });
 
-    setMyAnswers([...myAnswers, { answer: newAnswer, createdAt: new Date() }]);
+    setMyAnswers([
+      ...myAnswers,
+      { answer: newAnswer, createdAt: new Date(), round: quiz.round },
+    ]);
 
     setNewAnswer("");
 
@@ -136,19 +142,20 @@ export default function QuizDetailPage({ params }) {
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
-      // ★ 修正：exists → exists()
       const userData = userSnap.exists()
         ? userSnap.data()
         : { displayName: "名無し", xAccount: "未登録" };
 
       itemsSnap.forEach((item) => {
-        allAnswers.push({
-          uid: userId,
-          answer: item.data().answer,
-          createdAt: item.data().createdAt,
-          userNickname: userData.displayName ?? "名無し",
-          userX: userData.xAccount ?? "未登録",
-        });
+        if (item.data().round === quiz.round) { // ★ 現在のラウンドのみ
+          allAnswers.push({
+            uid: userId,
+            answer: item.data().answer,
+            createdAt: item.data().createdAt,
+            userNickname: userData.displayName ?? "名無し",
+            userX: userData.xAccount ?? "未登録",
+          });
+        }
       });
     }
 
@@ -179,22 +186,7 @@ export default function QuizDetailPage({ params }) {
     return (
       <div style={{ padding: 20 }}>
         <h2>このクイズは終了しました</h2>
-        <p>結果は完了済みクイズ一覧から確認できます。</p>
-
-        <Link
-          href="/quizzes/archive"
-          style={{
-            display: "inline-block",
-            marginTop: 20,
-            padding: "8px 12px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: 8,
-            textDecoration: "none",
-          }}
-        >
-          完了済みクイズを見る
-        </Link>
+        <Link href="/quizzes/archive">完了済みクイズを見る</Link>
       </div>
     );
   }
@@ -204,39 +196,29 @@ export default function QuizDetailPage({ params }) {
   -------------------------------------------------- */
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>{quiz.title}</h1>
+      <h1>{quiz.title}</h1>
 
-      <img
-        src={quiz.thumbnail}
-        style={{ width: "100%", borderRadius: 12, marginBottom: 20 }}
-      />
+      <img src={quiz.thumbnail} style={{ width: "100%", borderRadius: 12 }} />
 
-      <h2 style={{ fontSize: 20, marginBottom: 10 }}>問題</h2>
-      <p style={{ marginBottom: 20 }}>{quiz.question}</p>
+      <h2>問題</h2>
+      <p>{quiz.question}</p>
 
-      <div
-        style={{
-          padding: 12,
-          background: "#eef2ff",
-          borderRadius: 8,
-          marginBottom: 16,
-        }}
-      >
+      <div style={{ padding: 12, background: "#eef2ff", borderRadius: 8 }}>
         <strong>このクイズの山分けポイント：</strong>
         {quiz.rewardPoint} pt
       </div>
 
-      {/* ▼ 自分の過去回答 */}
+      {/* ▼ 自分の過去回答（現在のラウンドのみ） */}
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <h3>あなたの過去の回答</h3>
+          <h3>あなたの過去の回答（現在のラウンド）</h3>
           {myAnswers.map((a, i) => (
             <p key={i}>・{a.answer}</p>
           ))}
         </div>
       )}
 
-      {/* ▼ 新規回答フォーム（自分が回答可能なときだけ） */}
+      {/* ▼ 新規回答フォーム */}
       {myAnswers.length < quiz.maxAnswers && (
         <div>
           <input
@@ -269,7 +251,7 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 他人の回答一覧（自分が回答し終わったら表示） */}
+      {/* ▼ 他人の回答一覧 */}
       {myAnswers.length >= quiz.maxAnswers && (
         <>
           <button
@@ -296,16 +278,8 @@ export default function QuizDetailPage({ params }) {
                   <p>回答数：{answers.length}件</p>
 
                   {answers.map((a, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: "8px 12px",
-                        borderBottom: "1px solid #eee",
-                      }}
-                    >
-                      <strong>
-                        {a.userNickname}（{a.userX}）
-                      </strong>
+                    <div key={i} style={{ padding: "8px 12px" }}>
+                      <strong>{a.userNickname}（{a.userX}）</strong>
                       ：{a.answer}
                     </div>
                   ))}
@@ -314,18 +288,6 @@ export default function QuizDetailPage({ params }) {
             </div>
           )}
         </>
-      )}
-
-      {/* ▼ アーカイブ後の正解表示 */}
-      {quiz.archived && quiz.answer && (
-        <div style={{ marginTop: 20 }}>
-          <h3>正解：{quiz.answer}</h3>
-          {quiz.explanation && (
-            <p style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-              {quiz.explanation}
-            </p>
-          )}
-        </div>
       )}
     </div>
   );
