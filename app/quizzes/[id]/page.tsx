@@ -59,8 +59,8 @@ export default function QuizDetailPage({ params }) {
 
       const data = snap.data();
 
-      // ★ round がない既存クイズにも対応
-      if (data.round === undefined) data.round = 1;
+      // ★ round がない既存クイズは round=0 として扱う
+      data.round = data.round ?? 0;
 
       setQuiz(data);
 
@@ -72,7 +72,7 @@ export default function QuizDetailPage({ params }) {
 
         const list = itemsSnap.docs
           .map((d) => d.data())
-          .filter((a) => a.round === data.round); // ★ ここが重要
+          .filter((a) => (a.round ?? 0) === data.round); // ★ round が無い回答は 0 として扱う
 
         setMyAnswers(list);
       }
@@ -97,7 +97,7 @@ export default function QuizDetailPage({ params }) {
       {
         answer: newAnswer,
         createdAt: new Date(),
-        round: quiz.round, // ★ 現在のラウンド番号を保存
+        round: quiz.round ?? 0, // ★ round が無い場合は 0 として保存
       }
     );
 
@@ -112,7 +112,7 @@ export default function QuizDetailPage({ params }) {
 
     setMyAnswers([
       ...myAnswers,
-      { answer: newAnswer, createdAt: new Date(), round: quiz.round },
+      { answer: newAnswer, createdAt: new Date(), round: quiz.round ?? 0 },
     ]);
 
     setNewAnswer("");
@@ -147,11 +147,14 @@ export default function QuizDetailPage({ params }) {
         : { displayName: "名無し", xAccount: "未登録" };
 
       itemsSnap.forEach((item) => {
-        if (item.data().round === quiz.round) { // ★ 現在のラウンドのみ
+        const itemData = item.data();
+        const itemRound = itemData.round ?? 0;
+
+        if (itemRound === (quiz.round ?? 0)) {
           allAnswers.push({
             uid: userId,
-            answer: item.data().answer,
-            createdAt: item.data().createdAt,
+            answer: itemData.answer,
+            createdAt: itemData.createdAt,
             userNickname: userData.displayName ?? "名無し",
             userX: userData.xAccount ?? "未登録",
           });
