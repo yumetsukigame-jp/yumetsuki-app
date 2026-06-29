@@ -287,7 +287,7 @@ export default function QuizDetailPage({ params }) {
 
           {open && (
             <div style={{ marginTop: 16 }}>
-              {answersLoading && <p>読み込み中…</p>}
+              {answersLoading && <p>読み込み中です…</p>}
 
               {!answersLoading && (
                 <div>
@@ -304,7 +304,7 @@ export default function QuizDetailPage({ params }) {
             </div>
           )}
         </>
-      )}
+      )}    
     </div>
   );
 }
