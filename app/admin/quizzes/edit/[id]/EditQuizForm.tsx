@@ -58,7 +58,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   const [newAnswerCount, setNewAnswerCount] = useState(0);
 
-  const [round, setRound] = useState(1); // ★ 新規追加
+  const [round, setRound] = useState(0); // ★ round=0 を初期値にする
 
   /* --------------------------------------------------
      クイズ読み込み
@@ -91,7 +91,8 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
       setNewAnswerCount(data.newAnswerCount ?? 0);
 
-      setRound(data.round ?? 1); // ★ ラウンド読み込み
+      // ★ round が無い既存クイズは 0 として扱う
+      setRound(data.round ?? 0);
 
       const imgSnap = await getDocs(collection(db, "imageMeta"));
       const list = imgSnap.docs
@@ -131,7 +132,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       salt: newSalt,
       thread: newThread,
       newAnswerCount,
-      round, // ★ ラウンド保存
+      round, // ★ round を保存
     });
 
     alert("更新しました！");
@@ -139,17 +140,17 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   };
 
   /* --------------------------------------------------
-     ★ 回答回数リセット（ラウンド制）
-     過去回答は保持し、新しいラウンドを開始する
+     ★ ラウンドリセット（round を +1）
+     過去回答は保持される
   -------------------------------------------------- */
   const resetAnswers = async () => {
     if (!confirm("新しいラウンドを開始しますか？")) return;
 
-    const nextRound = round + 1;
+    const nextRound = (round ?? 0) + 1;
 
     await updateDoc(doc(db, "quizzes", quizId), {
       newAnswerCount: 0,
-      round: nextRound, // ★ ラウンドを進める
+      round: nextRound,
     });
 
     setNewAnswerCount(0);
