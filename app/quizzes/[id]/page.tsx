@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   addDoc,
+  setDoc,
   collection,
   getDocs,
   updateDoc,
@@ -92,7 +93,7 @@ export default function QuizDetailPage({ params }) {
   }, [authReady, uid, quizId]);
 
   /* --------------------------------------------------
-     新規回答送信
+     新規回答送信（answers/{uid} を必ず作る）
   -------------------------------------------------- */
   const submitAnswer = async () => {
     if (!newAnswer.trim()) {
@@ -100,12 +101,20 @@ export default function QuizDetailPage({ params }) {
       return;
     }
 
+    // ★ answers/{uid} を必ず作成（これが今回の修正点）
+    await setDoc(
+      doc(db, "quizzes", quizId, "answers", uid!),
+      {},
+      { merge: true }
+    );
+
+    // ★ items に回答を追加
     await addDoc(
       collection(db, "quizzes", quizId, "answers", uid!, "items"),
       {
         answer: newAnswer,
         createdAt: new Date(),
-        round: quiz.round ?? 0, // ★ round が無い場合は 0 として保存
+        round: quiz.round ?? 0,
       }
     );
 
@@ -304,7 +313,7 @@ export default function QuizDetailPage({ params }) {
             </div>
           )}
         </>
-      )}    
+      )}
     </div>
   );
 }
