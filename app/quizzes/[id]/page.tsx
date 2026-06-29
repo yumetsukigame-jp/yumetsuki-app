@@ -60,13 +60,10 @@ export default function QuizDetailPage({ params }) {
       }
 
       const data = snap.data();
-
-      // ★ round が無い既存クイズは 0 として扱う
       data.round = data.round ?? 0;
 
       setQuiz(data);
 
-      // ★ 自分の過去回答（round <= quiz.round）
       if (uid) {
         const itemsSnap = await getDocs(
           collection(db, "quizzes", quizId, "answers", uid, "items")
@@ -101,7 +98,7 @@ export default function QuizDetailPage({ params }) {
       return;
     }
 
-    // ★ answers/{uid} を必ず作成（これが今回の修正点）
+    // ★ answers/{uid} を必ず作成
     await setDoc(
       doc(db, "quizzes", quizId, "answers", uid!),
       {},
@@ -171,7 +168,6 @@ export default function QuizDetailPage({ params }) {
         const itemData = item.data();
         const itemRound = itemData.round ?? 0;
 
-        // ★ round <= quiz.round の回答だけ表示
         if (itemRound <= (quiz.round ?? 0)) {
           allAnswers.push({
             uid: userId,
@@ -197,16 +193,10 @@ export default function QuizDetailPage({ params }) {
     }
   };
 
-  /* --------------------------------------------------
-     ローディング
-  -------------------------------------------------- */
   if (!authReady || loading) {
     return <p style={{ padding: 20 }}>読み込み中…</p>;
   }
 
-  /* --------------------------------------------------
-     終了済み
-  -------------------------------------------------- */
   if (!quiz) {
     return (
       <div style={{ padding: 20 }}>
@@ -216,9 +206,6 @@ export default function QuizDetailPage({ params }) {
     );
   }
 
-  /* --------------------------------------------------
-     UI
-  -------------------------------------------------- */
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
       <h1>{quiz.title}</h1>
@@ -233,7 +220,6 @@ export default function QuizDetailPage({ params }) {
         {quiz.rewardPoint} pt
       </div>
 
-      {/* ▼ 自分の過去回答（round <= quiz.round） */}
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <h3>あなたの過去の回答</h3>
@@ -243,7 +229,6 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 新規回答フォーム（現在ラウンドの回答数で判定） */}
       {myCurrentRoundAnswers.length < quiz.maxAnswers && (
         <div>
           <input
@@ -276,7 +261,6 @@ export default function QuizDetailPage({ params }) {
         </div>
       )}
 
-      {/* ▼ 他人の回答一覧（現在ラウンドの回答が maxAnswers に達したら） */}
       {myCurrentRoundAnswers.length >= quiz.maxAnswers && (
         <>
           <button
