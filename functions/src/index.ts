@@ -1090,7 +1090,7 @@ export const getNibuichiUserStats = functions
 export * from "./imageProcessor";
 
 /* ============================================================
-   クイズ正答者ポイント分配（複数回答対応 完全版）
+   クイズ正答者ポイント分配（複数回答対応・重複正解防止・完全版）
 ============================================================ */
 
 export const confirmQuizAnswer = functions
@@ -1122,12 +1122,12 @@ export const confirmQuizAnswer = functions
       const thread = quiz.thread ?? `thread_${quizId}`;
 
       /* --------------------------------------------------
-         ★ 全ユーザーの複数回答を取得
+         ★ 全ユーザーの複数回答を取得（重複正解防止）
       -------------------------------------------------- */
       const answersRef = quizRef.collection("answers");
       const usersSnap = await answersRef.get();
 
-      const correctUsers: string[] = [];
+      const correctUsers = new Set<string>(); // ★ 重複防止
 
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
@@ -1140,21 +1140,23 @@ export const confirmQuizAnswer = functions
         itemsSnap.forEach((item) => {
           const ans = item.data().answer;
           if (ans === correctAnswer) {
-            correctUsers.push(uid);
+            correctUsers.add(uid); // ★ 同じ uid は 1 回だけ
           }
         });
       }
+
+      const correctUserList = Array.from(correctUsers);
 
       /* --------------------------------------------------
          ★ 山分けポイント計算
       -------------------------------------------------- */
       let perUser = 0;
-      if (correctUsers.length > 0) {
-        perUser = Math.floor(rewardPoint / correctUsers.length);
+      if (correctUserList.length > 0) {
+        perUser = Math.floor(rewardPoint / correctUserList.length);
       }
 
       const batch = db.batch();
-      correctUsers.forEach((uid) => {
+      correctUserList.forEach((uid) => {
         const userRef = db.collection("users").doc(uid);
         batch.update(userRef, {
           points: FieldValue.increment(perUser),
@@ -1190,7 +1192,7 @@ export const confirmQuizAnswer = functions
 
         for (const item of itemsSnap.docs) {
           await archiveAnswersRef
-            .doc(uid)
+            .doc(uid) // ★ 本番側が uid ならアーカイブ側も uid になる
             .collection("items")
             .doc(item.id)
             .set(item.data());
@@ -1222,7 +1224,7 @@ export const confirmQuizAnswer = functions
 
       return {
         success: true,
-        correctUsers,
+        correctUsers: correctUserList,
         perUser,
         salt,
         thread,
