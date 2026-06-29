@@ -51,7 +51,8 @@ export default function QuizDetailPage({ params }) {
       const ref = doc(db, "quizzes", quizId);
       const snap = await getDoc(ref);
 
-      if (!snap.exists) {
+      // ★ 修正ポイント：exists → exists()
+      if (!snap.exists()) {
         setQuiz(null);
         setLoading(false);
         return;
@@ -135,7 +136,8 @@ export default function QuizDetailPage({ params }) {
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
-      const userData = userSnap.exists
+      // ★ 修正：exists → exists()
+      const userData = userSnap.exists()
         ? userSnap.data()
         : { displayName: "名無し", xAccount: "未登録" };
 
