@@ -30,11 +30,12 @@ export default function QuizArchivePage() {
   }, []);
 
   /* --------------------------------------------------
-     回答一覧読み込み（複数回答対応）
+     回答一覧読み込み（本番と同じロジック）
   -------------------------------------------------- */
   const loadAnswers = async (quizId: string) => {
     setAnswersLoading((prev) => ({ ...prev, [quizId]: true }));
 
+    // answers の直下のドキュメントをすべて取得（uid でも autoId でもOK）
     const usersSnap = await getDocs(
       collection(db, "quizzes_archive", quizId, "answers")
     );
@@ -42,15 +43,15 @@ export default function QuizArchivePage() {
     const allAnswers: any[] = [];
 
     for (const userDoc of usersSnap.docs) {
-      const uid = userDoc.id;
+      const userId = userDoc.id; // ★ uid と決めつけない（本番と同じ）
 
-      // ★ 複数回答 items を取得
+      // ★ items を取得（userId が autoId でも uid でもOK）
       const itemsSnap = await getDocs(
-        collection(db, "quizzes_archive", quizId, "answers", uid, "items")
+        collection(db, "quizzes_archive", quizId, "answers", userId, "items")
       );
 
-      // ★ ユーザー情報取得
-      const userRef = doc(db, "users", uid);
+      // ★ ユーザー情報取得（存在しない場合は名無し）
+      const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
       const userData = userSnap.exists()
@@ -60,12 +61,13 @@ export default function QuizArchivePage() {
             xAccount: "未登録",
           };
 
-      // ★ items をすべて push
+      // ★ items を push
       itemsSnap.forEach((item) => {
+        const itemData = item.data();
         allAnswers.push({
-          uid,
-          answer: item.data().answer,
-          createdAt: item.data().createdAt,
+          uid: userId,
+          answer: itemData.answer,
+          createdAt: itemData.createdAt,
           userNickname: userData.displayName ?? "名無し",
           userX: userData.xAccount ?? "未登録",
         });
