@@ -14,6 +14,9 @@ export default function QuizArchivePage() {
   const [answers, setAnswers] = useState<Record<string, any[]>>({});
   const [answersLoading, setAnswersLoading] = useState<Record<string, boolean>>({});
 
+  /* --------------------------------------------------
+     アーカイブ一覧読み込み
+  -------------------------------------------------- */
   const fetchQuizzes = async () => {
     const snap = await getDocs(collection(db, "quizzes_archive"));
     const list = snap.docs.map((d) => ({
@@ -30,7 +33,7 @@ export default function QuizArchivePage() {
   }, []);
 
   /* --------------------------------------------------
-     回答一覧読み込み（本番と同じロジック）
+     回答一覧読み込み（本番と完全一致）
   -------------------------------------------------- */
   const loadAnswers = async (quizId: string) => {
     setAnswersLoading((prev) => ({ ...prev, [quizId]: true }));
@@ -45,29 +48,27 @@ export default function QuizArchivePage() {
     for (const userDoc of usersSnap.docs) {
       const userId = userDoc.id; // ★ uid と決めつけない（本番と同じ）
 
-      // ★ items を取得（userId が autoId でも uid でもOK）
+      // items を取得
       const itemsSnap = await getDocs(
         collection(db, "quizzes_archive", quizId, "answers", userId, "items")
       );
 
-      // ★ ユーザー情報取得（存在しない場合は名無し）
+      // ユーザー情報取得
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
       const userData = userSnap.exists()
         ? userSnap.data()
-        : {
-            displayName: "名無し",
-            xAccount: "未登録",
-          };
+        : { displayName: "名無し", xAccount: "未登録" };
 
-      // ★ items を push
+      // items を push
       itemsSnap.forEach((item) => {
         const itemData = item.data();
+
         allAnswers.push({
           uid: userId,
           answer: itemData.answer,
-          createdAt: itemData.createdAt,
+          createdAt: itemData.createdAt?.toDate?.() ?? null,
           userNickname: userData.displayName ?? "名無し",
           userX: userData.xAccount ?? "未登録",
         });
@@ -79,14 +80,11 @@ export default function QuizArchivePage() {
   };
 
   const toggleOpen = (quizId: string) => {
-    if (openQuizId === quizId) {
-      setOpenQuizId(null);
-      return;
-    }
+    const next = openQuizId === quizId ? null : quizId;
+    setOpenQuizId(next);
 
-    setOpenQuizId(quizId);
-
-    if (!answers[quizId]) {
+    // ★ 空配列でも読み込むように修正
+    if (next && !answers[quizId]) {
       loadAnswers(quizId);
     }
   };
@@ -156,17 +154,14 @@ export default function QuizArchivePage() {
 
                 {!answersLoading[q.id] && (
                   <div>
-                    {/* 正解 */}
                     <h3 style={{ marginTop: 10 }}>正解：{q.answer}</h3>
 
-                    {/* 解説 */}
                     {q.explanation && (
                       <p style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>
                         {q.explanation}
                       </p>
                     )}
 
-                    {/* ★ 改ざん防止情報 */}
                     <div
                       style={{
                         marginTop: 16,
@@ -177,14 +172,9 @@ export default function QuizArchivePage() {
                     >
                       <h4 style={{ marginBottom: 8 }}>改ざん防止情報</h4>
                       <p><strong>salt：</strong>{q.salt}</p>
-                      <p><strong>thread（SHA-256）：</strong>{q.thread}</p>
-
-                      <p style={{ marginTop: 8, fontSize: 14, color: "#555" }}>
-                        ※ 正解 + "-" + salt を SHA-256 でハッシュ化した値が thread と一致しているか確認できます。
-                      </p>
+                      <p><strong>thread：</strong>{q.thread}</p>
                     </div>
 
-                    {/* 回答一覧 */}
                     <p style={{ marginTop: 16 }}>
                       回答数：{answers[q.id]?.length ?? 0}件
                     </p>
@@ -197,9 +187,7 @@ export default function QuizArchivePage() {
                           borderBottom: "1px solid #eee",
                         }}
                       >
-                        <strong>
-                          {a.userNickname}（{a.userX}）
-                        </strong>
+                        <strong>{a.userNickname}（{a.userX}）</strong>
                         ：{a.answer}
                       </div>
                     ))}
