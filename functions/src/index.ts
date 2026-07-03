@@ -1185,6 +1185,13 @@ export const confirmQuizAnswer = functions
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
 
+        // ★★★ ここが今回の最適化ポイント ★★★
+        // 空ドキュメント問題を防ぐため、最低1フィールドを必ず書き込む
+        await archiveAnswersRef.doc(uid).set(
+          { uid },
+          { merge: true }
+        );
+
         const itemsSnap = await answersRef
           .doc(uid)
           .collection("items")
@@ -1192,7 +1199,7 @@ export const confirmQuizAnswer = functions
 
         for (const item of itemsSnap.docs) {
           await archiveAnswersRef
-            .doc(uid) // ★ 本番側が uid ならアーカイブ側も uid になる
+            .doc(uid)
             .collection("items")
             .doc(item.id)
             .set(item.data());
