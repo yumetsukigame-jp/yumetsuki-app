@@ -90,7 +90,7 @@ export default function QuizDetailPage({ params }) {
   }, [authReady, uid, quizId]);
 
   /* --------------------------------------------------
-     新規回答送信（answers/{uid} を必ず作る）
+     新規回答送信（answers/{uid} にユーザー情報を書き込む）
   -------------------------------------------------- */
   const submitAnswer = async () => {
     if (!newAnswer.trim()) {
@@ -98,10 +98,20 @@ export default function QuizDetailPage({ params }) {
       return;
     }
 
-    // ★ answers/{uid} を必ず作成
+    // ★ ユーザーデータを取得
+    const userRef = doc(db, "users", uid!);
+    const userSnap = await getDoc(userRef);
+    const userData = userSnap.exists()
+      ? userSnap.data()
+      : { displayName: "名無し", xAccount: "未登録" };
+
+    // ★ answers/{uid} を必ず作成（空ドキュメントを防ぐ）
     await setDoc(
       doc(db, "quizzes", quizId, "answers", uid!),
-      {},
+      {
+        xAccount: userData.xAccount ?? "未登録",
+        displayName: userData.displayName ?? "名無し",
+      },
       { merge: true }
     );
 
