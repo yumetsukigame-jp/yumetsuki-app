@@ -8,12 +8,12 @@ export default function AnswersClient({ quizId }) {
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ★ デバッグ用
   const [debug, setDebug] = useState({ users: 0, items: 0 });
 
   useEffect(() => {
     const load = async () => {
-      // ★ まず answers のユーザー数を確認
+      console.log("★ quizId:", quizId);
+
       const usersSnap = await getDocs(
         collection(db, "quizzes_archive", quizId, "answers")
       );
@@ -27,7 +27,14 @@ export default function AnswersClient({ quizId }) {
         const userId = userDoc.id;
 
         const itemsSnap = await getDocs(
-          collection(db, "quizzes_archive", quizId, "answers", userId, "items")
+          collection(
+            db,
+            "quizzes_archive",
+            quizId,
+            "answers",
+            userId,
+            "items"
+          )
         );
 
         itemCount += itemsSnap.docs.length;
@@ -52,9 +59,7 @@ export default function AnswersClient({ quizId }) {
         });
       }
 
-      // ★ デバッグ情報をセット
       setDebug({ users: userCount, items: itemCount });
-
       setAnswers(all);
       setLoading(false);
     };
@@ -67,9 +72,12 @@ export default function AnswersClient({ quizId }) {
   return (
     <div style={{ marginTop: 24 }}>
       <h2>回答一覧</h2>
+
+      {/* ★ ここが最重要：画面が読んでいる quizId を表示 */}
+      <p>quizId: {String(quizId)}</p>
+
       <p>回答数：{answers.length}件</p>
 
-      {/* ★ デバッグ表示 */}
       <p style={{ fontSize: 12, color: "#666" }}>
         usersSnap: {debug.users} 件 / itemsSnap 合計: {debug.items} 件
       </p>
