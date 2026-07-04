@@ -3,21 +3,28 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "../../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
 import OricaCard from "../../../components/OricaCard";
 import OricaModal from "../../../components/OricaModal";
 
 export default function OricaPage() {
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<any[]>([]);
   const [owned, setOwned] = useState<Record<string, boolean>>({});
   const [uid, setUid] = useState<string | null>(null);
   const [modalImg, setModalImg] = useState<string | null>(null);
 
-  // 画像一覧取得
+  // Firestore から画像メタ情報を取得（MemoriesPage と同じ構造）
   useEffect(() => {
-    fetch("/api/orica-images")
-      .then((res) => res.json())
-      .then((data) => setImages(data));
+    const load = async () => {
+      const snap = await getDocs(collection(db, "imageMeta"));
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((d) => d.folder === "orica"); // ← フォルダ名で絞る（MemoriesPage と同じ）
+
+      setImages(list);
+    };
+
+    load();
   }, []);
 
   // ログインユーザー取得 & 所持状況読み込み
@@ -30,8 +37,9 @@ export default function OricaPage() {
       const ownedData: Record<string, boolean> = {};
 
       for (const img of images) {
-        const id =
-          img.split("/").pop()?.replace(/\.(png|jpg|jpeg|webp)$/i, "") || "";
+        // fileName から拡張子を除いて id を作る（MemoriesPage と同じ）
+        const id = img.fileName.replace(/\.(png|jpg|jpeg|webp)$/i, "");
+
         const ref = doc(db, "users", user.uid, "orica", id);
         const snap = await getDoc(ref);
         ownedData[id] = snap.exists() ? snap.data().owned : false;
@@ -44,11 +52,10 @@ export default function OricaPage() {
   }, [images]);
 
   // 所持切り替え
-  const toggleOwned = async (img: string) => {
+  const toggleOwned = async (img: any) => {
     if (!uid) return;
 
-    const id =
-      img.split("/").pop()?.replace(/\.(png|jpg|jpeg|webp)$/i, "") || "";
+    const id = img.fileName.replace(/\.(png|jpg|jpeg|webp)$/i, "");
     const newState = !owned[id];
 
     setOwned((prev) => ({ ...prev, [id]: newState }));
@@ -58,11 +65,11 @@ export default function OricaPage() {
     });
   };
 
-  // グループ分類
+  // グループ分類（prefix 判定は MemoriesPage と同じ）
   const groups = {
-    orica: images.filter((img) => img.includes("/orica_")),
-    sp: images.filter((img) => img.includes("/sp_")),
-    honpo: images.filter((img) => img.includes("/honpo_")),
+    orica: images.filter((img) => img.prefix === "orica_"),
+    sp: images.filter((img) => img.prefix === "sp_"),
+    honpo: images.filter((img) => img.prefix === "honpo_"),
   };
 
   return (
@@ -77,7 +84,6 @@ export default function OricaPage() {
             {groupName === "honpo" && "ゆめつき本舗"}
           </h2>
 
-          {/* 本棚の棚板 */}
           <div
             style={{
               height: "6px",
@@ -95,18 +101,16 @@ export default function OricaPage() {
             }}
           >
             {groupImages.map((img) => {
-              const id =
-                img.split("/").pop()?.replace(/\.(png|jpg|jpeg|webp)$/i, "") ||
-                "";
+              const id = img.fileName.replace(/\.(png|jpg|jpeg|webp)$/i, "");
               const isOwned = owned[id];
 
               return (
                 <OricaCard
-                  key={img}
-                  img={img}
+                  key={img.url}
+                  img={img.url}
                   owned={isOwned}
                   onToggle={() => toggleOwned(img)}
-                  onClick={() => setModalImg(img)}
+                  onClick={() => setModalImg(img.url)}
                 />
               );
             })}
@@ -116,7 +120,6 @@ export default function OricaPage() {
 
       <OricaModal img={modalImg} onClose={() => setModalImg(null)} />
 
-      {/* ▼ 書庫に戻るボタン（追加部分） */}
       <div style={{ marginTop: "40px", textAlign: "center" }}>
         <a
           href="/archive"
@@ -134,7 +137,6 @@ export default function OricaPage() {
           書庫に戻る
         </a>
       </div>
-      {/* ▲ ここまで追加 */}
     </div>
   );
 }

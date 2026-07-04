@@ -24,6 +24,7 @@ export default function ImageListPage() {
     "character-select",
     "rewards",
     "memories",
+    "orica",    
     "misc",
   ];
 
