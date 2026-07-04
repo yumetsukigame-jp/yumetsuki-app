@@ -249,7 +249,7 @@ export default function PublicGachaListPage() {
               {g.thumbnail && (
                 <div style={{ textAlign: "center", marginBottom: 12 }}>
                   <img
-                    src={`/gacha/${g.thumbnail}`}
+                    src={g.thumbnail}
                     style={{
                       width: "100%",
                       maxWidth: 240,

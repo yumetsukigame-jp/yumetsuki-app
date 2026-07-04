@@ -1185,8 +1185,7 @@ export const confirmQuizAnswer = functions
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
 
-        // ★★★ ここが今回の最適化ポイント ★★★
-        // 空ドキュメント問題を防ぐため、最低1フィールドを必ず書き込む
+        // ★ 空ドキュメント問題を防ぐため、最低1フィールドを必ず書き込む
         await archiveAnswersRef.doc(uid).set(
           { uid },
           { merge: true }
@@ -1222,10 +1221,13 @@ export const confirmQuizAnswer = functions
           deleteBatch.delete(item.ref);
         });
         await deleteBatch.commit();
+
+        // ★★★ ゴミドキュメント防止：answers/{uid} を削除 ★★★
+        await answersRef.doc(uid).delete();
       }
 
       /* --------------------------------------------------
-         ★ 最後にクイズ本体を削除
+         ★ 最後にクイズ本体を削除（answers が空なので完全に消える）
       -------------------------------------------------- */
       await quizRef.delete();
 
