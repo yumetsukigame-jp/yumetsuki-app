@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 
-export default function AnswersClient({ quizId }) {
+export default function AnswersClient({ quizId, correctAnswer }) {
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,11 +65,28 @@ export default function AnswersClient({ quizId }) {
 
       <p>回答数：{answers.length}件</p>
 
-      {answers.map((a, i) => (
-        <div key={i} style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-          <strong>{a.userNickname}（{a.userX}）</strong>：{a.answer}
-        </div>
-      ))}
+      {answers.map((a, i) => {
+        const isCorrect = a.answer === correctAnswer;
+
+        return (
+          <div
+            key={i}
+            style={{
+              padding: 8,
+              borderBottom: "1px solid #eee",
+              borderRadius: 6,
+              background: isCorrect ? "#fef3c7" : "transparent", // ★ 正解背景色
+              marginBottom: 6,
+            }}
+          >
+            <strong>
+              {a.userNickname}（{a.userX}）
+            </strong>
+            ：{a.answer}
+            {isCorrect && " ★正解"}
+          </div>
+        );
+      })}
     </div>
   );
 }

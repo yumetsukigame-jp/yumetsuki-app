@@ -32,6 +32,9 @@ export default function QuizDetailPage({ params }) {
 
   const [open, setOpen] = useState(false);
 
+  // ★ 追加：送信ロック
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   /* --------------------------------------------------
      Auth 初期化
   -------------------------------------------------- */
@@ -93,59 +96,67 @@ export default function QuizDetailPage({ params }) {
      新規回答送信（answers/{uid} にユーザー情報を書き込む）
   -------------------------------------------------- */
   const submitAnswer = async () => {
-    if (!newAnswer.trim()) {
-      alert("回答を入力してください");
-      return;
-    }
+    if (isSubmitting) return; // ★ 二重送信防止
+    setIsSubmitting(true);    // ★ ボタンロック
 
-    // ★ ユーザーデータを取得
-    const userRef = doc(db, "users", uid!);
-    const userSnap = await getDoc(userRef);
-    const userData = userSnap.exists()
-      ? userSnap.data()
-      : { displayName: "名無し", xAccount: "未登録" };
+    try {
+      if (!newAnswer.trim()) {
+        alert("回答を入力してください");
+        setIsSubmitting(false);
+        return;
+      }
 
-    // ★ answers/{uid} を必ず作成（空ドキュメントを防ぐ）
-    await setDoc(
-      doc(db, "quizzes", quizId, "answers", uid!),
-      {
-        xAccount: userData.xAccount ?? "未登録",
-        displayName: userData.displayName ?? "名無し",
-      },
-      { merge: true }
-    );
+      // ★ ユーザーデータを取得
+      const userRef = doc(db, "users", uid!);
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.exists()
+        ? userSnap.data()
+        : { displayName: "名無し", xAccount: "未登録" };
 
-    // ★ items に回答を追加
-    await addDoc(
-      collection(db, "quizzes", quizId, "answers", uid!, "items"),
-      {
+      // ★ answers/{uid} を必ず作成（空ドキュメントを防ぐ）
+      await setDoc(
+        doc(db, "quizzes", quizId, "answers", uid!),
+        {
+          xAccount: userData.xAccount ?? "未登録",
+          displayName: userData.displayName ?? "名無し",
+        },
+        { merge: true }
+      );
+
+      // ★ items に回答を追加
+      await addDoc(
+        collection(db, "quizzes", quizId, "answers", uid!, "items"),
+        {
+          answer: newAnswer,
+          createdAt: new Date(),
+          round: quiz.round ?? 0,
+        }
+      );
+
+      await updateDoc(doc(db, "quizzes", quizId), {
+        newAnswerCount: quiz.newAnswerCount + 1,
+      });
+
+      const newItem = {
         answer: newAnswer,
         createdAt: new Date(),
         round: quiz.round ?? 0,
-      }
-    );
+      };
 
-    await updateDoc(doc(db, "quizzes", quizId), {
-      newAnswerCount: quiz.newAnswerCount + 1,
-    });
+      setMyAnswers([...myAnswers, newItem]);
+      setMyCurrentRoundAnswers([...myCurrentRoundAnswers, newItem]);
 
-    const newItem = {
-      answer: newAnswer,
-      createdAt: new Date(),
-      round: quiz.round ?? 0,
-    };
+      setQuiz({
+        ...quiz,
+        newAnswerCount: quiz.newAnswerCount + 1,
+      });
 
-    setMyAnswers([...myAnswers, newItem]);
-    setMyCurrentRoundAnswers([...myCurrentRoundAnswers, newItem]);
+      setNewAnswer("");
 
-    setQuiz({
-      ...quiz,
-      newAnswerCount: quiz.newAnswerCount + 1,
-    });
-
-    setNewAnswer("");
-
-    alert("回答しました！");
+      alert("回答しました！");
+    } finally {
+      setIsSubmitting(false); // ★ 必ず解除
+    }
   };
 
   /* --------------------------------------------------
@@ -257,16 +268,17 @@ export default function QuizDetailPage({ params }) {
 
           <button
             onClick={submitAnswer}
+            disabled={isSubmitting}
             style={{
               padding: "12px",
-              background: "#4f46e5",
+              background: isSubmitting ? "#9ca3af" : "#4f46e5",
               color: "white",
               borderRadius: 8,
               border: "none",
-              cursor: "pointer",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
             }}
           >
-            回答する
+            {isSubmitting ? "送信中…" : "回答する"}
           </button>
         </div>
       )}

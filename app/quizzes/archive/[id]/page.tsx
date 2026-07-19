@@ -3,7 +3,7 @@ import { doc, getDoc } from "firebase/firestore";
 import AnswersClient from "./AnswersClient";
 
 export default async function ArchiveDetailPage({ params }) {
-  const quizId = params.id;
+  const { id: quizId } = await params; // ★ 修正ポイント
 
   const ref = doc(db, "quizzes_archive", quizId);
   const snap = await getDoc(ref);
@@ -47,8 +47,7 @@ export default async function ArchiveDetailPage({ params }) {
         <p><strong>thread：</strong>{quiz.thread}</p>
       </div>
 
-      {/* ★ 回答一覧はクライアント側で読み込む */}
-      <AnswersClient quizId={quizId} />
+      <AnswersClient quizId={quizId} correctAnswer={quiz.answer} />
     </div>
   );
 }
