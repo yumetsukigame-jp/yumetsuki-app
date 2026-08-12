@@ -9,12 +9,21 @@ import {
   getDoc,
   updateDoc,
   setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
+type RewardItem = {
+  id: string;
+  name: string;
+  cost: number;
+  stock: number;
+  image?: string | null;
+};
+
 export default function RewardPage() {
-  const [rewards, setRewards] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<RewardItem[]>([]);
   const [points, setPoints] = useState<number | null>(null);
   const router = useRouter();
 
@@ -42,9 +51,16 @@ export default function RewardPage() {
   useEffect(() => {
     const fetchRewards = async () => {
       const querySnapshot = await getDocs(collection(db, "rewards"));
-      const list: any[] = [];
+      const list: RewardItem[] = [];
       querySnapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data() as Partial<RewardItem>;
+        list.push({
+          id: docSnap.id,
+          name: data.name ?? "",
+          cost: data.cost ?? 0,
+          stock: data.stock ?? 0,
+          image: data.image ?? null,
+        });
       });
       setRewards(list);
     };
@@ -55,7 +71,7 @@ export default function RewardPage() {
   /* --------------------------------------------------
      発送物を選択
   -------------------------------------------------- */
-  const handleSelect = async (reward: any) => {
+  const handleSelect = async (reward: RewardItem) => {
     if (points === null) return;
 
     if (points < reward.cost) {
@@ -73,13 +89,6 @@ export default function RewardPage() {
 
     const uid = user.uid;
 
-    // ユーザー情報取得
-    const userRef = doc(db, "users", uid);
-    const userSnap = await getDoc(userRef);
-
-    const userName = userSnap.data()?.name ?? "";
-    const userX = userSnap.data()?.xAccount ?? "";
-
     const newPoints = points - reward.cost;
 
     /* --------------------------------------------------
@@ -90,17 +99,25 @@ export default function RewardPage() {
     });
 
     /* --------------------------------------------------
-       ② selectedRewards に保存（uid を必ず含める）
+       ② shippingPending に保存（現在の未発送状態）
     -------------------------------------------------- */
-    await setDoc(doc(db, "selectedRewards", uid), {
-      uid,                     // ★ 必須
+    const pendingRef = doc(db, "shippingPending", uid);
+    const legacyRef = doc(db, "selectedRewards", uid);
+
+    const pendingData = {
+      uid,
       rewardId: reward.id,
       name: reward.name,
       cost: reward.cost,
       image: reward.image ?? null,
-      timestamp: new Date(),
+      requestedAt: serverTimestamp(),
+      status: "pending",
       shipped: false,
-    });
+      timestamp: new Date(),
+    };
+
+    await setDoc(pendingRef, pendingData);
+    await setDoc(legacyRef, pendingData);
 
     /* --------------------------------------------------
        ③ 在庫を減らす
@@ -110,19 +127,8 @@ export default function RewardPage() {
     });
 
     /* --------------------------------------------------
-       ④ shippingHistory に履歴保存
+       ④ 履歴は発送済み時にのみ追加する
     -------------------------------------------------- */
-    await setDoc(doc(collection(db, "shippingHistory")), {
-      uid,
-      rewardId: reward.id,
-      name: reward.name,
-      cost: reward.cost,
-      image: reward.image ?? null,
-      requestedAt: new Date(),
-      shipped: false,
-      userName,
-      userX,
-    });
 
     /* --------------------------------------------------
        ⑤ ポイントを画面に反映

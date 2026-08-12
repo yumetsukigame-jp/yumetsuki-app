@@ -11,25 +11,39 @@ import {
   query,
 } from "firebase/firestore";
 
+type ValidCode = {
+  id: string;
+  points?: number;
+  type?: "global" | "perUser";
+  createdAt?: { toDate: () => Date } | Date | null;
+  [key: string]: unknown;
+};
+
+type UsedCodeRecord = {
+  id: string;
+  userId?: string;
+  [key: string]: unknown;
+};
+
 export default function ValidCodesPage() {
-  const [codes, setCodes] = useState([]);
-  const [usage, setUsage] = useState({});
-  const [userEmails, setUserEmails] = useState({});
+  const [codes, setCodes] = useState<ValidCode[]>([]);
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  const [userEmails, setUserEmails] = useState<Record<string, string[]>>({});
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("desc");
-  const [filtered, setFiltered] = useState([]);
+  const [filtered, setFiltered] = useState<ValidCode[]>([]);
 
   // コード一覧取得
   const fetchCodes = async () => {
     const q = query(
       collection(db, "validCodes"),
-      orderBy("createdAt", sortOrder)
+      orderBy("createdAt", sortOrder === "asc" ? "asc" : "desc")
     );
 
     const querySnapshot = await getDocs(q);
-    const list = querySnapshot.docs.map((doc) => ({
+    const list: ValidCode[] = querySnapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data(),
+      ...(doc.data() as Record<string, unknown>),
     }));
 
     setCodes(list);
@@ -39,34 +53,32 @@ export default function ValidCodesPage() {
   };
 
   // 使用人数 + 使用ユーザー一覧を取得
-  const fetchUsage = async (codeList) => {
+  const fetchUsage = async (codeList: ValidCode[]) => {
     const usedSnap = await getDocs(collection(db, "usedCodes"));
     const usedDocs = usedSnap.docs.map((d) => ({
       id: d.id,
-      ...d.data(),
-    }));
+      ...(d.data() as Record<string, unknown>),
+    } as UsedCodeRecord));
 
-    const usageMap = {};
-    const emailMap = {};
+    const usageMap: Record<string, number> = {};
+    const emailMap: Record<string, string[]> = {};
 
     for (const code of codeList) {
-      let usedUsers = [];
+      let usedUsers: string[] = [];
 
       if (code.type === "global") {
-        // global → 1人 or 0人
         const used = usedDocs.find((u) => u.id === code.id);
-        if (used) usedUsers.push(used.userId);
+        if (used && typeof used.userId === "string") usedUsers.push(used.userId);
       } else {
-        // perUser → uid_code の件数
         usedUsers = usedDocs
-          .filter((u) => u.id.endsWith(`_${code.id}`))
-          .map((u) => u.userId);
+          .filter((u) => typeof u.id === "string" && u.id.endsWith(`_${code.id}`))
+          .map((u) => u.userId ?? "");
       }
 
       usageMap[code.id] = usedUsers.length;
 
       // uid → email に変換
-      const emails = [];
+      const emails: string[] = [];
       for (const uid of usedUsers) {
         const userRef = doc(db, "users", uid);
         const userSnap = await getDocs(collection(db, "users"));
@@ -91,7 +103,7 @@ export default function ValidCodesPage() {
   }, [sortOrder]);
 
   // 検索
-  const handleSearch = (text) => {
+  const handleSearch = (text: string) => {
     setSearch(text);
 
     if (!text) {
@@ -106,7 +118,7 @@ export default function ValidCodesPage() {
   };
 
   // 削除
-  const handleDelete = async (codeId) => {
+  const handleDelete = async (codeId: string) => {
     if (!confirm(`コード「${codeId}」を削除しますか？`)) return;
 
     await deleteDoc(doc(db, "validCodes", codeId));
@@ -193,7 +205,7 @@ export default function ValidCodesPage() {
 
           <p>
             <strong>作成日時：</strong>{" "}
-            {item.createdAt?.toDate
+            {item.createdAt && typeof item.createdAt === "object" && "toDate" in item.createdAt
               ? item.createdAt.toDate().toLocaleString()
               : "不明"}
           </p>

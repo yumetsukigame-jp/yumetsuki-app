@@ -12,7 +12,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -29,7 +29,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.push("/admin");
+      router.replace("/admin");
     } catch (err) {
       setError("ログインに失敗しました。メールまたはパスワードを確認してください。");
     }

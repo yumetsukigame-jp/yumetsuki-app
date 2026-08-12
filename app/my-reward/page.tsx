@@ -1,15 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { db, auth } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
+type RewardRecord = {
+  name?: string;
+  cost?: number;
+  image?: string | null;
+  timestamp?: { toDate: () => Date } | Date | null;
+  shipped?: boolean;
+  shippedAt?: { toDate: () => Date } | Date | null;
+  status?: "pending" | "done";
+};
+
 export default function MyRewardPage() {
-  const [reward, setReward] = useState<any>(null);
+  const [reward, setReward] = useState<RewardRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const formatTimestamp = (value: RewardRecord["timestamp"] | RewardRecord["shippedAt"]) => {
+    if (!value) return "不明";
+    if (value instanceof Date) return value.toLocaleString();
+    if ("toDate" in value) return value.toDate().toLocaleString();
+    return new Date(value).toLocaleString();
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -20,12 +38,23 @@ export default function MyRewardPage() {
 
       const uid = user.uid;
 
-      // ユーザーが選んだ発送物を取得
-      const ref = doc(db, "selectedRewards", uid);
-      const snap = await getDoc(ref);
+      // 現在の発送状態を priority order で確認
+      const pendingRef = doc(db, "shippingPending", uid);
+      const doneRef = doc(db, "shippingDone", uid);
+      const legacyRef = doc(db, "selectedRewards", uid);
 
-      if (snap.exists()) {
-        setReward(snap.data());
+      const pendingSnap = await getDoc(pendingRef);
+      const doneSnap = await getDoc(doneRef);
+      const legacySnap = await getDoc(legacyRef);
+
+      if (pendingSnap.exists()) {
+        setReward({ ...pendingSnap.data(), status: "pending" });
+      } else if (doneSnap.exists()) {
+        setReward({ ...doneSnap.data(), status: "done" });
+      } else if (legacySnap.exists()) {
+        const legacyData = legacySnap.data();
+        const status = legacyData.status ?? (legacyData.shipped ? "done" : "pending");
+        setReward({ ...legacyData, status });
       } else {
         setReward(null);
       }
@@ -34,15 +63,14 @@ export default function MyRewardPage() {
     });
 
     return () => unsub();
-  }, []);
-
+  }, [router]);
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
   if (!reward) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
         <h2>まだ発送物を選んでいません。</h2>
-        <a
+        <Link
           href="/reward"
           style={{
             marginTop: "20px",
@@ -55,7 +83,7 @@ export default function MyRewardPage() {
           }}
         >
           発送物を選ぶ
-        </a>
+        </Link>
       </div>
     );
   }
@@ -95,13 +123,13 @@ export default function MyRewardPage() {
         </p>
         <p>
           <strong>選択日時：</strong>{" "}
-          {reward.timestamp?.toDate().toLocaleString()}
+          {formatTimestamp(reward.timestamp)}
         </p>
 
         {reward.shipped ? (
           <p style={{ color: "green", marginTop: "10px" }}>
             <strong>発送済み：</strong>{" "}
-            {reward.shippedAt?.toDate().toLocaleString()}
+            {formatTimestamp(reward.shippedAt)}
           </p>
         ) : (
           <p style={{ color: "red", marginTop: "10px" }}>
@@ -110,7 +138,7 @@ export default function MyRewardPage() {
         )}
       </div>
 
-      <a
+      <Link
         href="/"
         style={{
           marginTop: "30px",
@@ -123,7 +151,7 @@ export default function MyRewardPage() {
         }}
       >
         トップへ戻る
-      </a>
+      </Link>
     </div>
   );
 }

@@ -14,9 +14,26 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 
+type UserRecord = {
+  id: string;
+  email?: string;
+  name?: string;
+  displayName?: string;
+  xAccount?: string;
+  subscriber?: boolean;
+  xAccountConfirmed?: boolean;
+  points?: number;
+  shippingCount?: number;
+  waitingCount?: number;
+  loginCount?: number;
+  lastLogin?: { seconds?: number; toDate?: () => Date } | Date | null;
+  createdAt?: { seconds?: number; toDate?: () => Date } | Date | null;
+  [key: string]: unknown;
+};
+
 export default function UsersPage() {
-  const [users, setUsers] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [filtered, setFiltered] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("createdDesc");
 
@@ -44,9 +61,9 @@ export default function UsersPage() {
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
 
-    const list = snap.docs.map((doc) => ({
+    const list: UserRecord[] = snap.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data(),
+      ...(doc.data() as Record<string, unknown>),
     }));
 
     // 発送履歴数 & 発送待ち件数
@@ -75,25 +92,29 @@ export default function UsersPage() {
     } else if (sortOrder === "pointsAsc") {
       sorted.sort((a, b) => (a.points ?? 0) - (b.points ?? 0));
     } else if (sortOrder === "lastLoginDesc") {
-      sorted.sort(
-        (a, b) =>
-          (b.lastLogin?.seconds ?? 0) - (a.lastLogin?.seconds ?? 0)
-      );
+      sorted.sort((a, b) => {
+        const aValue = typeof a.lastLogin === "object" && a.lastLogin && "seconds" in a.lastLogin ? Number(a.lastLogin.seconds ?? 0) : 0;
+        const bValue = typeof b.lastLogin === "object" && b.lastLogin && "seconds" in b.lastLogin ? Number(b.lastLogin.seconds ?? 0) : 0;
+        return bValue - aValue;
+      });
     } else if (sortOrder === "lastLoginAsc") {
-      sorted.sort(
-        (a, b) =>
-          (a.lastLogin?.seconds ?? 0) - (b.lastLogin?.seconds ?? 0)
-      );
+      sorted.sort((a, b) => {
+        const aValue = typeof a.lastLogin === "object" && a.lastLogin && "seconds" in a.lastLogin ? Number(a.lastLogin.seconds ?? 0) : 0;
+        const bValue = typeof b.lastLogin === "object" && b.lastLogin && "seconds" in b.lastLogin ? Number(b.lastLogin.seconds ?? 0) : 0;
+        return aValue - bValue;
+      });
     } else if (sortOrder === "createdAsc") {
-      sorted.sort(
-        (a, b) =>
-          (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)
-      );
+      sorted.sort((a, b) => {
+        const aValue = typeof a.createdAt === "object" && a.createdAt && "seconds" in a.createdAt ? Number(a.createdAt.seconds ?? 0) : 0;
+        const bValue = typeof b.createdAt === "object" && b.createdAt && "seconds" in b.createdAt ? Number(b.createdAt.seconds ?? 0) : 0;
+        return aValue - bValue;
+      });
     } else {
-      sorted.sort(
-        (a, b) =>
-          (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
-      );
+      sorted.sort((a, b) => {
+        const aValue = typeof a.createdAt === "object" && a.createdAt && "seconds" in a.createdAt ? Number(a.createdAt.seconds ?? 0) : 0;
+        const bValue = typeof b.createdAt === "object" && b.createdAt && "seconds" in b.createdAt ? Number(b.createdAt.seconds ?? 0) : 0;
+        return bValue - aValue;
+      });
     }
 
     setUsers(sorted);
@@ -108,7 +129,7 @@ export default function UsersPage() {
   }, [sortOrder]);
 
   // 検索（メール + 名前 + ニックネーム + Xアカウント）
-  const handleSearch = (text) => {
+  const handleSearch = (text: string) => {
     setSearch(text);
 
     if (!text) {
@@ -120,10 +141,10 @@ export default function UsersPage() {
     const lower = text.toLowerCase();
 
     const result = users.filter((u) => {
-      const email = (u.email || "").toLowerCase();
-      const name = (u.name || "").toLowerCase();
-      const display = (u.displayName || "").toLowerCase();
-      const x = (u.xAccount || "").toLowerCase();
+      const email = String(u.email ?? "").toLowerCase();
+      const name = String(u.name ?? "").toLowerCase();
+      const display = String(u.displayName ?? "").toLowerCase();
+      const x = String(u.xAccount ?? "").toLowerCase();
 
       return (
         email.includes(lower) ||
@@ -138,8 +159,8 @@ export default function UsersPage() {
   };
 
   // ポイント編集
-  const editPoints = async (uid, currentPoints) => {
-    const input = prompt("新しいポイント数を入力してください", currentPoints);
+  const editPoints = async (uid: string, currentPoints: number) => {
+    const input = prompt("新しいポイント数を入力してください", String(currentPoints));
 
     if (input === null) return;
 
@@ -158,7 +179,7 @@ export default function UsersPage() {
   };
 
   // ユーザー削除
-  const deleteUser = async (uid) => {
+  const deleteUser = async (uid: string) => {
     if (!confirm("このユーザーを削除しますか？")) return;
 
     await deleteDoc(doc(db, "users", uid));
@@ -168,7 +189,7 @@ export default function UsersPage() {
   };
 
   // Xアカウント確定
-  const confirmXAccount = async (uid) => {
+  const confirmXAccount = async (uid: string) => {
     await updateDoc(doc(db, "users", uid), {
       xAccountConfirmed: true,
     });
@@ -178,8 +199,8 @@ export default function UsersPage() {
   };
 
   // Xアカウント編集
-  const editXAccount = async (uid, currentX) => {
-    const input = prompt("新しいXアカウントを入力してください", currentX);
+  const editXAccount = async (uid: string, currentX?: string) => {
+    const input = prompt("新しいXアカウントを入力してください", currentX ?? "");
 
     if (input === null) return;
 
@@ -320,14 +341,14 @@ export default function UsersPage() {
 
             <p>
               <strong>最終ログイン：</strong>{" "}
-              {user.lastLogin?.toDate
+              {typeof user.lastLogin === "object" && user.lastLogin && "toDate" in user.lastLogin && typeof user.lastLogin.toDate === "function"
                 ? user.lastLogin.toDate().toLocaleString()
                 : "不明"}
             </p>
 
             <p>
               <strong>登録日時：</strong>{" "}
-              {user.createdAt?.toDate
+              {typeof user.createdAt === "object" && user.createdAt && "toDate" in user.createdAt && typeof user.createdAt.toDate === "function"
                 ? user.createdAt.toDate().toLocaleString()
                 : "不明"}
             </p>

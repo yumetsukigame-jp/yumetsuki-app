@@ -30,14 +30,15 @@ export default function NibuichiHistoryPage() {
      管理者チェック
   ============================================================ */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    const checkAccess = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
         setUser(null);
         setLoading(false);
         return;
       }
 
-      const adminRef = doc(db, "admins", u.uid);
+      const adminRef = doc(db, "admins", currentUser.uid);
       const adminSnap = await getDoc(adminRef);
 
       if (!adminSnap.exists()) {
@@ -46,11 +47,11 @@ export default function NibuichiHistoryPage() {
         return;
       }
 
-      setUser(u);
+      setUser(currentUser);
       setLoading(false);
-    });
+    };
 
-    return () => unsub();
+    checkAccess();
   }, []);
 
   /* ============================================================

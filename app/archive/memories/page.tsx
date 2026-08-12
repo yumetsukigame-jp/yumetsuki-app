@@ -6,8 +6,14 @@ import { collection, getDocs } from "firebase/firestore";
 import MemoryCard from "../../components/MemoryCard";
 import OricaModal from "../../components/OricaModal";
 
+type MemoryImage = {
+  url: string;
+  prefix?: string;
+  folder?: string;
+};
+
 export default function MemoriesPage() {
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<MemoryImage[]>([]);
   const [modalImg, setModalImg] = useState<string | null>(null);
 
   // Firestore から memories フォルダの画像を取得
@@ -15,8 +21,8 @@ export default function MemoriesPage() {
     const load = async () => {
       const snap = await getDocs(collection(db, "imageMeta"));
       const list = snap.docs
-        .map((d) => d.data())
-        .filter((d) => d.folder === "memories"); // ← memories のみ
+        .map((d) => d.data() as Partial<MemoryImage>)
+        .filter((d): d is MemoryImage => !!d.url && d.folder === "memories");
 
       setImages(list);
     };

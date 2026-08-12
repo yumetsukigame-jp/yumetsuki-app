@@ -17,8 +17,46 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
+type GachaFrame = {
+  label?: string;
+  name?: string;
+  usedCount?: number;
+  maxCount?: number;
+  probability?: number;
+  rewardMin?: number;
+  rewardMax?: number;
+  shippingEnabled?: boolean;
+};
+
+type GachaCodeData = {
+  id: string;
+  code?: string;
+  title?: string;
+  point?: { cost?: number; maxPerUser?: number };
+  totalCount?: number;
+  mode?: "count" | "probability";
+  resetType?: string;
+  publicFlags?: string[];
+  xAccountList?: string[];
+  frames?: GachaFrame[];
+  createdAt?: { toDate: () => Date } | Date | null;
+  expiresAt?: { toDate: () => Date } | Date | null;
+  [key: string]: unknown;
+};
+
+type UserInfo = { label: string };
+
+type GachaResult = {
+  id: string;
+  uid: string;
+  frame?: string;
+  frameName?: string;
+  reward?: number;
+  createdAt?: { toMillis: () => number };
+};
+
 export default function GachaManagePage() {
-  const [codes, setCodes] = useState<any[]>([]);
+  const [codes, setCodes] = useState<GachaCodeData[]>([]);
   const [search, setSearch] = useState("");
 
   const loadCodes = async () => {
@@ -120,19 +158,19 @@ export default function GachaManagePage() {
   /* -----------------------------------------
      ★ 再発行＝内容変更
   ----------------------------------------- */
-  const updateGacha = async (codeData: any) => {
+  const updateGacha = async (codeData: GachaCodeData) => {
     if (!confirm("このガチャの内容を更新しますか？")) return;
 
     await updateDoc(doc(db, "gachaCodes", codeData.id), {
-      title: codeData.title,
-      frames: codeData.frames,
-      totalCount: codeData.totalCount,
-      mode: codeData.mode,
-      resetType: codeData.resetType,
-      publicFlags: codeData.publicFlags,
-      point: codeData.point,
-      thumbnail: codeData.thumbnail,
-      expiresAt: codeData.expiresAt,
+      title: codeData.title ?? "",
+      frames: codeData.frames ?? [],
+      totalCount: codeData.totalCount ?? 0,
+      mode: codeData.mode ?? "count",
+      resetType: codeData.resetType ?? "",
+      publicFlags: codeData.publicFlags ?? [],
+      point: codeData.point ?? { cost: 0, maxPerUser: 0 },
+      thumbnail: codeData.thumbnail ?? "",
+      expiresAt: codeData.expiresAt ?? null,
       xAccountList: codeData.xAccountList ?? [],
     });
 
@@ -159,13 +197,13 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
-  const getUserInfo = async (uid: string) => {
+  const getUserInfo = async (uid: string): Promise<UserInfo> => {
     const snap = await getDoc(doc(db, "users", uid));
     if (!snap.exists()) return { label: uid };
 
-    const data = snap.data();
-    const displayName = data.displayName ?? "";
-    const x = data.xAccount ?? "";
+    const data = snap.data() as Record<string, unknown>;
+    const displayName = typeof data.displayName === "string" ? data.displayName : "";
+    const x = typeof data.xAccount === "string" ? data.xAccount : "";
 
     let label = "";
     if (displayName && x) label = `${displayName}（${x}）`;
@@ -176,14 +214,14 @@ export default function GachaManagePage() {
     return { label };
   };
 
-  const getResultsByCode = async (code: string) => {
+  const getResultsByCode = async (code: string): Promise<GachaResult[]> => {
     const snap = await getDocs(
       collection(db, "gachaResults", code, "results")
     );
 
     return snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      .map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as GachaResult))
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
   };
 
   useEffect(() => {
@@ -243,6 +281,18 @@ export default function GachaManagePage() {
 /* ------------------------------
    ガチャ1件分の表示
 ------------------------------ */
+type GachaItemProps = {
+  codeData: GachaCodeData;
+  getUserInfo: (uid: string) => Promise<UserInfo>;
+  getResultsByCode: (code: string) => Promise<GachaResult[]>;
+  updateTitle: (id: string, newTitle: string) => Promise<void>;
+  updateExpire: (id: string, newDate: string) => Promise<void>;
+  updatePublicFlags: (id: string, newFlags: string[]) => Promise<void>;
+  updateGacha: (codeData: GachaCodeData) => Promise<void>;
+  deleteCode: (id: string) => Promise<void>;
+  archiveCode: (id: string) => Promise<void>;
+};
+
 function GachaItem({
   codeData,
   getUserInfo,
@@ -253,9 +303,9 @@ function GachaItem({
   updateGacha,
   deleteCode,
   archiveCode,
-}) {
+}: GachaItemProps) {
   const [open, setOpen] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<GachaResult[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [showX, setShowX] = useState(false);
@@ -264,7 +314,7 @@ function GachaItem({
     setOpen(!open);
     if (!open) {
       setLoading(true);
-      const r = await getResultsByCode(codeData.code);
+      const r = await getResultsByCode(codeData.code ?? "");
       setResults(r);
       setLoading(false);
     }
@@ -277,7 +327,7 @@ function GachaItem({
   const [xListText, setXListText] = useState("");
 
   const openXEditor = () => {
-    const list = codeData.xAccountList ?? [];
+    const list = Array.isArray(codeData.xAccountList) ? codeData.xAccountList : [];
     setXListText(list.join("\n"));
     setEditXList(true);
   };
@@ -298,16 +348,16 @@ function GachaItem({
 
   const remaining =
     codeData.mode === "count"
-      ? codeData.totalCount - results.length
+      ? (codeData.totalCount ?? 0) - results.length
       : "∞";
 
   const resetUsage = async () => {
     if (!confirm("このガチャの全ユーザーの使用回数をリセットしますか？")) return;
 
     const fn = httpsCallable(functions, "resetGachaUsage");
-    const res: any = await fn({ code: codeData.code });
+    const res = await fn({ code: codeData.code ?? "" }) as { data: { count?: number } };
 
-    alert(`リセット完了：${res.data.count} 件の履歴を更新しました`);
+    alert(`リセット完了：${res.data.count ?? 0} 件の履歴を更新しました`);
   };
 
   const renderFlags = (flags: string[] = []) => {
@@ -323,7 +373,7 @@ function GachaItem({
   };
 
   return (
-    <div> {/* ← ★外側の div（構文エラー修正） */}
+    <div>
       <div
         style={{
           border: "1px solid #ccc",
@@ -361,7 +411,7 @@ function GachaItem({
         <p>コード：{codeData.code}</p>
         <p>方式：{codeData.mode === "count" ? "枠数方式" : "確率方式"}</p>
         <p>
-          1回 {codeData.point.cost} pt（上限 {codeData.point.maxPerUser} 回）
+          1回 {codeData.point?.cost ?? 0} pt（上限 {codeData.point?.maxPerUser ?? 0} 回）
         </p>
 
         <p>残数：{remaining}</p>
@@ -369,7 +419,7 @@ function GachaItem({
         <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 
         {/* ★ Xアカウント折りたたみ */}
-        {codeData.publicFlags?.includes("x_account_match") && (
+        {Array.isArray(codeData.publicFlags) && codeData.publicFlags.includes("x_account_match") && (
           <div
             style={{
               marginTop: 8,
@@ -522,8 +572,8 @@ function GachaItem({
 
         {open && (
           <div style={{ marginTop: 16 }}>
-            <p>作成日：{codeData.createdAt.toDate().toLocaleString()}</p>
-            <p>締切日：{codeData.expiresAt.toDate().toLocaleString()}</p>
+            <p>作成日：{codeData.createdAt && "toDate" in codeData.createdAt ? codeData.createdAt.toDate().toLocaleString() : "なし"}</p>
+            <p>締切日：{codeData.expiresAt && "toDate" in codeData.expiresAt ? codeData.expiresAt.toDate().toLocaleString() : "なし"}</p>
 
             <label>期限を変更：</label>
             <input
@@ -558,7 +608,7 @@ function GachaItem({
               <p>読み込み中…</p>
             ) : (
               <FrameList
-                frames={codeData.frames}
+                frames={codeData.frames ?? []}
                 results={results}
                 getUserInfo={getUserInfo}
                 mode={codeData.mode}
@@ -568,7 +618,7 @@ function GachaItem({
             <hr style={{ margin: "16px 0" }} />
 
             <button
-              onClick={() => navigator.clipboard.writeText(codeData.code)}
+              onClick={() => navigator.clipboard.writeText(codeData.code ?? "")}
               style={btnBlue}
             >
               コピー
@@ -604,32 +654,39 @@ function GachaItem({
 /* ------------------------------
    枠ごとの当選者一覧（★重複バグ完全修正版）
 ------------------------------ */
-function FrameList({ frames, results, getUserInfo, mode }) {
+type FrameListProps = {
+  frames: GachaFrame[];
+  results: GachaResult[];
+  getUserInfo: (uid: string) => Promise<UserInfo>;
+  mode?: "count" | "probability";
+};
+
+function FrameList({ frames, results, getUserInfo, mode }: FrameListProps) {
   return (
     <div>
-      {frames.map((f: any, i: number) => {
+      {(frames ?? []).map((f: GachaFrame, i: number) => {
         // ★ ユーザー側と同じロジックに統一
         const frameName = f.label || f.name;
 
         // ★ 新形式（frame）を優先、古い形式（frameName）も fallback
         const list = results.filter(
-          (r: any) =>
+          (r: GachaResult) =>
             r.frame === frameName ||
             r.frameName === frameName
         );
 
         // ★ 重複排除
         const frameResults = Array.from(
-          new Map(list.map((r: any) => [r.id, r])).values()
-        ).sort((a, b) => a.reward - b.reward);
+          new Map(list.map((r: GachaResult) => [r.id, r])).values()
+        ).sort((a, b) => (a.reward ?? 0) - (b.reward ?? 0));
 
         return (
           <div key={i} style={{ marginBottom: 20 }}>
             <h3>
               {frameName}（
               {mode === "count"
-                ? `${frameResults.length}/${f.maxCount}`
-                : `${Math.round(f.probability * 100)}%`}
+                ? `${frameResults.length}/${f.maxCount ?? 0}`
+                : `${Math.round((f.probability ?? 0) * 100)}%`}
               ）
             </h3>
 
@@ -637,7 +694,7 @@ function FrameList({ frames, results, getUserInfo, mode }) {
               <p style={{ marginLeft: 20 }}>当選者なし</p>
             ) : (
               <ul style={{ paddingLeft: 20 }}>
-                {frameResults.map((r: any) => (
+                {frameResults.map((r: GachaResult) => (
                   <UserResultItem
                     key={r.id}
                     result={r}
@@ -657,8 +714,13 @@ function FrameList({ frames, results, getUserInfo, mode }) {
 /* ------------------------------
    当選者の表示
 ------------------------------ */
-function UserResultItem({ result, getUserInfo }) {
-  const [user, setUser] = useState<any>(null);
+type UserResultItemProps = {
+  result: GachaResult;
+  getUserInfo: (uid: string) => Promise<UserInfo>;
+};
+
+function UserResultItem({ result, getUserInfo }: UserResultItemProps) {
+  const [user, setUser] = useState<UserInfo | null>(null);
 
   useEffect(() => {
     const load = async () => {

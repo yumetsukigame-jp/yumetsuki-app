@@ -276,9 +276,9 @@ if (isXAccountMatch) {
     const list = snapResults.docs
       .map((d) => ({
         id: d.id,
-        ...d.data(),
+        ...(d.data() as Record<string, unknown>),
       }))
-      .filter((d) => d.createdAt);
+      .filter((d) => "createdAt" in d && !!d.createdAt);
 
     setAllResults(list);
     setResultsLoading(false);

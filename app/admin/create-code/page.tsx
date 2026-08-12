@@ -21,7 +21,7 @@ export default function CreateCodePage() {
 
       await setDoc(codeRef, {
         points: Number(points),
-        type: type, // ★ 追加
+        type: type,
         createdAt: new Date(),
       });
 
@@ -51,7 +51,7 @@ export default function CreateCodePage() {
       <input
         type="number"
         value={points}
-        onChange={(e) => setPoints(e.target.value)}
+        onChange={(e) => setPoints(Number(e.target.value))}
         placeholder="付与ポイント"
         style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
       />

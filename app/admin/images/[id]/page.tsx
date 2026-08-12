@@ -69,9 +69,11 @@ export default function ImageDetailPage() {
 
     // ★ metadata は直下に入れる（新 Storage 仕様）
     const metadata = {
-      folder: folder || "",
-      prefix: prefix || "",
-      originalName: newFile.name,
+      customMetadata: {
+        folder: folder || "",
+        prefix: prefix || "",
+        originalName: newFile.name,
+      },
     };
 
     const task = uploadBytesResumable(storageRef, newFile, metadata);

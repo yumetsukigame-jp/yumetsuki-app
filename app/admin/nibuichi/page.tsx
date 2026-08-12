@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { auth, functions, db } from "../../../firebase";
 import { httpsCallable } from "firebase/functions";
-import { onAuthStateChanged } from "firebase/auth";
 import {
   doc,
   getDoc,
@@ -29,14 +28,21 @@ function getTodayJST6() {
   return now.toISOString().slice(0, 10);
 }
 
+type NibuichiResult = {
+  processed?: boolean;
+  result?: string;
+  rewardPoints?: number;
+  date?: string;
+};
+
 export default function AdminNibuichiPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
-  const [globalStats, setGlobalStats] = useState<any>(null);
-  const [todayResult, setTodayResult] = useState<any>(null);
+  const [globalStats, setGlobalStats] = useState<Record<string, number> | null>(null);
+  const [todayResult, setTodayResult] = useState<NibuichiResult | null>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [rewardPoints, setRewardPoints] = useState<number>(500);
@@ -44,20 +50,21 @@ export default function AdminNibuichiPage() {
 
   const [editMode, setEditMode] = useState(false);
 
-  const [predictionStats, setPredictionStats] = useState<any>(null);
+  const [predictionStats, setPredictionStats] = useState<Record<string, number> | null>(null);
 
   /* --------------------------------------------------
      管理者判定
   -------------------------------------------------- */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    const checkAccess = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
         setUser(null);
         setLoading(false);
         return;
       }
 
-      const adminRef = doc(db, "admins", u.uid);
+      const adminRef = doc(db, "admins", currentUser.uid);
       const adminSnap = await getDoc(adminRef);
 
       if (!adminSnap.exists()) {
@@ -66,11 +73,11 @@ export default function AdminNibuichiPage() {
         return;
       }
 
-      setUser(u);
+      setUser(currentUser);
       fetchStats();
-    });
+    };
 
-    return () => unsub();
+    checkAccess();
   }, []);
 
   /* --------------------------------------------------
@@ -84,7 +91,7 @@ export default function AdminNibuichiPage() {
 
     const snap = await getDocs(q);
 
-    const counts = {
+    const counts: Record<string, number> = {
       bakuado: 0,
       nibuni: 0,
       nibuichi: 0,
@@ -93,8 +100,10 @@ export default function AdminNibuichiPage() {
     };
 
     snap.forEach((doc) => {
-      const p = doc.data().prediction;
-      if (counts[p] !== undefined) counts[p]++;
+      const rawPrediction = doc.data().prediction as string | undefined;
+      if (rawPrediction && rawPrediction in counts) {
+        counts[rawPrediction] += 1;
+      }
     });
 
     setPredictionStats(counts);
@@ -148,8 +157,8 @@ export default function AdminNibuichiPage() {
       // ② 総合戦績を取得
       const statsRef = doc(db, "nibuichi_global_stats", "stats");
       const statsSnap = await getDoc(statsRef);
-      const stats = statsSnap.exists
-        ? statsSnap.data()
+      const stats = statsSnap.exists()
+        ? (statsSnap.data() as Record<string, number>)
         : { win: 0, draw: 0, lose: 0, bakuado: 0 };
 
       // ③ 前回の結果を減算
@@ -240,7 +249,7 @@ export default function AdminNibuichiPage() {
             { key: "nibuichi", label: "ニブイチ", color: "bg-green-400" },
             { key: "nibuzero", label: "ニブゼロ", color: "bg-gray-400" },
           ].map((item) => {
-            const count = predictionStats[item.key];
+            const count = predictionStats[item.key] ?? 0;
             const percent =
               predictionStats.total > 0
                 ? Math.round((count / predictionStats.total) * 100)

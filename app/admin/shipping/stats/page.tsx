@@ -5,7 +5,7 @@ import { db } from "../../../../firebase";
 import { collection, getDocs } from "firebase/firestore";
 
 export default function ShippingStatsPage() {
-  const [stats, setStats] = useState<any>({});
+  const [stats, setStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
@@ -35,7 +35,7 @@ export default function ShippingStatsPage() {
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
-  const entries = Object.entries(stats);
+  const entries = Object.entries(stats) as [string, number][];
 
   return (
     <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>

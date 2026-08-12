@@ -4,8 +4,17 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 
-export default function AnswersClient({ quizId, correctAnswer }) {
-  const [answers, setAnswers] = useState([]);
+type AnswerItem = {
+  uid: string;
+  answer: string;
+  round: number;
+  createdAt: Date | null;
+  userNickname?: string;
+  userX?: string;
+};
+
+export default function AnswersClient({ quizId, correctAnswer }: { quizId: string; correctAnswer: string }) {
+  const [answers, setAnswers] = useState<AnswerItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,7 +23,7 @@ export default function AnswersClient({ quizId, correctAnswer }) {
         collection(db, "quizzes_archive", quizId, "answers")
       );
 
-      const all = [];
+      const all: AnswerItem[] = [];
 
       for (const userDoc of usersSnap.docs) {
         const userId = userDoc.id;
@@ -65,7 +74,7 @@ export default function AnswersClient({ quizId, correctAnswer }) {
 
       <p>回答数：{answers.length}件</p>
 
-      {answers.map((a, i) => {
+      {answers.map((a: AnswerItem, i: number) => {
         const isCorrect = a.answer === correctAnswer;
 
         return (

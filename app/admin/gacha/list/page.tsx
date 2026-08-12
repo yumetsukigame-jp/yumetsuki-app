@@ -11,9 +11,45 @@ import {
   getDoc,
 } from "firebase/firestore";
 
+type GachaFrame = {
+  label?: string;
+  name?: string;
+  usedCount?: number;
+  maxCount?: number;
+  probability?: number;
+  rewardMin?: number;
+  rewardMax?: number;
+  shippingEnabled?: boolean;
+};
+
+type GachaCode = {
+  id: string;
+  code?: string;
+  title?: string;
+  thumbnail?: string;
+  publicFlags?: string[];
+  xAccountList?: string[];
+  mode?: "count" | "probability";
+  resetType?: string;
+  expiresAt?: { toDate: () => Date } | Date | null;
+  frames?: GachaFrame[];
+  point?: { cost?: number; maxPerUser?: number };
+  createdAt?: { toDate: () => Date } | Date | null;
+  [key: string]: unknown;
+};
+
+const formatDate = (value?: GachaCode["expiresAt"]) => {
+  if (!value) return "なし";
+  if (value instanceof Date) return value.toLocaleString();
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    return value.toDate().toLocaleString();
+  }
+  return "なし";
+};
+
 export default function AdminGachaListPage() {
-  const [codes, setCodes] = useState<any[]>([]);
-  const [archiveCodes, setArchiveCodes] = useState<any[]>([]);
+  const [codes, setCodes] = useState<GachaCode[]>([]);
+  const [archiveCodes, setArchiveCodes] = useState<GachaCode[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [view, setView] = useState<"active" | "archive">("active");
@@ -170,7 +206,15 @@ export default function AdminGachaListPage() {
 /* ------------------------------
    ガチャカード
 ------------------------------ */
-function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }) {
+type GachaCardProps = {
+  c: GachaCode;
+  view: "active" | "archive";
+  renderFlags: (flags?: string[]) => string;
+  deleteCode: (id: string) => void | Promise<void>;
+  restoreCode: (id: string) => void | Promise<void>;
+};
+
+function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardProps) {
   const [showX, setShowX] = useState(false);
 
   return (
@@ -215,7 +259,7 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }) {
       </p>
 
       {/* ▼ Xアカウント折りたたみ */}
-      {c.publicFlags?.includes("x_account_match") && (
+      {Array.isArray(c.publicFlags) && c.publicFlags.includes("x_account_match") && (
         <div
           style={{
             marginTop: 8,
@@ -270,15 +314,12 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }) {
       </p>
 
       <p style={{ margin: "4px 0" }}>
-        期限：
-        {c.expiresAt?.toDate
-          ? c.expiresAt.toDate().toLocaleString()
-          : "なし"}
+        期限：{formatDate(c.expiresAt)}
       </p>
 
       <h3 style={{ marginTop: 12 }}>枠情報</h3>
 
-      {c.frames.map((f: any, i: number) => (
+      {Array.isArray(c.frames) && c.frames.map((f: GachaFrame, i: number) => (
         <div
           key={i}
           style={{
@@ -296,7 +337,7 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }) {
             </div>
           )}
 
-          {c.mode === "probability" && (
+          {c.mode === "probability" && typeof f.probability === "number" && (
             <div>確率：{(f.probability * 100).toFixed(1)}%</div>
           )}
 
@@ -311,7 +352,7 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }) {
       {/* ▼ ボタン */}
       <div style={{ marginTop: 12 }}>
         <button
-          onClick={() => navigator.clipboard.writeText(c.code)}
+          onClick={() => navigator.clipboard.writeText(c.code ?? "")}
           style={{
             marginRight: 10,
             padding: "6px 12px",

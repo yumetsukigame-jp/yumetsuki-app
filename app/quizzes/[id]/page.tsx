@@ -14,7 +14,11 @@ import {
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 
-export default function QuizDetailPage({ params }) {
+type QuizDetailPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default function QuizDetailPage({ params }: QuizDetailPageProps) {
   const { id: quizId } = React.use(params);
 
   const [uid, setUid] = useState<string | null>(null);
@@ -244,7 +248,7 @@ export default function QuizDetailPage({ params }) {
       {myAnswers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <h3>あなたの過去の回答</h3>
-          {myAnswers.map((a, i) => (
+          {myAnswers.map((a: { answer?: string }, i: number) => (
             <p key={i}>・{a.answer}</p>
           ))}
         </div>
@@ -256,7 +260,7 @@ export default function QuizDetailPage({ params }) {
             type="text"
             placeholder="新しい回答"
             value={newAnswer}
-            onChange={(e) => setNewAnswer(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAnswer(e.target.value)}
             style={{
               width: "100%",
               padding: 10,
@@ -308,7 +312,7 @@ export default function QuizDetailPage({ params }) {
                 <div>
                   <p>回答数：{answers.length}件</p>
 
-                  {answers.map((a, i) => (
+                  {answers.map((a: { userNickname?: string; userX?: string; answer?: string }, i: number) => (
                     <div key={i} style={{ padding: "8px 12px" }}>
                       <strong>{a.userNickname}（{a.userX}）</strong>
                       ：{a.answer}

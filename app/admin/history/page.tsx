@@ -12,36 +12,55 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
+type AdminHistoryItem = {
+  id: string;
+  image?: string | null;
+  name?: string;
+  cost?: number;
+  uid?: string;
+  userName?: string;
+  userX?: string;
+  requestedAt?: { toDate: () => Date } | Date | string | null;
+  shipped?: boolean;
+  shippedAt?: { toDate: () => Date } | Date | string | null;
+};
+
 export default function ShippingHistoryPage() {
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState<AdminHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchHistory = async () => {
-    const q = query(
-      collection(db, "shippingHistory"),
-      orderBy("requestedAt", "desc")
-    );
-
-    const snap = await getDocs(q);
-
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-
-    setHistory(list);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchHistory();
+    let cancelled = false;
+
+    const load = async () => {
+      const q = query(
+        collection(db, "shippingHistory"),
+        orderBy("shippedAt", "desc")
+      );
+
+      const snap = await getDocs(q);
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      if (cancelled) return;
+      setHistory(list);
+      setLoading(false);
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 発送済みにする
-  const markAsShipped = async (id) => {
+  const markAsShipped = async (id: string) => {
     const ref = doc(db, "shippingHistory", id);
 
-    const shippedAt = Timestamp.now(); // ← Firestore Timestamp に統一
+    const shippedAt = Timestamp.now();
 
     await updateDoc(ref, {
       shipped: true,
@@ -56,10 +75,12 @@ export default function ShippingHistoryPage() {
   };
 
   // Timestamp / Date 両対応
-  const formatDate = (value) => {
+  const formatDate = (value: AdminHistoryItem["requestedAt"] | AdminHistoryItem["shippedAt"]) => {
     if (!value) return "不明";
-    if (value.toDate) return value.toDate().toLocaleString();
-    return new Date(value).toLocaleString();
+    if (typeof value === "string") return new Date(value).toLocaleString();
+    if (value instanceof Date) return value.toLocaleString();
+    if ("toDate" in value) return value.toDate().toLocaleString();
+    return "不明";
   };
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;

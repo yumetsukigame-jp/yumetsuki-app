@@ -56,7 +56,8 @@ export default function Home() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        window.location.href = "/login";
+        setUid(null);
+        setAuthReady(true);
         return;
       }
 
@@ -143,14 +144,30 @@ export default function Home() {
   /* --------------------------------------------------
      読み込み中
   -------------------------------------------------- */
-  if (!authReady || !uid || nickname === undefined) {
+  if (!authReady) {
     return (
       <div style={{ padding: 20, textAlign: "center" }}>
         読み込み中…
+      </div>
+    );
+  }
+
+  if (!uid) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        ログインしてください。
         <br />
         <a href="/login" style={{ color: "#2563eb" }}>
           ログインはこちら
         </a>
+      </div>
+    );
+  }
+
+  if (nickname === undefined) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        読み込み中…
       </div>
     );
   }

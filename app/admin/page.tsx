@@ -11,7 +11,6 @@ import {
   orderBy,
   limit,
   getDocs,
-  where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
@@ -41,8 +40,8 @@ export default function AdminTopPage() {
       );
       const snap = await getDocs(q);
 
-      let gacha = null;
-      let nibuichi = null;
+      let gacha: string | null = null;
+      let nibuichi: string | null = null;
 
       snap.forEach((d) => {
         const data = d.data();
@@ -67,22 +66,22 @@ export default function AdminTopPage() {
   };
 
   /* --------------------------------------------------
-     未発送数読み込み（selectedRewards）
+     未発送数読み込み（shippingPending を正本とし、旧データは後方互換）
   -------------------------------------------------- */
   const loadPendingShipping = async () => {
     try {
-      const snap = await getDocs(collection(db, "selectedRewards"));
+      const pendingSnap = await getDocs(collection(db, "shippingPending"));
 
-      let count = 0;
+      if (pendingSnap.size > 0) {
+        setPendingShipping(pendingSnap.size);
+        return;
+      }
 
-      snap.forEach((d) => {
+      const legacySnap = await getDocs(collection(db, "selectedRewards"));
+      const count = legacySnap.docs.filter((d) => {
         const rewardData = d.data();
-
-        // ★ shipped が false のものをカウント
-        if (rewardData.shipped === false) {
-          count++;
-        }
-      });
+        return rewardData.shipped === false || rewardData.status === "pending";
+      }).length;
 
       setPendingShipping(count);
     } catch (e) {
@@ -109,9 +108,10 @@ export default function AdminTopPage() {
       }
 
       await loadLogs();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("manual reset error:", e);
-      alert("エラー: " + e.message);
+      const message = e instanceof Error ? e.message : "不明なエラー";
+      alert("エラー: " + message);
     }
 
     setRunning(false);
@@ -123,7 +123,7 @@ export default function AdminTopPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.push("/admin/login");
+        setLoading(false);
         return;
       }
 
@@ -132,7 +132,7 @@ export default function AdminTopPage() {
       const adminSnap = await getDoc(adminRef);
 
       if (!adminSnap.exists()) {
-        router.push("/");
+        setLoading(false);
         return;
       }
 
@@ -143,7 +143,7 @@ export default function AdminTopPage() {
     });
 
     return () => unsub();
-  }, []);
+  }, [router]);
 
   if (loading) return <p style={{ textAlign: "center" }}>読み込み中…</p>;
 
@@ -262,13 +262,21 @@ export default function AdminTopPage() {
 /* ------------------------------
    セクション（折りたたみ対応）
 ------------------------------ */
+type SectionProps = {
+  title: string;
+  children: React.ReactNode;
+  alwaysOpen?: boolean;
+  showFirstOnly?: boolean;
+  forceCollapseAll?: boolean;
+};
+
 function Section({
   title,
   children,
   alwaysOpen = false,
   showFirstOnly = false,
   forceCollapseAll = false,
-}) {
+}: SectionProps) {
   const [open, setOpen] = useState(false);
 
   const items = React.Children.toArray(children);
@@ -332,7 +340,12 @@ function Section({
 /* ------------------------------
    メニューリンク
 ------------------------------ */
-function MenuLink({ href, children }) {
+type MenuLinkProps = {
+  href: string;
+  children: React.ReactNode;
+};
+
+function MenuLink({ href, children }: MenuLinkProps) {
   return (
     <a
       href={href}

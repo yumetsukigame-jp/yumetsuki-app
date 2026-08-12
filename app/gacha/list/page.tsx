@@ -14,20 +14,57 @@ import {
 } from "firebase/firestore";
 import { getCountFromServer } from "firebase/firestore";
 
+type FirestoreDateLike =
+  | { toDate?: () => Date; _seconds?: number; seconds?: number }
+  | Date
+  | null
+  | undefined;
+
+type GachaFrame = {
+  label?: string;
+  name?: string;
+  maxCount?: number;
+  [key: string]: unknown;
+};
+
+type GachaRecord = {
+  code: string;
+  title?: string;
+  createdAt?: FirestoreDateLike;
+  expiresAt?: FirestoreDateLike;
+  publicFlags?: string[];
+  frames?: GachaFrame[];
+  point?: { cost?: number; maxPerUser?: number };
+  totalCount?: number;
+  mode?: "count" | "probability";
+  resetType?: string;
+  thumbnail?: string;
+  [key: string]: unknown;
+};
+
+type GachaResultRecord = {
+  id: string;
+  uid: string;
+  frame?: string;
+  createdAt?: FirestoreDateLike;
+  [key: string]: unknown;
+};
+
 /* --------------------------------------------------
    Timestamp を安全に Date に変換
 -------------------------------------------------- */
-function toDateSafe(ts: any) {
+function toDateSafe(ts: FirestoreDateLike): Date | null {
   if (!ts) return null;
-  if (ts.toDate) return ts.toDate();
-  if (ts._seconds) return new Date(ts._seconds * 1000);
+  if (ts instanceof Date) return ts;
+  if (typeof ts === "object" && "toDate" in ts && typeof ts.toDate === "function") return ts.toDate();
+  if (typeof ts === "object" && "_seconds" in ts && typeof ts._seconds === "number") return new Date(ts._seconds * 1000);
   return null;
 }
 
 /* --------------------------------------------------
    ★ ユーザー情報キャッシュ付き取得（＠重複修正済み）
 -------------------------------------------------- */
-const userCache: Record<string, any> = {};
+const userCache: Record<string, { name: string }> = {};
 
 async function getUserInfo(uid: string) {
   if (userCache[uid]) return userCache[uid];
@@ -51,11 +88,11 @@ async function getUserInfo(uid: string) {
 }
 
 export default function PublicGachaListPage() {
-  const [gachas, setGachas] = useState<any[]>([]);
+  const [gachas, setGachas] = useState<GachaRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"new" | "popular">("new");
 
-  const [resultsMap, setResultsMap] = useState<Record<string, any[]>>({});
+  const [resultsMap, setResultsMap] = useState<Record<string, GachaResultRecord[]>>({});
   const [countCache, setCountCache] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const router = useRouter();
@@ -71,12 +108,12 @@ export default function PublicGachaListPage() {
     setLoading(true);
 
     const fnList = httpsCallable(functions, "getPublicGachaList");
-    const resList: any = await fnList();
-    const list = resList.data || [];
+    const resList = (await fnList()) as { data?: GachaRecord[] };
+    const list = resList.data ?? [];
 
     const now = new Date();
 
-    let filtered = list.filter((g: any) => {
+    let filtered = list.filter((g: GachaRecord) => {
       if (!g.title?.trim()) return false;
       const exp = toDateSafe(g.expiresAt);
       if (exp && exp < now) return false;
@@ -88,11 +125,11 @@ export default function PublicGachaListPage() {
     let sorted = [...filtered];
 
     if (sort === "new") {
-      sorted.sort(
-        (a, b) =>
-          toDateSafe(b.createdAt).getTime() -
-          toDateSafe(a.createdAt).getTime()
-      );
+      sorted.sort((a, b) => {
+        const bDate = toDateSafe(b.createdAt)?.getTime() ?? 0;
+        const aDate = toDateSafe(a.createdAt)?.getTime() ?? 0;
+        return bDate - aDate;
+      });
     }
 
     if (sort === "popular") {
@@ -103,7 +140,7 @@ export default function PublicGachaListPage() {
           const countSnap = await getCountFromServer(
             collection(db, "gachaResults", g.code, "results")
           );
-          newCache[g.code] = countSnap.data().count;
+          newCache[g.code] = Number(countSnap.data().count ?? 0);
         }
       }
 
@@ -136,9 +173,9 @@ export default function PublicGachaListPage() {
     const list = snap.docs
       .map((d) => ({
         id: d.id,
-        ...d.data(),
-      }))
-      .filter((d) => d.createdAt);
+        ...(d.data() as Record<string, unknown>),
+      } as GachaResultRecord))
+      .filter((d) => !!d.createdAt);
 
     setResultsMap((prev) => ({
       ...prev,
@@ -207,15 +244,15 @@ export default function PublicGachaListPage() {
           /* --------------------------------------------------
              ★ グレーアウト判定
           -------------------------------------------------- */
-          const frames = g.frames || [];
+          const frames: GachaFrame[] = g.frames ?? [];
           const lastIndex = frames.length - 1;
           const upperFrames = frames.slice(0, lastIndex);
 
           const isGrayOut =
             upperFrames.length > 0 &&
-            upperFrames.every((f) => {
+            upperFrames.every((f: GachaFrame) => {
               const used = resultsForThis.filter(
-                (r: any) => r.frame === f.label
+                (r: GachaResultRecord) => r.frame === (f.label ?? f.name)
               ).length;
               const max = f.maxCount ?? 0;
               return max - used <= 0;
@@ -308,7 +345,7 @@ export default function PublicGachaListPage() {
               </p>
 
               <p style={{ margin: "6px 0" }}>
-                1回 {g.point.cost} pt（上限 {g.point.maxPerUser} 回）
+                1回 {g.point?.cost ?? 0} pt（上限 {g.point?.maxPerUser ?? 0} 回）
               </p>
 
               {/* ▼ 詳細 */}
@@ -371,15 +408,15 @@ export default function PublicGachaListPage() {
                   <div style={{ marginTop: 20 }}>
                     <h3 style={{ marginBottom: 10 }}>🎁 枠ごとの状況</h3>
 
-                    {g.frames.map((f: any) => {
-                      const frameName = f.label;
+                    {(g.frames ?? []).map((f: GachaFrame) => {
+                      const frameName = f.label ?? f.name ?? "-";
                       const frameResults = resultsForThis.filter(
-                        (r: any) => r.frame === frameName
+                        (r: GachaResultRecord) => r.frame === frameName
                       );
 
                       const frameRemaining =
                         g.mode === "count"
-                          ? f.maxCount - frameResults.length
+                          ? (f.maxCount ?? 0) - frameResults.length
                           : "∞";
 
                       const grouped: Record<string, number> = {};
@@ -398,7 +435,7 @@ export default function PublicGachaListPage() {
                           }}
                         >
                           <p style={{ margin: 0, fontWeight: "bold" }}>
-                            {frameName}（残り：{frameRemaining}）
+                            {frameName}（残り：{String(frameRemaining)}）
                           </p>
 
                           {Object.keys(grouped).length === 0 ? (
@@ -425,9 +462,10 @@ export default function PublicGachaListPage() {
 
                   <p style={{ margin: "6px 0", fontSize: 14, color: "#555" }}>
                     締切：
-                    {toDateSafe(g.expiresAt)
-                      ? toDateSafe(g.expiresAt).toLocaleString()
-                      : "なし"}
+                    {(() => {
+                      const expiresDate = toDateSafe(g.expiresAt);
+                      return expiresDate ? expiresDate.toLocaleString() : "なし";
+                    })()}
                   </p>
 
                   <button

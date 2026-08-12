@@ -1,6 +1,11 @@
 "use client";
 
-export default function OricaModal({ img, onClose }) {
+type OricaModalProps = {
+  img: string | null;
+  onClose?: () => void;
+};
+
+export default function OricaModal({ img, onClose }: OricaModalProps) {
   if (!img) return null;
 
   return (

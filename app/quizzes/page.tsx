@@ -5,8 +5,18 @@ import { db } from "@/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import Link from "next/link";
 
+type QuizSummary = {
+  id: string;
+  title?: string;
+  thumbnail?: string;
+  rewardPoint?: number;
+  maxAnswers?: number;
+  archived?: boolean;
+  thread?: string;
+};
+
 export default function QuizListPage() {
-  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({}); // ★ ハッシュ折りたたみ
@@ -15,11 +25,11 @@ export default function QuizListPage() {
     const snap = await getDocs(collection(db, "quizzes"));
     const list = snap.docs.map((d) => ({
       id: d.id,
-      ...d.data(),
-    }));
+      ...(d.data() as Record<string, unknown>),
+    } as QuizSummary));
 
     // archived = false のみ表示
-    setQuizzes(list.filter((q) => !q.archived));
+    setQuizzes(list.filter((q) => !(q.archived ?? false)));
     setLoading(false);
   };
 

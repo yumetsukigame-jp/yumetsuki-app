@@ -31,11 +31,39 @@ function formatUserName(u: any) {
 /* --------------------------------------------------
    内側コンポーネント
 -------------------------------------------------- */
+type GachaResultItem = {
+  id: string;
+  uid: string;
+  createdAt?: { toDate: () => Date } | Date | null;
+  userName?: string;
+  _userName?: string;
+  [key: string]: unknown;
+};
+
+type GachaCodeMeta = {
+  publicFlags?: string[];
+  frames?: unknown[];
+  mode?: string;
+  thumbnail?: string;
+  xAccountList?: string[];
+};
+
+type GachaCodeRow = {
+  code: string;
+  title?: string;
+  publicFlags?: string[];
+  frames?: unknown[];
+  mode?: string;
+  thumbnail?: string;
+  xAccountList?: string[];
+  [key: string]: unknown;
+};
+
 function ResultsContent() {
-  const [grouped, setGrouped] = useState<any>({});
+  const [grouped, setGrouped] = useState<Record<string, GachaResultItem[]>>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const [titles, setTitles] = useState<{ [key: string]: string }>({});
-  const [meta, setMeta] = useState<{ [key: string]: any }>({});
+  const [meta, setMeta] = useState<{ [key: string]: GachaCodeMeta }>({});
 
   const [filterMine, setFilterMine] = useState(false);
   const [search, setSearch] = useState("");
@@ -78,14 +106,17 @@ function ResultsContent() {
 
     // ① gachaCodes を全部取得
     const gachaSnap = await getDocs(collection(db, "gachaCodes"));
-    const gachaList = gachaSnap.docs.map((d) => ({
-      code: d.id,
-      ...d.data(),
-    }));
+    const gachaList: GachaCodeRow[] = gachaSnap.docs.map((d) => {
+      const data = d.data() as Record<string, unknown>;
+      return {
+        code: d.id,
+        ...data,
+      } as GachaCodeRow;
+    });
 
-    const groupedData: any = {};
-    const titleMap: any = {};
-    const metaMap: any = {};
+    const groupedData: Record<string, GachaResultItem[]> = {};
+    const titleMap: Record<string, string> = {};
+    const metaMap: Record<string, GachaCodeMeta> = {};
 
     // ② 各ガチャごとに results を取得
     for (const g of gachaList) {
@@ -102,32 +133,38 @@ function ResultsContent() {
 
       if (resultsSnap.empty) continue;
 
+      const rawResults = resultsSnap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        return {
+          id: d.id,
+          ...data,
+        } as GachaResultItem & Record<string, unknown>;
+      });
+
       const results = await Promise.all(
-        resultsSnap.docs
-          .map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-          .filter((d) => d.createdAt)
+        rawResults
+          .filter((d): d is GachaResultItem & Record<string, unknown> => {
+            return !!d.createdAt && typeof d.uid === "string";
+          })
           .map(async (d) => {
             const name = await getUserName(d.uid);
             return {
               ...d,
               userName: name,
               _userName: name.toLowerCase(),
-            };
+            } as GachaResultItem;
           })
       );
 
       groupedData[code] = results;
 
-      titleMap[code] = g.title;
+      titleMap[code] = typeof g.title === "string" ? g.title : "";
       metaMap[code] = {
-        publicFlags: g.publicFlags ?? [],
-        frames: g.frames ?? [],
-        mode: g.mode,
-        thumbnail: g.thumbnail ?? "",
-        xAccountList: g.xAccountList ?? [],
+        publicFlags: Array.isArray(g.publicFlags) ? g.publicFlags : [],
+        frames: Array.isArray(g.frames) ? g.frames : [],
+        mode: typeof g.mode === "string" ? g.mode : undefined,
+        thumbnail: typeof g.thumbnail === "string" ? g.thumbnail : "",
+        xAccountList: Array.isArray(g.xAccountList) ? g.xAccountList : [],
       };
     }
 

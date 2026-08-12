@@ -13,30 +13,52 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
+type HistoryItem = {
+  id: string;
+  status?: "pending" | "done";
+  shipped?: boolean;
+  shippedAt?: { toDate: () => Date } | Date | string | null;
+  cost?: number;
+  userNickname?: string;
+  userX?: string;
+  rewardName?: string;
+  userName?: string;
+  userEmail?: string;
+  uid?: string;
+  image?: string | null;
+};
+
 export default function ShippingHistoryPage() {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [openMap, setOpenMap] = useState<{ [id: string]: boolean }>({});
   const [sortKey, setSortKey] = useState("dateDesc");
 
-  const fetchHistory = async () => {
-    const q = query(
-      collection(db, "shippingHistory"),
-      orderBy("shippedAt", "desc")
-    );
-    const snap = await getDocs(q);
-
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-
-    setHistory(list);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchHistory();
+    let cancelled = false;
+
+    const load = async () => {
+      const q = query(
+        collection(db, "shippingHistory"),
+        orderBy("shippedAt", "desc")
+      );
+
+      const snap = await getDocs(q);
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      if (cancelled) return;
+      setHistory(list);
+      setLoading(false);
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 発送済みにする
@@ -72,10 +94,12 @@ export default function ShippingHistoryPage() {
   };
 
   // Timestamp / Date 両対応の変換
-  const toMillis = (value: any) => {
+  const toMillis = (value: HistoryItem["shippedAt"]) => {
     if (!value) return 0;
+    if (typeof value === "string") return new Date(value).getTime();
+    if (value instanceof Date) return value.getTime();
     if (value.toDate) return value.toDate().getTime();
-    return new Date(value).getTime();
+    return 0;
   };
 
   // 並べ替え
@@ -101,11 +125,16 @@ export default function ShippingHistoryPage() {
     }
   });
 
-  const formatDate = (value: any) => {
+  const formatDate = (value: HistoryItem["shippedAt"]) => {
     if (!value) return "日時不明";
+    if (typeof value === "string") return new Date(value).toLocaleString();
+    if (value instanceof Date) return value.toLocaleString();
     if (value.toDate) return value.toDate().toLocaleString();
-    return new Date(value).toLocaleString();
+    return "日時不明";
   };
+
+  const getStatusLabel = (item: HistoryItem) =>
+    item.status === "done" || item.shipped ? "発送済み" : "準備中";
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
 
@@ -179,7 +208,7 @@ export default function ShippingHistoryPage() {
                     <br />
 
                     <span style={{ fontSize: "12px", color: "#666" }}>
-                      {formatDate(item.shippedAt)}
+                      {getStatusLabel(item)} · {formatDate(item.shippedAt)}
                     </span>
                   </div>
                 </div>

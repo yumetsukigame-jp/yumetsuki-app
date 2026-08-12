@@ -1,5 +1,5 @@
 "use client";
-console.log("EditRewardForm received id:", id);
+
 import { useEffect, useState } from "react";
 import { db } from "../../../../../firebase";
 import {
@@ -10,7 +10,22 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-export default function EditRewardForm({ id }) {
+type RewardImage = {
+  url: string;
+  prefix?: string;
+  folder?: string;
+};
+
+type RewardRecord = RewardImage & {
+  id: string;
+  name?: string;
+  cost?: number;
+  image?: string;
+  stock?: number;
+  [key: string]: unknown;
+};
+
+export default function EditRewardForm({ id }: { id: string }) {
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -18,15 +33,15 @@ export default function EditRewardForm({ id }) {
   const [image, setImage] = useState("");
   const [stock, setStock] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<RewardImage[]>([]);
 
   // Firestore から rewards フォルダの画像一覧を取得
   useEffect(() => {
     const loadImages = async () => {
       const snap = await getDocs(collection(db, "imageMeta"));
       const list = snap.docs
-        .map((d) => d.data())
-        .filter((d) => d.folder === "rewards");
+        .map((d) => d.data() as Partial<RewardImage>)
+        .filter((d): d is RewardImage => !!d.url && d.folder === "rewards");
 
       setImages(list);
     };
@@ -46,8 +61,8 @@ export default function EditRewardForm({ id }) {
       const snap = await getDocs(collection(db, "rewards"));
       const list = snap.docs.map((d) => ({
         id: d.id,
-        ...d.data(),
-      }));
+        ...(d.data() as Record<string, unknown>),
+      } as RewardRecord));
 
       const target = list.find(
         (r) => r.id.normalize("NFC") === id.normalize("NFC")
@@ -58,9 +73,9 @@ export default function EditRewardForm({ id }) {
       console.log("target:", target);
 
       if (target) {
-        setName(target.name);
-        setCost(target.cost);
-        setImage(target.image);
+        setName(target.name ?? "");
+        setCost(target.cost ?? 0);
+        setImage(target.image ?? "");
         setStock(target.stock ?? 0);
       }
 
@@ -70,7 +85,7 @@ export default function EditRewardForm({ id }) {
     fetchReward();
   }, [id]);
 
-  const handleUpdate = async (e) => {
+  const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     await updateDoc(doc(db, "rewards", id), {

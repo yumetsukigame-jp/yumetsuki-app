@@ -46,7 +46,7 @@ export default function AddRewardForm() {
     load();
   }, []);
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!name || !image) {

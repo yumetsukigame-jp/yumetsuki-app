@@ -1,6 +1,11 @@
 "use client";
 
-export default function MemoryCard({ img, onClick }) {
+type MemoryCardProps = {
+  img: string;
+  onClick?: () => void;
+};
+
+export default function MemoryCard({ img, onClick }: MemoryCardProps) {
   return (
     <div
       style={{

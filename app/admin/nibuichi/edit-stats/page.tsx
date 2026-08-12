@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 // Firebase
 import { auth, functions, db } from "../../../../firebase";
 import { httpsCallable } from "firebase/functions";
-import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function EditNibuichiStatsPage() {
@@ -27,14 +26,15 @@ export default function EditNibuichiStatsPage() {
   // 管理者判定
   // -----------------------------
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    const checkAccess = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
         setUser(null);
         setLoading(false);
         return;
       }
 
-      const adminRef = doc(db, "admins", u.uid);
+      const adminRef = doc(db, "admins", currentUser.uid);
       const adminSnap = await getDoc(adminRef);
 
       if (!adminSnap.exists()) {
@@ -43,11 +43,11 @@ export default function EditNibuichiStatsPage() {
         return;
       }
 
-      setUser(u);
+      setUser(currentUser);
       fetchStats();
-    });
+    };
 
-    return () => unsub();
+    checkAccess();
   }, []);
 
   // -----------------------------

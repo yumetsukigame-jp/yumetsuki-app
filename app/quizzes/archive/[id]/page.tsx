@@ -2,8 +2,23 @@ import { db } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import AnswersClient from "./AnswersClient";
 
-export default async function ArchiveDetailPage({ params }) {
-  const { id: quizId } = await params; // ★ 修正ポイント
+type ArchiveDetailPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+type QuizArchive = {
+  id: string;
+  title?: string;
+  thumbnail?: string;
+  question?: string;
+  answer?: string;
+  explanation?: string;
+  salt?: string;
+  thread?: string;
+};
+
+export default async function ArchiveDetailPage({ params }: ArchiveDetailPageProps) {
+  const { id: quizId } = await params;
 
   const ref = doc(db, "quizzes_archive", quizId);
   const snap = await getDoc(ref);
@@ -12,21 +27,24 @@ export default async function ArchiveDetailPage({ params }) {
     return <div style={{ padding: 20 }}>このアーカイブは存在しません</div>;
   }
 
-  const quiz = { id: quizId, ...snap.data() };
+  const quiz: QuizArchive = {
+    id: quizId,
+    ...(snap.data() as Record<string, unknown>),
+  };
 
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
       <h1>{quiz.title}</h1>
 
       <img
-        src={quiz.thumbnail}
+        src={quiz.thumbnail ?? ""}
         style={{ width: "100%", borderRadius: 12, marginBottom: 20 }}
       />
 
       <h2>問題</h2>
       <p>{quiz.question}</p>
 
-      <h3 style={{ marginTop: 20 }}>正解：{quiz.answer}</h3>
+      <h3 style={{ marginTop: 20 }}>正解：{quiz.answer ?? ""}</h3>
 
       {quiz.explanation && (
         <p style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>
@@ -47,7 +65,7 @@ export default async function ArchiveDetailPage({ params }) {
         <p><strong>thread：</strong>{quiz.thread}</p>
       </div>
 
-      <AnswersClient quizId={quizId} correctAnswer={quiz.answer} />
+      <AnswersClient quizId={quizId} correctAnswer={quiz.answer ?? ""} />
     </div>
   );
 }

@@ -1,6 +1,13 @@
 "use client";
 
-export default function OricaCard({ img, owned, onToggle, onClick }) {
+type OricaCardProps = {
+  img: string;
+  owned?: boolean;
+  onToggle?: () => void;
+  onClick?: () => void;
+};
+
+export default function OricaCard({ img, owned, onToggle, onClick }: OricaCardProps) {
   return (
     <div
       style={{

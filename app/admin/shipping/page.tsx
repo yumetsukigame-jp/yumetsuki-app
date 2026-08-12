@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import {
   collection,
@@ -11,10 +11,40 @@ import {
   getDoc,
   deleteDoc,
   Timestamp,
+  query,
+  orderBy,
+  setDoc,
 } from "firebase/firestore";
 
+type UserData = {
+  name?: string;
+  email?: string;
+  xAccount?: string;
+  displayName?: string;
+  xAccountConfirmed?: boolean;
+};
+
+type PendingItem = {
+  id: string;
+  uid: string;
+  rewardId?: string;
+  name?: string;
+  cost?: number;
+  image?: string | null;
+  requestedAt?: { toDate: () => Date } | Date | number | string | null;
+  timestamp?: { toDate: () => Date } | Date | number | string | null;
+  shipped?: boolean;
+  shippedAt?: { toDate: () => Date } | Date | number | string | null;
+  status?: "pending" | "done";
+  userName?: string;
+  userEmail?: string;
+  userX?: string;
+  userNickname?: string;
+  xAccountConfirmed?: boolean;
+};
+
 export default function ShippingAdminPage() {
-  const [list, setList] = useState<any[]>([]);
+  const [list, setList] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [openMap, setOpenMap] = useState<{ [id: string]: boolean }>({});
@@ -28,90 +58,131 @@ export default function ShippingAdminPage() {
   /* --------------------------------------------------
      データ取得（selectedRewards → shippingHistory）
   -------------------------------------------------- */
-  const fetchData = async () => {
-    const snap = await getDocs(collection(db, "selectedRewards"));
+  const fetchData = useCallback(async () => {
+    const pendingSnap = await getDocs(
+      query(collection(db, "shippingPending"), orderBy("requestedAt", "desc"))
+    );
 
-    const data: any[] = [];
+    const data: PendingItem[] = [];
 
-    for (const d of snap.docs) {
-      const rewardId = d.id;          // ★ ドキュメントID（uidではない）
+    for (const d of pendingSnap.docs) {
+      const rewardId = d.id;
       const rewardData = d.data();
-
-      const uid = rewardData.uid;     // ★ 正しいユーザーID
+      const uid = rewardData.uid;
 
       if (!uid) {
-        console.warn("selectedRewards に uid がありません:", rewardId);
+        console.warn("shippingPending に uid がありません:", rewardId);
         continue;
       }
 
-      // ★ users コレクションからユーザー情報を取得
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
-      const userData = userSnap.exists()
-        ? userSnap.data()
-        : {
-            name: "不明",
-            email: "不明",
-            xAccount: "不明",
-            displayName: "名無し",
-            xAccountConfirmed: false,
-          };
+      const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
 
       data.push({
-        id: rewardId,               // ★ rewardId を保持
-        uid,                        // ★ 正しいユーザーID
+        id: rewardId,
+        uid,
         ...rewardData,
-        userName: userData.name ?? "不明",
-        userEmail: userData.email ?? "不明",
-        userX: userData.xAccount ?? "不明",
-        userNickname: userData.displayName ?? "名無し",
-        xAccountConfirmed: userData.xAccountConfirmed ?? false,
+        userName: userData?.name ?? "不明",
+        userEmail: userData?.email ?? "不明",
+        userX: userData?.xAccount ?? "不明",
+        userNickname: userData?.displayName ?? "名無し",
+        xAccountConfirmed: userData?.xAccountConfirmed ?? false,
       });
     }
 
-    // ★ 未発送 → 発送済み の順
-    data.sort((a, b) => {
-      if (a.shipped !== b.shipped) {
-        return a.shipped ? 1 : -1;
+    if (data.length === 0) {
+      const legacySnap = await getDocs(collection(db, "selectedRewards"));
+      for (const d of legacySnap.docs) {
+        const rewardId = d.id;
+        const rewardData = d.data();
+        const uid = rewardData.uid;
+
+        if (!uid) {
+          continue;
+        }
+
+        const userRef = doc(db, "users", uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
+
+        data.push({
+          id: rewardId,
+          uid,
+          ...rewardData,
+          userName: userData?.name ?? "不明",
+          userEmail: userData?.email ?? "不明",
+          userX: userData?.xAccount ?? "不明",
+          userNickname: userData?.displayName ?? "名無し",
+          xAccountConfirmed: userData?.xAccountConfirmed ?? false,
+        });
       }
+    }
 
-      const tA = a.timestamp?.toDate
-        ? a.timestamp.toDate().getTime()
-        : new Date(a.timestamp).getTime();
+    data.sort((a, b) => {
+      const toComparableTime = (value?: PendingItem["requestedAt"] | PendingItem["timestamp"]) => {
+        if (!value) return 0;
+        if (value instanceof Date) return value.getTime();
+        if (typeof value === "object" && "toDate" in value) return value.toDate().getTime();
+        return new Date(value).getTime();
+      };
 
-      const tB = b.timestamp?.toDate
-        ? b.timestamp.toDate().getTime()
-        : new Date(b.timestamp).getTime();
-
+      const tA = toComparableTime(a.requestedAt ?? a.timestamp);
+      const tB = toComparableTime(b.requestedAt ?? b.timestamp);
       return tB - tA;
     });
 
     setList(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchData]);
 
   /* --------------------------------------------------
      発送済みフラグ切り替え ＋ 履歴保存
   -------------------------------------------------- */
-  const toggleShipped = async (rewardId: string, shipped: boolean, item: any) => {
-    const ref = doc(db, "selectedRewards", rewardId);
+  const toggleShipped = async (rewardId: string, shipped: boolean, item: PendingItem) => {
+    const pendingRef = doc(db, "shippingPending", item.uid);
+    const doneRef = doc(db, "shippingDone", item.uid);
+    const legacyRef = doc(db, "selectedRewards", item.uid);
 
     if (!shipped) {
       const shippedAt = Timestamp.now();
 
-      await updateDoc(ref, {
+      await setDoc(doneRef, {
+        ...item,
+        uid: item.uid,
+        rewardId: item.rewardId ?? rewardId,
+        status: "done",
         shipped: true,
         shippedAt,
       });
 
-      // ★ 発送履歴に保存
+      await deleteDoc(pendingRef);
+      await updateDoc(legacyRef, {
+        status: "done",
+        shipped: true,
+        shippedAt,
+      }).catch(() => {
+        setDoc(legacyRef, {
+          ...item,
+          uid: item.uid,
+          rewardId: item.rewardId ?? rewardId,
+          status: "done",
+          shipped: true,
+          shippedAt,
+        });
+      });
+
       await addDoc(collection(db, "shippingHistory"), {
-        rewardId,
+        rewardId: item.rewardId ?? rewardId,
         uid: item.uid,
         rewardName: item.name,
         cost: item.cost,
@@ -123,9 +194,24 @@ export default function ShippingAdminPage() {
         userNickname: item.userNickname,
       });
     } else {
-      await updateDoc(ref, {
+      await setDoc(pendingRef, {
+        ...item,
+        status: "pending",
         shipped: false,
         shippedAt: null,
+      });
+      await deleteDoc(doneRef);
+      await updateDoc(legacyRef, {
+        status: "pending",
+        shipped: false,
+        shippedAt: null,
+      }).catch(() => {
+        setDoc(legacyRef, {
+          ...item,
+          status: "pending",
+          shipped: false,
+          shippedAt: null,
+        });
       });
     }
 
@@ -147,9 +233,10 @@ export default function ShippingAdminPage() {
 
   const paginatedList = list.slice((page - 1) * perPage, page * perPage);
 
-  const formatDate = (value: any) => {
+  const formatDate = (value: PendingItem["requestedAt"] | PendingItem["timestamp"] | PendingItem["shippedAt"] | null | undefined) => {
     if (!value) return "日時不明";
-    if (value.toDate) return value.toDate().toLocaleString();
+    if (value instanceof Date) return value.toLocaleString();
+    if (typeof value === "object" && "toDate" in value) return value.toDate().toLocaleString();
     return new Date(value).toLocaleString();
   };
 
@@ -161,7 +248,8 @@ export default function ShippingAdminPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         {paginatedList.map((item) => {
-          const isOpen = openMap[item.id] ?? !item.shipped;
+          const isDone = item.status === "done" || item.shipped;
+          const isOpen = openMap[item.id] ?? !isDone;
 
           return (
             <div
@@ -170,7 +258,7 @@ export default function ShippingAdminPage() {
                 border: "1px solid #ddd",
                 borderRadius: "8px",
                 padding: "16px",
-                background: item.shipped ? "#f5f5f5" : "#fffbe6",
+                background: isDone ? "#f5f5f5" : "#fffbe6",
               }}
             >
               {/* ▼ ヘッダー */}
@@ -205,7 +293,7 @@ export default function ShippingAdminPage() {
                     </span>
                     <br />
                     <span style={{ fontSize: "12px", color: "#666" }}>
-                      {item.shipped
+                      {isDone
                         ? `発送済み：${formatDate(item.shippedAt)}`
                         : "未発送"}
                     </span>
@@ -247,11 +335,11 @@ export default function ShippingAdminPage() {
                   <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
                   <button
-                    onClick={() => toggleShipped(item.id, item.shipped, item)}
+                    onClick={() => toggleShipped(item.id, Boolean(isDone), item)}
                     style={{
                       marginTop: "12px",
                       padding: "10px 16px",
-                      background: item.shipped ? "#aaa" : "#10b981",
+                      background: isDone ? "#aaa" : "#10b981",
                       color: "white",
                       borderRadius: "8px",
                       border: "none",
@@ -259,7 +347,7 @@ export default function ShippingAdminPage() {
                       minWidth: "140px",
                     }}
                   >
-                    {item.shipped ? "未発送に戻す" : "発送済みにする"}
+                    {isDone ? "未発送に戻す" : "発送済みにする"}
                   </button>
                 </div>
               )}
