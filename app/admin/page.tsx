@@ -4,8 +4,6 @@ import React from "react";
 import { useEffect, useState } from "react";
 import { auth, db, functions } from "@/firebase";
 import {
-  doc,
-  getDoc,
   collection,
   query,
   orderBy,
@@ -13,18 +11,19 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
+import { withRetry } from "@/app/lib/retry";
+import Link from "next/link";
 
 export default function AdminTopPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
-
   const [dailyGachaTime, setDailyGachaTime] = useState<string | null>(null);
   const [dailyNibuichiTime, setDailyNibuichiTime] = useState<string | null>(null);
 
   const [running, setRunning] = useState(false);
   const [pendingShipping, setPendingShipping] = useState<number>(0);
+  const [pendingShippingStatus, setPendingShippingStatus] = useState<
+    "loading" | "loaded" | "error"
+  >("loading");
 
   const [openAuto, setOpenAuto] = useState(false);
 
@@ -69,11 +68,13 @@ export default function AdminTopPage() {
      未発送数読み込み（shippingPending を正本とし、旧データは後方互換）
   -------------------------------------------------- */
   const loadPendingShipping = async () => {
+    setPendingShippingStatus("loading");
     try {
       const pendingSnap = await getDocs(collection(db, "shippingPending"));
 
       if (pendingSnap.size > 0) {
         setPendingShipping(pendingSnap.size);
+        setPendingShippingStatus("loaded");
         return;
       }
 
@@ -84,8 +85,10 @@ export default function AdminTopPage() {
       }).length;
 
       setPendingShipping(count);
+      setPendingShippingStatus("loaded");
     } catch (e) {
       console.error("loadPendingShipping error:", e);
+      setPendingShippingStatus("error");
     }
   };
 
@@ -121,31 +124,19 @@ export default function AdminTopPage() {
      管理者チェック
   -------------------------------------------------- */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
 
-      const uid = user.uid;
-      const adminRef = doc(db, "admins", uid);
-      const adminSnap = await getDoc(adminRef);
-
-      if (!adminSnap.exists()) {
-        setLoading(false);
-        return;
-      }
-
-      await loadLogs();
-      await loadPendingShipping();
-
-      setLoading(false);
+      void withRetry(() => loadLogs(), 2, 500, 10000).catch((error) => {
+        console.error("管理者トップのログ読み込みに失敗しました", error);
+      });
+      void withRetry(() => loadPendingShipping(), 2, 500, 10000).catch((error) => {
+        console.error("管理者トップの発送件数読み込みに失敗しました", error);
+      });
     });
 
     return () => unsub();
-  }, [router]);
-
-  if (loading) return <p style={{ textAlign: "center" }}>読み込み中…</p>;
+  }, []);
 
   return (
     <div
@@ -159,7 +150,11 @@ export default function AdminTopPage() {
 
       {/* 📦 発送状況（常に展開） */}
       <Section title="📦 発送状況" alwaysOpen>
-        {pendingShipping > 0 ? (
+        {pendingShippingStatus === "loading" ? (
+          <div style={statusBox}>発送状況を取得中…</div>
+        ) : pendingShippingStatus === "error" ? (
+          <div style={statusBox}>発送状況を取得できませんでした</div>
+        ) : pendingShipping > 0 ? (
           <div style={statusBox}>
             発送が必要なアイテムが <b>{pendingShipping}</b> 件あります
           </div>
@@ -347,7 +342,7 @@ type MenuLinkProps = {
 
 function MenuLink({ href, children }: MenuLinkProps) {
   return (
-    <a
+    <Link
       href={href}
       style={{
         padding: "12px",
@@ -360,7 +355,7 @@ function MenuLink({ href, children }: MenuLinkProps) {
       }}
     >
       {children}
-    </a>
+    </Link>
   );
 }
 

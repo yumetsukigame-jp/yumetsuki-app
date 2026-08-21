@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
+import LoadingState from "@/app/components/LoadingState";
 
 export default function NibuichiHistoryPage() {
   const [user, setUser] = useState<any>(null);
@@ -152,7 +153,7 @@ export default function NibuichiHistoryPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-center">読み込み中…</div>;
+    return <LoadingState className="p-6 text-center" />;
   }
 
   if (!user) {

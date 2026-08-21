@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function AdminFooter() {
   return (
     <div
@@ -10,7 +12,7 @@ export default function AdminFooter() {
         textAlign: "center",
       }}
     >
-      <a
+      <Link
         href="/admin"
         style={{
           color: "#2563eb",
@@ -19,7 +21,7 @@ export default function AdminFooter() {
         }}
       >
         管理者トップへ戻る
-      </a>
+      </Link>
     </div>
   );
 }

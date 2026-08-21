@@ -6,6 +6,8 @@ import { auth, functions, db } from "../../firebase";
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 export default function NibuichiPage() {
   const [user, setUser] = useState<any>(null);
@@ -47,7 +49,7 @@ export default function NibuichiPage() {
       where("date", "==", targetDate)
     );
 
-    const snap = await getDocs(q);
+    const snap = await withRetry(() => getDocs(q));
 
     const counts = {
       bakuado: 0,
@@ -74,7 +76,7 @@ export default function NibuichiPage() {
       const todayJST = getTodayJST6();
 
       const fn = httpsCallable(functions, "getNibuichiUserStats");
-      const res: any = await fn({ date: todayJST });
+      const res: any = await withRetry(() => fn({ date: todayJST }));
 
       const statsData = res.data.stats ?? null;
       const todayPredData = res.data.todayPrediction ?? null;
@@ -96,8 +98,9 @@ export default function NibuichiPage() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // 今日の予想を確定
@@ -120,7 +123,7 @@ export default function NibuichiPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-600">読み込み中…</div>;
+    return <LoadingState className="p-6 text-center text-gray-600" />;
   }
 
   if (!user) {

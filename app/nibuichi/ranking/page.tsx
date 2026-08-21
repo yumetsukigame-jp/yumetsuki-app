@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  documentId,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type UserStat = {
   uid: string;
@@ -62,34 +70,47 @@ export default function NibuichiRankingPage() {
 
   const fetchRanking = async () => {
     setLoading(true);
-
-    const snap = await getDocs(collection(db, "nibuichi_user_stats"));
-    const users = snap.docs.map((d) => ({
+    try {
+      const snap = await withRetry(() => getDocs(collection(db, "nibuichi_user_stats")));
+      const users = snap.docs.map((d) => ({
       uid: d.id,
       ...(d.data() as Record<string, unknown>),
-    } as UserStat));
+      } as UserStat));
 
     /* -----------------------------
        ユーザー情報取得
     ----------------------------- */
     const map: Record<string, { nickname: string; xAccount: string }> = {};
+    const userIds = users.map((user) => user.uid);
+    const userIdBatches = Array.from({ length: Math.ceil(userIds.length / 30) }, (_, index) =>
+      userIds.slice(index * 30, index * 30 + 30)
+    );
 
-    for (const u of users) {
-      const userRef = doc(db, "users", u.uid);
-      const userSnap = await getDoc(userRef);
+    const userSnapshots = await Promise.all(
+      userIdBatches.map((batch) =>
+        withRetry(() =>
+          getDocs(
+            query(
+              collection(db, "users"),
+              where(documentId(), "in", batch)
+            )
+          )
+        )
+      )
+    );
 
-      if (userSnap.exists()) {
+    for (const userSnapshotsBatch of userSnapshots) {
+      for (const userSnap of userSnapshotsBatch.docs) {
         const data = userSnap.data();
-        map[u.uid] = {
+        map[userSnap.id] = {
           nickname: data.displayName ?? "名無し",
           xAccount: data.xAccount ?? "",
         };
-      } else {
-        map[u.uid] = {
-          nickname: "不明ユーザー",
-          xAccount: "",
-        };
       }
+    }
+
+    for (const userId of userIds) {
+      map[userId] ??= { nickname: "不明ユーザー", xAccount: "" };
     }
 
     setUserMap(map);
@@ -155,13 +176,19 @@ export default function NibuichiRankingPage() {
 
     weekly = assignRanks(weekly, "weeklyScore");
 
-    setTotalRank(total);
-    setWeeklyRank(weekly);
-    setLoading(false);
+      setTotalRank(total);
+      setWeeklyRank(weekly);
+    } catch (error) {
+      console.error("ニブイチランキングの読み込みに失敗しました", error);
+      setTotalRank([]);
+      setWeeklyRank([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
-    return <div className="p-6 text-center">読み込み中…</div>;
+    return <LoadingState className="p-6 text-center" />;
   }
 
   return (

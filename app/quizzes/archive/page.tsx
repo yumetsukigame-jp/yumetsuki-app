@@ -4,27 +4,35 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import Link from "next/link";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 export default function QuizArchivePage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchQuizzes = async () => {
-    const snap = await getDocs(collection(db, "quizzes_archive"));
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    try {
+      const snap = await withRetry(() => getDocs(collection(db, "quizzes_archive")));
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
-    setQuizzes(list);
-    setLoading(false);
+      setQuizzes(list);
+    } catch (error) {
+      console.error("完了済みクイズの読み込みに失敗しました", error);
+      setQuizzes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchQuizzes();
   }, []);
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>

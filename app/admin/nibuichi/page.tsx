@@ -14,6 +14,7 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+import { withRetry } from "@/app/lib/retry";
 
 /* --------------------------------------------------
    ★ 今日の日付（6時切り替え）
@@ -38,8 +39,8 @@ type NibuichiResult = {
 export default function AdminNibuichiPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<unknown>(auth.currentUser);
+  const [accessChecked, setAccessChecked] = useState(false);
 
   const [globalStats, setGlobalStats] = useState<Record<string, number> | null>(null);
   const [todayResult, setTodayResult] = useState<NibuichiResult | null>(null);
@@ -57,24 +58,19 @@ export default function AdminNibuichiPage() {
   -------------------------------------------------- */
   useEffect(() => {
     const checkAccess = async () => {
+      await auth.authStateReady();
       const currentUser = auth.currentUser;
       if (!currentUser) {
         setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      const adminRef = doc(db, "admins", currentUser.uid);
-      const adminSnap = await getDoc(adminRef);
-
-      if (!adminSnap.exists()) {
-        setUser(null);
-        setLoading(false);
+        setAccessChecked(true);
         return;
       }
 
       setUser(currentUser);
-      fetchStats();
+      setAccessChecked(true);
+      void fetchStats().catch((error) => {
+        console.error("ニブイチ管理データの読み込みに失敗しました", error);
+      });
     };
 
     checkAccess();
@@ -89,7 +85,7 @@ export default function AdminNibuichiPage() {
       where("date", "==", targetDate)
     );
 
-    const snap = await getDocs(q);
+    const snap = await withRetry(() => getDocs(q), 2, 500, 10000);
 
     const counts: Record<string, number> = {
       bakuado: 0,
@@ -113,11 +109,9 @@ export default function AdminNibuichiPage() {
      戦績 & 今日の結果取得（修正版）
   -------------------------------------------------- */
   const fetchStats = async () => {
-    setLoading(true);
-
     try {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
-      const res: any = await fn({});
+      const res: any = await withRetry(() => fn({}), 2, 500, 15000);
 
       setGlobalStats(res.data.global ?? null);
 
@@ -137,7 +131,6 @@ export default function AdminNibuichiPage() {
       console.error(err);
     }
 
-    setLoading(false);
   };
 
   /* --------------------------------------------------
@@ -187,11 +180,7 @@ export default function AdminNibuichiPage() {
     setSending(false);
   };
 
-  if (loading) {
-    return <div className="p-6 text-center">読み込み中…</div>;
-  }
-
-  if (!user) {
+  if (accessChecked && !user) {
     return <div className="p-6 text-center">管理者のみアクセスできます</div>;
   }
 

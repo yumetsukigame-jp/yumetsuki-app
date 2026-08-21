@@ -12,6 +12,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import LoadingState from "@/app/components/LoadingState";
 
 /* --------------------------------------------------
    JST 6時切り替え（完全修正版）
@@ -291,14 +292,10 @@ if (isXAccountMatch) {
      Auth 初期化前は UI を動かさない
   -------------------------------------------------- */
   if (!authReady) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        読み込み中…
-      </div>
-    );
+    return <LoadingState />;
   }
 
-  if (loading) return <p style={{ padding: 24 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
 
   if (error)
     return (

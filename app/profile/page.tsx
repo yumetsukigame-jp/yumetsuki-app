@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 export default function ProfilePage() {
   const [name, setName] = useState("");
@@ -19,16 +21,20 @@ export default function ProfilePage() {
         return;
       }
 
-      const snap = await getDoc(doc(db, "users", user.uid));
-      if (snap.exists()) {
-        const data = snap.data();
-        setName(data.name ?? "");
-        setDisplayName(data.displayName ?? "");
-        setXAccount(data.xAccount ?? "");
-        setXAccountConfirmed(data.xAccountConfirmed ?? false);
+      try {
+        const snap = await withRetry(() => getDoc(doc(db, "users", user.uid)));
+        if (snap.exists()) {
+          const data = snap.data();
+          setName(data.name ?? "");
+          setDisplayName(data.displayName ?? "");
+          setXAccount(data.xAccount ?? "");
+          setXAccountConfirmed(data.xAccountConfirmed ?? false);
+        }
+      } catch (error) {
+        console.error("プロフィールの読み込みに失敗しました", error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => unsub();
@@ -69,7 +75,7 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return <div style={{ padding: 20 }}>読み込み中…</div>;
+    return <LoadingState />;
   }
 
   return (

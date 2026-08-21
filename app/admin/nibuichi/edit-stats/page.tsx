@@ -27,6 +27,7 @@ export default function EditNibuichiStatsPage() {
   // -----------------------------
   useEffect(() => {
     const checkAccess = async () => {
+      await auth.authStateReady();
       const currentUser = auth.currentUser;
       if (!currentUser) {
         setUser(null);

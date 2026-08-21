@@ -11,6 +11,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { useSearchParams, useRouter } from "next/navigation";
+import LoadingState from "@/app/components/LoadingState";
 
 /* --------------------------------------------------
    ユーザー名の整形（displayName + xAccount）@正規化対応
@@ -467,7 +468,7 @@ function UserResultItem({ result, highlight }: any) {
 -------------------------------------------------- */
 export default function GachaResultsPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>読み込み中…</div>}>
+    <Suspense fallback={<LoadingState />}>
       <ResultsContent />
     </Suspense>
   );

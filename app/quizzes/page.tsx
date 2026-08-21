@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 import Link from "next/link";
+import LoadingState from "@/app/components/LoadingState";
 
 type QuizSummary = {
   id: string;
@@ -15,33 +16,77 @@ type QuizSummary = {
   thread?: string;
 };
 
+let cachedQuizList: QuizSummary[] | null = null;
+
 export default function QuizListPage() {
-  const [quizzes, setQuizzes] = useState<QuizSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [quizzes, setQuizzes] = useState<QuizSummary[]>(
+    () => cachedQuizList ?? []
+  );
+  const [loading, setLoading] = useState(() => cachedQuizList === null);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({}); // ★ ハッシュ折りたたみ
 
-  const fetchQuizzes = async () => {
-    const snap = await getDocs(collection(db, "quizzes"));
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Record<string, unknown>),
-    } as QuizSummary));
-
-    // archived = false のみ表示
-    setQuizzes(list.filter((q) => !(q.archived ?? false)));
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchQuizzes();
-  }, []);
+    const unsubscribe = onSnapshot(
+      collection(db, "quizzes"),
+      (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Record<string, unknown>),
+      } as QuizSummary));
+
+      const activeQuizzes = list.filter((q) => !(q.archived ?? false));
+      cachedQuizList = activeQuizzes;
+      setQuizzes(activeQuizzes);
+      setLoadError(false);
+      setLoading(false);
+      },
+      (error) => {
+        console.error("クイズ一覧の読み込みに失敗しました", error);
+        if (!cachedQuizList) {
+          setLoadError(true);
+          setLoading(false);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [retryKey]);
 
   const toggleOpen = (id: string) => {
     setOpenMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
+
+  if (loadError) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        <p>クイズ一覧を読み込めませんでした。</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            setLoadError(false);
+            setRetryKey((key) => key + 1);
+          }}
+          style={{
+            marginTop: 12,
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: 6,
+            background: "#2563eb",
+            color: "white",
+            cursor: "pointer",
+          }}
+        >
+          再取得
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>

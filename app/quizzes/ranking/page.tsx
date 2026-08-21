@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 export default function QuizRankingPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -19,39 +21,43 @@ export default function QuizRankingPage() {
      ★ 複数回答対応：answers/{uid}/items を全部数える
   -------------------------------------------------- */
   const fetchQuizzes = async () => {
-    const snap = await getDocs(collection(db, "quizzes_archive"));
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    try {
+      const snap = await withRetry(() => getDocs(collection(db, "quizzes_archive")));
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
-    const withCounts = await Promise.all(
-      list.map(async (q) => {
-        let totalAnswers = 0;
-
-        const usersSnap = await getDocs(
-          collection(db, "quizzes_archive", q.id, "answers")
-        );
-
-        for (const userDoc of usersSnap.docs) {
-          const itemsSnap = await getDocs(
-            collection(db, "quizzes_archive", q.id, "answers", userDoc.id, "items")
+      const withCounts = await Promise.all(
+        list.map(async (q) => {
+          let totalAnswers = 0;
+          const usersSnap = await withRetry(() =>
+            getDocs(collection(db, "quizzes_archive", q.id, "answers"))
           );
-          totalAnswers += itemsSnap.size;
-        }
 
-        return {
-          ...q,
-          answerCount: totalAnswers,
-        };
-      })
-    );
+          const itemSnapshots = await Promise.all(
+            usersSnap.docs.map((userDoc) =>
+              withRetry(() =>
+                getDocs(
+                  collection(db, "quizzes_archive", q.id, "answers", userDoc.id, "items")
+                )
+              )
+            )
+          );
+          totalAnswers = itemSnapshots.reduce((total, snapshot) => total + snapshot.size, 0);
 
-    // 回答数の多い順に並び替え
-    withCounts.sort((a, b) => b.answerCount - a.answerCount);
+          return { ...q, answerCount: totalAnswers };
+        })
+      );
 
-    setQuizzes(withCounts);
-    setLoading(false);
+      withCounts.sort((a, b) => b.answerCount - a.answerCount);
+      setQuizzes(withCounts);
+    } catch (error) {
+      console.error("クイズランキングの読み込みに失敗しました", error);
+      setQuizzes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -112,7 +118,7 @@ export default function QuizRankingPage() {
     }
   };
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>

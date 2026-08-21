@@ -1,8 +1,13 @@
+import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 import { nowJST, getYesterdayJST6 } from "./common/date";
 import { normalizeX } from "./common/normalize";
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const db = getFirestore();
 
@@ -475,14 +480,15 @@ export const getGachaResults = functions
 
         for (const r of resultSnap.docs) {
           const data = r.data() as GachaResultRow;
+          const { id: _ignoredId, ...restData } = data;
 
           const frameInfo = gachaData.frames?.find(
             (f: GachaFrame) => f.label === data.frame
           );
 
           results.push({
+            ...restData,
             id: r.id,
-            ...data,
             title: gachaData.title ?? "",
             frameName: frameInfo?.label ?? data.frame,
             thumbnail: gachaData.thumbnail ?? "",

@@ -13,6 +13,8 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type QuizDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -57,40 +59,43 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
     if (!authReady) return;
 
     const load = async () => {
-      const ref = doc(db, "quizzes", quizId);
-      const snap = await getDoc(ref);
+      try {
+        const snap = await withRetry(
+          () => getDoc(doc(db, "quizzes", quizId)),
+          2,
+          500,
+          10000
+        );
 
-      if (!snap.exists()) {
+        if (!snap.exists()) {
+          setQuiz(null);
+          return;
+        }
+
+        const data = snap.data();
+        data.round = data.round ?? 0;
+        setQuiz(data);
+
+        if (uid) {
+          const itemsSnap = await withRetry(
+            () =>
+              getDocs(collection(db, "quizzes", quizId, "answers", uid, "items")),
+            2,
+            500,
+            10000
+          );
+          const allMyAnswers = itemsSnap.docs.map((d) => d.data());
+          setMyAnswers(allMyAnswers.filter((a) => (a.round ?? 0) <= data.round));
+          setMyCurrentRoundAnswers(
+            allMyAnswers.filter((a) => (a.round ?? 0) === data.round)
+          );
+        }
+      } catch (error) {
+        console.error("クイズ詳細の読み込みに失敗しました", error);
         setQuiz(null);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const data = snap.data();
-      data.round = data.round ?? 0;
-
-      setQuiz(data);
-
-      if (uid) {
-        const itemsSnap = await getDocs(
-          collection(db, "quizzes", quizId, "answers", uid, "items")
-        );
-
-        const allMyAnswers = itemsSnap.docs.map((d) => d.data());
-
-        const visibleAnswers = allMyAnswers.filter(
-          (a) => (a.round ?? 0) <= data.round
-        );
-
-        const currentRoundAnswers = allMyAnswers.filter(
-          (a) => (a.round ?? 0) === data.round
-        );
-
-        setMyAnswers(visibleAnswers);
-        setMyCurrentRoundAnswers(currentRoundAnswers);
-      }
-
-      setLoading(false);
     };
 
     load();
@@ -168,45 +173,52 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
   -------------------------------------------------- */
   const loadAnswers = async () => {
     setAnswersLoading(true);
-
-    const usersSnap = await getDocs(
-      collection(db, "quizzes", quizId, "answers")
-    );
-
-    const allAnswers: any[] = [];
-
-    for (const userDoc of usersSnap.docs) {
-      const userId = userDoc.id;
-
-      const itemsSnap = await getDocs(
-        collection(db, "quizzes", quizId, "answers", userId, "items")
+    try {
+      const usersSnap = await withRetry(
+        () => getDocs(collection(db, "quizzes", quizId, "answers")),
+        2,
+        500,
+        10000
       );
+      const allAnswers: any[] = [];
 
-      const userRef = doc(db, "users", userId);
-      const userSnap = await getDoc(userRef);
+      for (const userDoc of usersSnap.docs) {
+        const userId = userDoc.id;
+        const [itemsSnap, userSnap] = await Promise.all([
+          withRetry(
+            () =>
+              getDocs(collection(db, "quizzes", quizId, "answers", userId, "items")),
+            2,
+            500,
+            10000
+          ),
+          withRetry(() => getDoc(doc(db, "users", userId)), 2, 500, 10000),
+        ]);
+        const userData = userSnap.exists()
+          ? userSnap.data()
+          : { displayName: "名無し", xAccount: "未登録" };
 
-      const userData = userSnap.exists()
-        ? userSnap.data()
-        : { displayName: "名無し", xAccount: "未登録" };
+        itemsSnap.forEach((item) => {
+          const itemData = item.data();
+          if ((itemData.round ?? 0) <= (quiz.round ?? 0)) {
+            allAnswers.push({
+              uid: userId,
+              answer: itemData.answer,
+              createdAt: itemData.createdAt,
+              userNickname: userData.displayName ?? "名無し",
+              userX: userData.xAccount ?? "未登録",
+            });
+          }
+        });
+      }
 
-      itemsSnap.forEach((item) => {
-        const itemData = item.data();
-        const itemRound = itemData.round ?? 0;
-
-        if (itemRound <= (quiz.round ?? 0)) {
-          allAnswers.push({
-            uid: userId,
-            answer: itemData.answer,
-            createdAt: itemData.createdAt,
-            userNickname: userData.displayName ?? "名無し",
-            userX: userData.xAccount ?? "未登録",
-          });
-        }
-      });
+      setAnswers(allAnswers);
+    } catch (error) {
+      console.error("クイズ回答一覧の読み込みに失敗しました", error);
+      setAnswers([]);
+    } finally {
+      setAnswersLoading(false);
     }
-
-    setAnswers(allAnswers);
-    setAnswersLoading(false);
   };
 
   const toggleOpen = () => {
@@ -219,7 +231,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
   };
 
   if (!authReady || loading) {
-    return <p style={{ padding: 20 }}>読み込み中…</p>;
+    return <LoadingState />;
   }
 
   if (!quiz) {

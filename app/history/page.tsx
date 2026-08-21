@@ -10,6 +10,8 @@ import {
   getDocs
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -51,28 +53,37 @@ export default function HistoryPage() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-      const q = query(
-        collection(db, "shippingHistory"),
-        where("uid", "==", user.uid),
-        orderBy("shippedAt", "desc")
-      );
+      try {
+        const q = query(
+          collection(db, "shippingHistory"),
+          where("uid", "==", user.uid),
+          orderBy("shippedAt", "desc")
+        );
 
-      const snap = await getDocs(q);
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Record<string, unknown>),
-      } as HistoryItem));
+        const snap = await withRetry(() => getDocs(q));
+        const list = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Record<string, unknown>),
+        } as HistoryItem));
 
-      setHistory(list);
-      setLoading(false);
+        setHistory(list);
+      } catch (error) {
+        console.error("発送履歴の読み込みに失敗しました", error);
+        setHistory([]);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => unsub();
   }, []);
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
 
   return (
     <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>

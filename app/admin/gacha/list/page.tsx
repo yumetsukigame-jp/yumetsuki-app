@@ -10,6 +10,7 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
+import { withRetry } from "@/app/lib/retry";
 
 type GachaFrame = {
   label?: string;
@@ -60,10 +61,21 @@ export default function AdminGachaListPage() {
   ----------------------------------------- */
   const loadCodes = async () => {
     setLoading(true);
-    const snap = await getDocs(collection(db, "gachaCodes"));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setCodes(list);
-    setLoading(false);
+    try {
+      const snap = await withRetry(
+        () => getDocs(collection(db, "gachaCodes")),
+        2,
+        500,
+        10000
+      );
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setCodes(list);
+    } catch (error) {
+      console.error("現役ガチャ一覧の読み込みに失敗しました", error);
+      setCodes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* -----------------------------------------
@@ -73,11 +85,22 @@ export default function AdminGachaListPage() {
     if (archiveLoaded) return;
 
     setLoading(true);
-    const snap = await getDocs(collection(db, "gachaCodesArchive"));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setArchiveCodes(list);
-    setArchiveLoaded(true);
-    setLoading(false);
+    try {
+      const snap = await withRetry(
+        () => getDocs(collection(db, "gachaCodesArchive")),
+        2,
+        500,
+        10000
+      );
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setArchiveCodes(list);
+      setArchiveLoaded(true);
+    } catch (error) {
+      console.error("ガチャアーカイブの読み込みに失敗しました", error);
+      setArchiveCodes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* -----------------------------------------

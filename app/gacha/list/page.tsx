@@ -13,6 +13,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { getCountFromServer } from "firebase/firestore";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -106,10 +108,10 @@ export default function PublicGachaListPage() {
   -------------------------------------------------- */
   const load = async () => {
     setLoading(true);
-
-    const fnList = httpsCallable(functions, "getPublicGachaList");
-    const resList = (await fnList()) as { data?: GachaRecord[] };
-    const list = resList.data ?? [];
+    try {
+      const fnList = httpsCallable(functions, "getPublicGachaList");
+      const resList = (await withRetry(() => fnList())) as { data?: GachaRecord[] };
+      const list = resList.data ?? [];
 
     const now = new Date();
 
@@ -153,8 +155,13 @@ export default function PublicGachaListPage() {
       });
     }
 
-    setGachas(sorted);
-    setLoading(false);
+      setGachas(sorted);
+    } catch (error) {
+      console.error("ガチャ一覧の読み込みに失敗しました", error);
+      setGachas([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* --------------------------------------------------
@@ -233,7 +240,7 @@ export default function PublicGachaListPage() {
         </button>
       </div>
 
-      {loading && <p>読み込み中…</p>}
+      {loading && <LoadingState />}
       {!loading && gachas.length === 0 && <p>表示できるガチャがありません。</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

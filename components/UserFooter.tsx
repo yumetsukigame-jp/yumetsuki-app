@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function UserFooter() {
   return (
     <div
@@ -10,7 +12,7 @@ export default function UserFooter() {
         textAlign: "center",
       }}
     >
-      <a
+      <Link
         href="/"
         style={{
           color: "#2563eb",
@@ -19,7 +21,7 @@ export default function UserFooter() {
         }}
       >
         トップページへ戻る
-      </a>
+      </Link>
     </div>
   );
 }

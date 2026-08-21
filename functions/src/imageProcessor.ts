@@ -6,6 +6,10 @@ import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
 
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 const db = admin.firestore();
 const bucket = admin.storage().bucket("point-app-1f854.firebasestorage.app");
 

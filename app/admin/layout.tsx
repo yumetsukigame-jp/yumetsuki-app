@@ -2,64 +2,103 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/firebase";
 import AdminFooter from "@/components/AdminFooter";
 import AdminHeader from "@/components/AdminHeader";
+import { withRetry } from "@/app/lib/retry";
+
+const authorizedAdminUids = new Set<string>();
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [accessState, setAccessState] = useState<
+    "checking" | "authorized" | "error"
+  >("checking");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (pathname === "/admin/login") {
-      setReady(true);
       return;
     }
 
     let active = true;
 
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        if (!active) return;
-        setReady(false);
-        router.replace("/admin/login");
-        return;
-      }
-
+    const checkAdmin = async () => {
       try {
-        const adminSnap = await getDoc(doc(db, "admins", user.uid));
-
+        await auth.authStateReady();
         if (!active) return;
 
-        if (!adminSnap.exists()) {
-          setReady(false);
+        setAccessState("checking");
+        const user = auth.currentUser;
+        if (!user) {
           router.replace("/admin/login");
           return;
         }
 
-        setReady(true);
+        if (authorizedAdminUids.has(user.uid)) {
+          setAccessState("authorized");
+          return;
+        }
+
+        await user.getIdToken();
+        if (!active) return;
+
+        const adminSnap = await withRetry(
+          () => getDoc(doc(db, "admins", user.uid)),
+          2,
+          500,
+          10000
+        );
+
+        if (!active) return;
+
+        if (!adminSnap.exists()) {
+          router.replace("/admin/login");
+          return;
+        }
+
+        authorizedAdminUids.add(user.uid);
+        setAccessState("authorized");
       } catch (error) {
         console.error("Admin auth check failed", error);
         if (active) {
-          setReady(false);
-          router.replace("/admin/login");
+          setAccessState("error");
         }
       }
-    });
+    };
+
+    void checkAdmin();
 
     return () => {
       active = false;
-      unsub();
     };
-  }, [pathname, router]);
+  }, [pathname, retryKey, router]);
 
-  if (!ready && pathname !== "/admin/login") {
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
+  if (accessState !== "authorized") {
     return (
-      <div style={{ padding: "24px", textAlign: "center" }}>
-        読み込み中…
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        {accessState === "checking" ? (
+          <p>管理者権限を確認しています…</p>
+        ) : (
+          <div>
+            <p>Firebase に接続できませんでした。通信状況を確認して再試行してください。</p>
+            <button onClick={() => setRetryKey((key) => key + 1)}>再試行</button>
+          </div>
+        )}
       </div>
     );
   }

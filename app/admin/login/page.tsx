@@ -1,37 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { auth, db } from "@/firebase";
+import { auth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
+      await signInWithEmailAndPassword(auth, email, password);
 
-      // ★ 管理者判定
-      const adminRef = doc(db, "admins", uid);
-      const adminSnap = await getDoc(adminRef);
-
-      if (!adminSnap.exists()) {
-        setError("管理者権限がありません。");
-        return;
-      }
-
-      router.replace("/admin");
+      window.location.assign("/admin");
     } catch (err) {
+      console.error("管理者ログインに失敗しました", err);
       setError("ログインに失敗しました。メールまたはパスワードを確認してください。");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,6 +76,7 @@ export default function AdminLoginPage() {
 
         <button
           type="submit"
+          disabled={loading}
           style={{
             width: "100%",
             padding: "12px",
@@ -91,15 +85,17 @@ export default function AdminLoginPage() {
             borderRadius: "8px",
             border: "none",
             fontSize: "16px",
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? "wait" : "pointer",
           }}
         >
-          ログイン
+          {loading ? "ログイン中…" : "ログイン"}
         </button>
       </form>
 
       {/* ★ トップページへ戻るリンク */}
       <div style={{ marginTop: "30px" }}>
-        <a
+        <Link
           href="/"
           style={{
             color: "#2563eb",
@@ -108,7 +104,7 @@ export default function AdminLoginPage() {
           }}
         >
           トップページへ戻る
-        </a>
+        </Link>
       </div>
     </div>
   );

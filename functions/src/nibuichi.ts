@@ -1,7 +1,12 @@
+import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { getYesterdayJST6, getTodayJST6, nowJST } from "./common/date";
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const db = getFirestore();
 

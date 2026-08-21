@@ -9,10 +9,14 @@ export default function LoginTracker() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
-        await updateDoc(doc(db, "users", u.uid), {
-          lastLogin: new Date(),
-          loginCount: increment(1),
-        });
+        try {
+          await updateDoc(doc(db, "users", u.uid), {
+            lastLogin: new Date(),
+            loginCount: increment(1),
+          });
+        } catch (error) {
+          console.error("ログイン記録の更新に失敗しました", error);
+        }
       }
     });
 

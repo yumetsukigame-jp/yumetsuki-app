@@ -6,6 +6,11 @@ export const dynamic = "force-dynamic";
 import { db, auth } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
+import Link from "next/link";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 /* --------------------------------------------------
    JST 6時切り替えの今日の日付
@@ -25,6 +30,25 @@ function getTodayJST6() {
   return `${y}-${m}-${d}`;
 }
 
+type CachedUser = {
+  uid: string;
+  nickname: string;
+  points: number;
+  xAccount?: string;
+  subscriber: boolean;
+};
+
+function getCachedUser(): CachedUser | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const value = sessionStorage.getItem("home-user");
+    return value ? (JSON.parse(value) as CachedUser) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   /* --------------------------------------------------
      Auth 状態
@@ -39,8 +63,6 @@ export default function Home() {
   const [nickname, setNickname] = useState<string | undefined>(undefined);
   const [xAccount, setXAccount] = useState<string | undefined>(undefined);
   const [subscriber, setSubscriber] = useState<boolean>(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
 
@@ -49,11 +71,23 @@ export default function Home() {
   const [totalDraw, setTotalDraw] = useState(0);
   const [totalLose, setTotalLose] = useState(0);
   const [totalBakuado, setTotalBakuado] = useState(0);
+  const [nibuichiLoaded, setNibuichiLoaded] = useState(false);
 
   /* --------------------------------------------------
      ① Auth 初期化（未ログインなら即ログイン画面へ）
   -------------------------------------------------- */
   useEffect(() => {
+    const cached = getCachedUser();
+    const cacheTimer = window.setTimeout(() => {
+      if (!cached) return;
+      setUid((currentUid) => currentUid ?? cached.uid);
+      setAuthReady((currentReady) => currentReady || cached.uid.length > 0);
+      setNickname((currentNickname) => currentNickname ?? cached.nickname);
+      setPoints((currentPoints) => currentPoints ?? cached.points);
+      setXAccount((currentXAccount) => currentXAccount ?? cached.xAccount);
+      setSubscriber((currentSubscriber) => currentSubscriber || cached.subscriber);
+    }, 0);
+
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setUid(null);
@@ -64,19 +98,15 @@ export default function Home() {
       setUid(user.uid);
       setAuthReady(true);
     });
-    return () => unsub();
+
+    return () => {
+      window.clearTimeout(cacheTimer);
+      unsub();
+    };
   }, []);
 
   /* --------------------------------------------------
-     ② uid が変わったら nickname をリセット
-  -------------------------------------------------- */
-  useEffect(() => {
-    setNickname(undefined);
-    setPoints(undefined);
-  }, [uid]);
-
-  /* --------------------------------------------------
-     ③ Firestore 読み込み
+      ② Firestore 読み込み
   -------------------------------------------------- */
   useEffect(() => {
     if (!authReady) return;
@@ -85,57 +115,93 @@ export default function Home() {
     const load = async () => {
       const today = getTodayJST6();
 
-      /* --- 管理者判定 --- */
-      const adminSnap = await getDoc(doc(db, "admins", uid));
-      setIsAdmin(adminSnap.exists());
-
-      /* --- ユーザーデータ --- */
-      const userSnap = await getDoc(doc(db, "users", uid));
-      if (userSnap.exists()) {
-        const u = userSnap.data();
-
-        if (!u.displayName || u.displayName.trim() === "") {
-          setNickname(undefined);
-        } else {
-          setNickname(u.displayName);
-        }
-
-        setPoints(u.points ?? 0);
-        setXAccount(u.xAccount ?? undefined);
-        setSubscriber(u.subscriber === true);
-      } else {
-        setNickname(undefined);
-      }
-
-      /* --- 今日の予想 --- */
-      const predSnap = await getDoc(
-        doc(db, "nibuichi_user_predictions", `${uid}_${today}`)
+      const userPromise = withRetry(
+        () => getDoc(doc(db, "users", uid)),
+        3,
+        300,
+        30000
       );
-      if (predSnap.exists()) {
-        setTodayPrediction(predSnap.data().prediction);
+      const applySupplemental = async <T,>(
+        promise: Promise<T>,
+        apply: (value: T) => void,
+        label: string,
+        onFailure?: () => void
+      ) => {
+        try {
+          apply(await promise);
+        } catch (error) {
+          console.error(`${label}の読み込みに失敗しました`, error);
+          onFailure?.();
+        }
+      };
+
+      void applySupplemental(
+        withRetry(
+          () =>
+            httpsCallable(functions, "getNibuichiUserStats")({ date: today }),
+          2,
+          300,
+          30000
+        ),
+        (response) => {
+          const data = response.data as {
+            todayPrediction?: { prediction?: string } | null;
+            todayResult?: { result?: string } | null;
+            global?: {
+              win?: number;
+              draw?: number;
+              lose?: number;
+              bakuado?: number;
+            } | null;
+          };
+          setTodayPrediction(data.todayPrediction?.prediction ?? null);
+          setTodayResult(data.todayResult?.result ?? null);
+          const s = data.global ?? {};
+          const win = s.win ?? 0;
+          const draw = s.draw ?? 0;
+          const lose = s.lose ?? 0;
+          const bakuado = s.bakuado ?? 0;
+          setTotalWin(win);
+          setTotalDraw(draw);
+          setTotalLose(lose);
+          setTotalBakuado(bakuado);
+          setTotalBattle(win + draw + lose + bakuado);
+          setNibuichiLoaded(true);
+        },
+        "ニブイチ戦績",
+        () => setNibuichiLoaded(true)
+      );
+
+      try {
+        const userSnap = await userPromise;
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          const nextNickname = u.displayName?.trim() || "";
+          const nextPoints = u.points ?? 0;
+          const nextXAccount = u.xAccount ?? undefined;
+          const nextSubscriber = u.subscriber === true;
+          setNickname(nextNickname);
+          setPoints(nextPoints);
+          setXAccount(nextXAccount);
+          setSubscriber(nextSubscriber);
+          sessionStorage.setItem(
+            "home-user",
+            JSON.stringify({
+              uid,
+              nickname: nextNickname,
+              points: nextPoints,
+              xAccount: nextXAccount,
+              subscriber: nextSubscriber,
+            } satisfies CachedUser)
+          );
+        } else {
+          setNickname("");
+        }
+      } catch (error) {
+        console.error("トップページのユーザー情報読み込みに失敗しました", error);
+        if (!getCachedUser()) setNickname("");
       }
 
-      /* --- 今日の結果 --- */
-      const resultSnap = await getDoc(doc(db, "nibuichi_global", today));
-      if (resultSnap.exists()) {
-        setTodayResult(resultSnap.data().result);
-      }
-
-      /* --- 全体戦績 --- */
-      const statsSnap = await getDoc(doc(db, "nibuichi_global_stats", "stats"));
-      if (statsSnap.exists()) {
-        const s = statsSnap.data();
-        const win = s.win ?? 0;
-        const draw = s.draw ?? 0;
-        const lose = s.lose ?? 0;
-        const bakuado = s.bakuado ?? 0;
-
-        setTotalWin(win);
-        setTotalDraw(draw);
-        setTotalLose(lose);
-        setTotalBakuado(bakuado);
-        setTotalBattle(win + draw + lose + bakuado);
-      }
     };
 
     load();
@@ -145,11 +211,7 @@ export default function Home() {
      読み込み中
   -------------------------------------------------- */
   if (!authReady) {
-    return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        読み込み中…
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (!uid) {
@@ -157,19 +219,15 @@ export default function Home() {
       <div style={{ padding: 20, textAlign: "center" }}>
         ログインしてください。
         <br />
-        <a href="/login" style={{ color: "#2563eb" }}>
+        <Link href="/login" style={{ color: "#2563eb" }}>
           ログインはこちら
-        </a>
+        </Link>
       </div>
     );
   }
 
   if (nickname === undefined) {
-    return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        読み込み中…
-      </div>
-    );
+    return <LoadingState />;
   }
 
   /* --------------------------------------------------
@@ -245,15 +303,19 @@ export default function Home() {
     textAlign: "center",
   }}
 >
-  <div style={{ marginBottom: "4px" }}>{nibuichiStatus}</div>
+  <div style={{ marginBottom: "4px" }}>
+    {nibuichiLoaded ? nibuichiStatus : "ニブイチ情報を読み込み中…"}
+  </div>
   {/* 1行目：総戦績 */}
   <div>
-    【現戦績】{totalBattle}戦
+    【現戦績】{nibuichiLoaded ? `${totalBattle}戦` : "読み込み中…"}
   </div>
 
   {/* 2行目：内訳 */}
   <div>
-    {totalWin}勝 / {totalDraw}分 / {totalLose}負 / {totalBakuado}爆アド
+    {nibuichiLoaded
+      ? `${totalWin}勝 / ${totalDraw}分 / ${totalLose}負 / ${totalBakuado}爆アド`
+      : "戦績を取得中…"}
   </div>
 </div>
 
@@ -330,15 +392,13 @@ export default function Home() {
           borderTop: "1px solid #ddd",
         }}
       >
-        {isAdmin ? (
-          <a href="/admin" style={{ color: "#dc2626", fontSize: "18px" }}>
-            管理者トップへ
-          </a>
-        ) : (
-          <a href="/admin/login" style={{ color: "#dc2626", fontSize: "18px" }}>
-            管理者ログイン
-          </a>
-        )}
+        <Link
+          href="/admin"
+          prefetch={false}
+          style={adminLinkStyle}
+        >
+          管理者トップへ
+        </Link>
       </div>
     </div>
   );
@@ -415,20 +475,36 @@ function Section({ title, color, icon, children, forceCollapseAll = false }: any
 ------------------------------ */
 function MenuButton({ href, color, children }: any) {
   return (
-    <a
+    <Link
       href={href}
+      prefetch={false}
       style={{
+        display: "block",
+        width: "100%",
         padding: "12px",
         background: color,
         color: "white",
         borderRadius: "8px",
-        textDecoration: "none",
         fontSize: "18px",
         fontWeight: "bold",
         textAlign: "center",
+        border: "none",
+        cursor: "pointer",
+        boxSizing: "border-box",
+        textDecoration: "none",
       }}
     >
       {children}
-    </a>
+    </Link>
   );
 }
+
+const adminLinkStyle = {
+  color: "#dc2626",
+  fontSize: "18px",
+  background: "none",
+  border: "none",
+  padding: 0,
+  textDecoration: "underline",
+  cursor: "pointer",
+};

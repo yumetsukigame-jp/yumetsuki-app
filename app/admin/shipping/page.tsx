@@ -15,6 +15,8 @@ import {
   orderBy,
   setDoc,
 } from "firebase/firestore";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type UserData = {
   name?: string;
@@ -46,6 +48,8 @@ type PendingItem = {
 export default function ShippingAdminPage() {
   const [list, setList] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   const [openMap, setOpenMap] = useState<{ [id: string]: boolean }>({});
   const [page, setPage] = useState(1);
@@ -59,28 +63,36 @@ export default function ShippingAdminPage() {
      データ取得（selectedRewards → shippingHistory）
   -------------------------------------------------- */
   const fetchData = useCallback(async () => {
-    const pendingSnap = await getDocs(
-      query(collection(db, "shippingPending"), orderBy("requestedAt", "desc"))
+    try {
+    const pendingSnap = await withRetry(
+      () =>
+        getDocs(
+          query(collection(db, "shippingPending"), orderBy("requestedAt", "desc"))
+        ),
+      2,
+      500,
+      10_000
     );
 
-    const data: PendingItem[] = [];
-
-    for (const d of pendingSnap.docs) {
+    const loadPendingItem = async (d: (typeof pendingSnap.docs)[number]) => {
       const rewardId = d.id;
       const rewardData = d.data();
       const uid = rewardData.uid;
 
       if (!uid) {
         console.warn("shippingPending に uid がありません:", rewardId);
-        continue;
+        return null;
       }
 
-      const userRef = doc(db, "users", uid);
-      const userSnap = await getDoc(userRef);
-
+      const userSnap = await withRetry(
+        () => getDoc(doc(db, "users", uid)),
+        2,
+        500,
+        10_000
+      );
       const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
 
-      data.push({
+      return {
         id: rewardId,
         uid,
         ...rewardData,
@@ -89,25 +101,39 @@ export default function ShippingAdminPage() {
         userX: userData?.xAccount ?? "不明",
         userNickname: userData?.displayName ?? "名無し",
         xAccountConfirmed: userData?.xAccountConfirmed ?? false,
-      });
-    }
+      } satisfies PendingItem;
+    };
+
+    const data = (await Promise.all(pendingSnap.docs.map(loadPendingItem))).filter(
+      (item): item is PendingItem => item !== null
+    );
 
     if (data.length === 0) {
-      const legacySnap = await getDocs(collection(db, "selectedRewards"));
-      for (const d of legacySnap.docs) {
+      const legacySnap = await withRetry(
+        () => getDocs(collection(db, "selectedRewards")),
+        2,
+        500,
+        10_000
+      );
+      const legacyItems = await Promise.all(
+        legacySnap.docs.map(async (d) => {
         const rewardId = d.id;
         const rewardData = d.data();
         const uid = rewardData.uid;
 
         if (!uid) {
-          continue;
+          return null;
         }
 
-        const userRef = doc(db, "users", uid);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await withRetry(
+          () => getDoc(doc(db, "users", uid)),
+          2,
+          500,
+          10_000
+        );
         const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
 
-        data.push({
+        return {
           id: rewardId,
           uid,
           ...rewardData,
@@ -116,8 +142,12 @@ export default function ShippingAdminPage() {
           userX: userData?.xAccount ?? "不明",
           userNickname: userData?.displayName ?? "名無し",
           xAccountConfirmed: userData?.xAccountConfirmed ?? false,
-        });
-      }
+        } satisfies PendingItem;
+        })
+      );
+      data.push(
+        ...legacyItems.filter((item): item is PendingItem => item !== null)
+      );
     }
 
     data.sort((a, b) => {
@@ -134,16 +164,22 @@ export default function ShippingAdminPage() {
     });
 
     setList(data);
+    setLoadError(false);
     setLoading(false);
+    } catch (error) {
+      console.error("発送管理データの読み込みに失敗しました", error);
+      setLoadError(true);
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       void fetchData();
     }, 0);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [fetchData]);
+    return () => window.clearTimeout(timer);
+  }, [fetchData, retryKey]);
 
   /* --------------------------------------------------
      発送済みフラグ切り替え ＋ 履歴保存
@@ -229,7 +265,33 @@ export default function ShippingAdminPage() {
     fetchData();
   };
 
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState message="発送管理データを読み込み中…" />;
+
+  if (loadError) {
+    return (
+      <div style={{ padding: 20, textAlign: "center" }}>
+        <p>発送管理データを取得できませんでした。</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            setLoadError(false);
+            setRetryKey((key) => key + 1);
+          }}
+          style={{
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: 6,
+            background: "#2563eb",
+            color: "white",
+            cursor: "pointer",
+          }}
+        >
+          再取得
+        </button>
+      </div>
+    );
+  }
 
   const paginatedList = list.slice((page - 1) * perPage, page * perPage);
 

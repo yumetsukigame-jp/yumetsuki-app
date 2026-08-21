@@ -6,6 +6,8 @@ import { db, auth } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import LoadingState from "@/app/components/LoadingState";
+import { withRetry } from "@/app/lib/retry";
 
 type RewardRecord = {
   name?: string;
@@ -43,9 +45,12 @@ export default function MyRewardPage() {
       const doneRef = doc(db, "shippingDone", uid);
       const legacyRef = doc(db, "selectedRewards", uid);
 
-      const pendingSnap = await getDoc(pendingRef);
-      const doneSnap = await getDoc(doneRef);
-      const legacySnap = await getDoc(legacyRef);
+      try {
+        const [pendingSnap, doneSnap, legacySnap] = await Promise.all([
+          withRetry(() => getDoc(pendingRef)),
+          withRetry(() => getDoc(doneRef)),
+          withRetry(() => getDoc(legacyRef)),
+        ]);
 
       if (pendingSnap.exists()) {
         setReward({ ...pendingSnap.data(), status: "pending" });
@@ -59,12 +64,17 @@ export default function MyRewardPage() {
         setReward(null);
       }
 
-      setLoading(false);
+      } catch (error) {
+        console.error("発送物情報の読み込みに失敗しました", error);
+        setReward(null);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => unsub();
   }, [router]);
-  if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
+  if (loading) return <LoadingState />;
 
   if (!reward) {
     return (

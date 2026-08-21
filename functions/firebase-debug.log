@@ -1,0 +1,32 @@
+[debug] [2026-08-12T11:11:18.933Z] ----------------------------------------------------------------------
+[debug] [2026-08-12T11:11:18.935Z] Command:       /opt/homebrew/Cellar/node/26.4.0/bin/node /opt/homebrew/bin/firebase deploy --only functions --debug
+[debug] [2026-08-12T11:11:18.935Z] CLI Version:   15.22.2
+[debug] [2026-08-12T11:11:18.935Z] Platform:      darwin
+[debug] [2026-08-12T11:11:18.935Z] Node Version:  v26.4.0
+[debug] [2026-08-12T11:11:18.935Z] Detected Agent: github_copilot_vscode_agent
+[debug] [2026-08-12T11:11:18.935Z] Time:          Wed Aug 12 2026 20:11:18 GMT+0900 (Japan Standard Time)
+[debug] [2026-08-12T11:11:18.935Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-12T11:11:19.341Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-12T11:11:19.342Z] > authorizing via signed-in user (yumetsukigame@gmail.com)
+[debug] [2026-08-12T11:11:19.342Z] [iam] checking project point-app-1f854 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-08-12T11:11:19.342Z] Checked if tokens are valid: true, expires at: 1786536603460
+[debug] [2026-08-12T11:11:19.342Z] Checked if tokens are valid: true, expires at: 1786536603460
+[debug] [2026-08-12T11:11:19.342Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions [none]
+[debug] [2026-08-12T11:11:19.342Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions  x-goog-user-project=point-app-1f854
+[debug] [2026-08-12T11:11:19.342Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-08-12T11:11:20.000Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions 200
+[debug] [2026-08-12T11:11:20.000Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-08-12T11:11:20.001Z] Checked if tokens are valid: true, expires at: 1786536603460
+[debug] [2026-08-12T11:11:20.001Z] Checked if tokens are valid: true, expires at: 1786536603460
+[debug] [2026-08-12T11:11:20.001Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/point-app-1f854/serviceAccounts/point-app-1f854@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-08-12T11:11:20.001Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/point-app-1f854/serviceAccounts/point-app-1f854@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-08-12T11:11:20.902Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/point-app-1f854/serviceAccounts/point-app-1f854@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-08-12T11:11:20.903Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/point-app-1f854/serviceAccounts/point-app-1f854@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'point-app-1f854'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build
+[error] 
+[error] Error: functions predeploy error: Command terminated with non-zero exit code 2

@@ -5,6 +5,7 @@ import { auth, db } from "@/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -105,7 +106,10 @@ export default function SignupPage() {
       </div>
 
       <p style={{ marginTop: "20px" }}>
-        すでにアカウントをお持ちの方は <a href="/login" style={{ color: "#2563eb" }}>ログイン</a>
+        すでにアカウントをお持ちの方は{" "}
+        <Link href="/login" style={{ color: "#2563eb" }}>
+          ログイン
+        </Link>
       </p>
     </div>
   );
