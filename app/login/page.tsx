@@ -6,26 +6,32 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDocFromServer } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async () => {
+    if (loading) return;
+
+    setLoading(true);
+    setMessage("");
+
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Firestore からユーザーデータ取得
+      // キャッシュではなくサーバーの最新データでアカウント情報を確認する
       const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
+      const userSnap = await getDocFromServer(userRef);
 
       if (!userSnap.exists()) {
-        setMessage("ユーザーデータが存在しません");
+        setMessage("アカウント情報を確認できませんでした。時間をおいてもう一度お試しください。");
         return;
       }
 
@@ -44,6 +50,8 @@ export default function LoginPage() {
     } catch (error) {
       console.error(error);
       setMessage("ログインに失敗しました");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -116,18 +124,20 @@ export default function LoginPage() {
         {/* ログインボタン */}
         <button
           onClick={handleLogin}
+          disabled={loading}
           style={{
             width: "100%",
             padding: "12px",
-            background: "#4f46e5",
+            background: loading ? "#999" : "#4f46e5",
             color: "white",
             borderRadius: "8px",
             fontSize: "16px",
             fontWeight: "bold",
             marginBottom: "12px",
+            cursor: loading ? "not-allowed" : "pointer",
           }}
         >
-          ログイン
+          {loading ? "ログイン中…" : "ログイン"}
         </button>
 
         {/* パスワード再発行 */}
