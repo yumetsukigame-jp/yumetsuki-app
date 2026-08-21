@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountCheckFailed, setAccountCheckFailed] = useState(false);
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -21,6 +22,7 @@ export default function LoginPage() {
 
     setLoading(true);
     setMessage("");
+    setAccountCheckFailed(false);
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -31,7 +33,10 @@ export default function LoginPage() {
       const userSnap = await getDocFromServer(userRef);
 
       if (!userSnap.exists()) {
-        setMessage("アカウント情報を確認できませんでした。時間をおいてもう一度お試しください。");
+        setAccountCheckFailed(true);
+        setMessage(
+          "アカウント情報の読み込みに時間がかかっています。数秒待ってから再度ログインするか、トップページへ移動してください。"
+        );
         return;
       }
 
@@ -174,16 +179,36 @@ export default function LoginPage() {
         </button>
 
         {message && (
-          <p
-            style={{
-              marginTop: "15px",
-              color: "red",
-              textAlign: "center",
-              fontWeight: "bold",
-            }}
-          >
-            {message}
-          </p>
+          <>
+            <p
+              style={{
+                marginTop: "15px",
+                color: "red",
+                textAlign: "center",
+                fontWeight: "bold",
+              }}
+            >
+              {message}
+            </p>
+            {accountCheckFailed && (
+              <button
+                onClick={() => router.push("/")}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  background: "#4f46e5",
+                  color: "white",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  marginTop: "12px",
+                }}
+              >
+                トップページへ
+              </button>
+            )}
+          </>
         )}
       </div>
 
