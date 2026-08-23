@@ -400,6 +400,15 @@ export default function Home() {
           管理者トップへ
         </Link>
       </div>
+
+      <div style={{ marginTop: "24px" }}>
+        <Link
+          href="/guide"
+          style={{ color: "#2563eb", textDecoration: "underline" }}
+        >
+          ゆめつきの書斎の使い方を見る
+        </Link>
+      </div>
     </div>
   );
 }

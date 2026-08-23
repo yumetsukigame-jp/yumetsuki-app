@@ -111,6 +111,11 @@ export default function SignupPage() {
           ログイン
         </Link>
       </p>
+      <p style={{ marginTop: "12px" }}>
+        <Link href="/guide" style={{ color: "#2563eb" }}>
+          ゆめつきの書斎の使い方を見る
+        </Link>
+      </p>
     </div>
   );
 }

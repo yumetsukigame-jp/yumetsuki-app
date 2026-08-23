@@ -12,6 +12,8 @@ export {
   confirmQuizAnswer,
 } from "./quiz";
 
+export * from "./nibuichi";
+
 /* ============================================================
    ★ imageProcessor（そのまま re-export）
 ============================================================ */

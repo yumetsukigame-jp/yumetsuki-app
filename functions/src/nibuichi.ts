@@ -445,6 +445,53 @@ export const submitNibuichiResult = functions
     return { message: "今日の結果を登録しました" };
   });
 
+export const editNibuichiGlobalStats = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
+
+    const adminSnap = await db.collection("admins").doc(uid).get();
+    if (!adminSnap.exists) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "管理者のみ総合戦績を更新できます"
+      );
+    }
+
+    const { win, draw, lose, bakuado } = data;
+    const values = [win, draw, lose, bakuado];
+    if (
+      values.some(
+        (value) =>
+          typeof value !== "number" ||
+          !Number.isFinite(value) ||
+          !Number.isInteger(value) ||
+          value < 0
+      )
+    ) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "勝・分・敗・爆アドは0以上の整数で指定してください"
+      );
+    }
+
+    await db.collection("nibuichi_global_stats").doc("stats").set(
+      {
+        win,
+        draw,
+        lose,
+        bakuado,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+
+    return { message: "総合戦績を更新しました" };
+  });
+
 export const getNibuichiUserStats = functions
   .region("us-east1")
   .https.onCall(async (data, context) => {

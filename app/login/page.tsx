@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, getDocFromServer } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -211,6 +212,12 @@ export default function LoginPage() {
           </>
         )}
       </div>
+
+      <p style={{ marginTop: "20px" }}>
+        <Link href="/guide" style={{ color: "#2563eb" }}>
+          ゆめつきの書斎の使い方を見る
+        </Link>
+      </p>
 
       {/* ▼ ゆめつき本舗リンク（ログインしていなくても表示） */}
       <div style={{ marginTop: 40, textAlign: "center" }}>
