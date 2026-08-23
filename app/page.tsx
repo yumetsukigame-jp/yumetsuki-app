@@ -384,10 +384,41 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 🔴 管理者 */}
+      {/* ゆめつき本舗 */}
       <div
         style={{
           marginTop: "40px",
+          paddingTop: "20px",
+          borderTop: "1px solid #ddd",
+        }}
+      >
+        <a
+          href="https://yumetsuki.base.shop"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-block" }}
+        >
+          <img
+            src="/honpo.webp"
+            alt="ゆめつき本舗HPはこちら"
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              cursor: "pointer",
+            }}
+          />
+        </a>
+        <p style={{ marginTop: 8, fontWeight: "bold" }}>
+          ゆめつき本舗HPはこちら
+        </p>
+      </div>
+
+      {/* 🔴 管理者 */}
+      <div
+        style={{
+          marginTop: "24px",
           paddingTop: "20px",
           borderTop: "1px solid #ddd",
         }}
