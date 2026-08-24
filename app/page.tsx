@@ -384,6 +384,29 @@ export default function Home() {
         </MenuButton>
       </Section>
 
+      <Link
+        href="/guide"
+        style={{
+          display: "block",
+          marginTop: "32px",
+          padding: "18px",
+          color: "#312e81",
+          fontSize: "18px",
+          fontWeight: "bold",
+          textAlign: "center",
+          textDecoration: "none",
+          background: "#eef2ff",
+          border: "2px solid #818cf8",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+        }}
+      >
+        📖 ゆめつきの書斎の使い方を見る
+        <span style={{ display: "block", marginTop: "4px", fontSize: "13px" }}>
+          アプリの機能や楽しみ方を画像つきで紹介しています
+        </span>
+      </Link>
+
       {/* ゆめつき本舗 */}
       <div
         style={{
@@ -413,6 +436,9 @@ export default function Home() {
         <p style={{ marginTop: 8, fontWeight: "bold" }}>
           ゆめつき本舗HPはこちら
         </p>
+        <p style={{ margin: "4px 0 0", color: "#555", fontSize: "14px" }}>
+          トレカ販売、有償企画の参加購入はこちら。
+        </p>
       </div>
 
       {/* 🔴 管理者 */}
@@ -432,14 +458,6 @@ export default function Home() {
         </Link>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
-        <Link
-          href="/guide"
-          style={{ color: "#2563eb", textDecoration: "underline" }}
-        >
-          ゆめつきの書斎の使い方を見る
-        </Link>
-      </div>
     </div>
   );
 }
