@@ -213,11 +213,28 @@ export default function LoginPage() {
         )}
       </div>
 
-      <p style={{ marginTop: "20px" }}>
-        <Link href="/guide" style={{ color: "#2563eb" }}>
-          ゆめつきの書斎の使い方を見る
-        </Link>
-      </p>
+      <Link
+        href="/guide"
+        style={{
+          display: "block",
+          marginTop: "24px",
+          padding: "18px",
+          color: "#312e81",
+          fontSize: "18px",
+          fontWeight: "bold",
+          textAlign: "center",
+          textDecoration: "none",
+          background: "#eef2ff",
+          border: "2px solid #818cf8",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+        }}
+      >
+        📖 ゆめつきの書斎の使い方を見る
+        <span style={{ display: "block", marginTop: "4px", fontSize: "13px" }}>
+          アプリの機能や楽しみ方を画像つきで紹介しています
+        </span>
+      </Link>
 
       {/* ▼ ゆめつき本舗リンク（ログインしていなくても表示） */}
       <div style={{ marginTop: 40, textAlign: "center" }}>
