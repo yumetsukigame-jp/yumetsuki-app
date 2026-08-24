@@ -216,12 +216,17 @@ export default function Home() {
 
   if (!uid) {
     return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        ログインしてください。
-        <br />
-        <Link href="/login" style={{ color: "#2563eb" }}>
-          ログインはこちら
-        </Link>
+      <div style={{ maxWidth: "480px", margin: "0 auto", padding: 20, textAlign: "center" }}>
+        <p>
+          ログインしてください。
+          <br />
+          <Link href="/login" style={{ color: "#2563eb" }}>
+            ログインはこちら
+          </Link>
+        </p>
+        <div style={{ marginTop: "28px" }}>
+          <GuideLinkCard />
+        </div>
       </div>
     );
   }
@@ -384,28 +389,9 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      <Link
-        href="/guide"
-        style={{
-          display: "block",
-          marginTop: "32px",
-          padding: "18px",
-          color: "#312e81",
-          fontSize: "18px",
-          fontWeight: "bold",
-          textAlign: "center",
-          textDecoration: "none",
-          background: "#eef2ff",
-          border: "2px solid #818cf8",
-          borderRadius: "12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        }}
-      >
-        📖 ゆめつきの書斎の使い方を見る
-        <span style={{ display: "block", marginTop: "4px", fontSize: "13px" }}>
-          アプリの機能や楽しみ方を画像つきで紹介しています
-        </span>
-      </Link>
+      <div style={{ marginTop: "32px" }}>
+        <GuideLinkCard />
+      </div>
 
       {/* ゆめつき本舗 */}
       <div
@@ -553,6 +539,32 @@ function MenuButton({ href, color, children }: any) {
       }}
     >
       {children}
+    </Link>
+  );
+}
+
+function GuideLinkCard() {
+  return (
+    <Link
+      href="/guide"
+      style={{
+        display: "block",
+        padding: "18px",
+        color: "#312e81",
+        fontSize: "18px",
+        fontWeight: "bold",
+        textAlign: "center",
+        textDecoration: "none",
+        background: "#eef2ff",
+        border: "2px solid #818cf8",
+        borderRadius: "12px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+      }}
+    >
+      📖 ゆめつきの書斎の使い方を見る
+      <span style={{ display: "block", marginTop: "4px", fontSize: "13px" }}>
+        アプリの機能や楽しみ方を画像つきで紹介しています
+      </span>
     </Link>
   );
 }
