@@ -25,8 +25,15 @@ type GachaCode = {
   title: string;
   publicFlags: string[];
   thumbnail: string;
-  frames: string[];
+  frames: GachaFrame[];
+  mode: "count" | "probability";
+  totalCount: number | null;
   createdAt: DateLike;
+};
+
+type GachaFrame = {
+  label: string;
+  maxCount: number | null;
 };
 
 type GachaResult = {
@@ -302,66 +309,89 @@ export default function GachaResultsBrowser({
                   {page?.loading && page.items.length === 0 ? (
                     <p>結果を読み込み中…</p>
                   ) : page?.items.length ? (
-                    groupResultsByFrame(page.items, gacha.frames).map(
-                      ([frame, results]) => (
-                        <div
-                          key={frame}
+                    <>
+                      {gacha.mode === "count" && gacha.totalCount !== null && (
+                        <p
                           style={{
-                            marginBottom: 16,
-                            padding: 14,
-                            background: "#f8fafc",
-                            border: "1px solid #dbe3ef",
-                            borderRadius: 10,
+                            margin: "0 0 16px",
+                            padding: "10px 12px",
+                            color: "#312e81",
+                            fontWeight: "bold",
+                            background: "#eef2ff",
+                            borderRadius: 8,
                           }}
                         >
-                          <h3
+                          抽選状況：{page.items.length} / {gacha.totalCount}
+                        </p>
+                      )}
+                      {groupResultsByFrame(page.items, gacha.frames).map(
+                        ([frame, results]) => (
+                          <div
+                            key={frame.label}
                             style={{
-                              margin: "0 0 10px",
-                              paddingBottom: 10,
-                              color: "#312e81",
-                              borderBottom: "2px solid #c7d2fe",
+                              marginBottom: 16,
+                              padding: 14,
+                              background: "#f8fafc",
+                              border: "1px solid #dbe3ef",
+                              borderRadius: 10,
                             }}
                           >
-                            🎁 {frame} <span style={{ fontSize: 14 }}>（{results.length}件）</span>
-                          </h3>
-                          {results.length === 0 ? (
-                            <p style={{ margin: 0, paddingLeft: 12 }}>当選者なし</p>
-                          ) : (
-                            <ul
+                            <h3
                               style={{
-                                listStyle: "none",
-                                margin: 0,
-                                padding: "0 0 0 12px",
+                                margin: "0 0 10px",
+                                paddingBottom: 10,
+                                color: "#312e81",
+                                borderBottom: "2px solid #c7d2fe",
                               }}
                             >
-                              {results.map((item) => (
-                                <li
-                                  key={item.id}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    gap: 12,
-                                    marginBottom: 6,
-                                    padding: "10px 12px",
-                                    background: "white",
-                                    border: "1px solid #e5e7eb",
-                                    borderRadius: 6,
-                                    color: currentUid === item.uid ? "#2563eb" : "#222",
-                                    fontWeight: currentUid === item.uid ? "bold" : "normal",
-                                  }}
-                                >
-                                  <span>
-                                    {item.userName}
-                                    {currentUid === item.uid && " ← あなた"}
-                                  </span>
-                                  <span>{item.reward} pt</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )
-                    )
+                              🎁 {frame.label}{" "}
+                              <span style={{ fontSize: 14 }}>
+                                （{results.length}
+                                {gacha.mode === "count" && frame.maxCount !== null
+                                  ? ` / ${frame.maxCount}`
+                                  : "件"}
+                                ）
+                              </span>
+                            </h3>
+                            {results.length === 0 ? (
+                              <p style={{ margin: 0, paddingLeft: 12 }}>当選者なし</p>
+                            ) : (
+                              <ul
+                                style={{
+                                  listStyle: "none",
+                                  margin: 0,
+                                  padding: "0 0 0 12px",
+                                }}
+                              >
+                                {results.map((item) => (
+                                  <li
+                                    key={item.id}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      gap: 12,
+                                      marginBottom: 6,
+                                      padding: "10px 12px",
+                                      background: "white",
+                                      border: "1px solid #e5e7eb",
+                                      borderRadius: 6,
+                                      color: currentUid === item.uid ? "#2563eb" : "#222",
+                                      fontWeight: currentUid === item.uid ? "bold" : "normal",
+                                    }}
+                                  >
+                                    <span>
+                                      {item.userName}
+                                      {currentUid === item.uid && " ← あなた"}
+                                    </span>
+                                    <span>{item.reward} pt</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </>
                   ) : (
                     <p>結果がありません。</p>
                   )}
@@ -406,26 +436,37 @@ function toGachaCode(document: QueryDocumentSnapshot<DocumentData>): GachaCode {
             typeof frame === "object" &&
             frame !== null &&
             typeof (frame as { label?: unknown }).label === "string"
-              ? (frame as { label: string }).label
+              ? {
+                  label: (frame as { label: string }).label,
+                  maxCount:
+                    typeof (frame as { maxCount?: unknown }).maxCount === "number"
+                      ? (frame as { maxCount: number }).maxCount
+                      : null,
+                }
               : null
           )
-          .filter((label): label is string => label !== null)
+          .filter((frame): frame is GachaFrame => frame !== null)
       : [],
+    mode: data.mode === "count" ? "count" : "probability",
+    totalCount: typeof data.totalCount === "number" ? data.totalCount : null,
     createdAt: data.createdAt as DateLike,
   };
 }
 
-function groupResultsByFrame(items: GachaResult[], frames: string[]) {
-  const groups = new Map<string, GachaResult[]>();
+function groupResultsByFrame(items: GachaResult[], frames: GachaFrame[]) {
+  const groups = new Map<string, { frame: GachaFrame; results: GachaResult[] }>();
   for (const frame of frames) {
-    groups.set(frame, []);
+    groups.set(frame.label, { frame, results: [] });
   }
   for (const item of items) {
-    const results = groups.get(item.frame) ?? [];
-    results.push(item);
-    groups.set(item.frame, results);
+    const group = groups.get(item.frame) ?? {
+      frame: { label: item.frame, maxCount: null },
+      results: [],
+    };
+    group.results.push(item);
+    groups.set(item.frame, group);
   }
-  return [...groups.entries()];
+  return [...groups.values()].map(({ frame, results }) => [frame, results] as const);
 }
 
 const navigationLinkStyle = {
