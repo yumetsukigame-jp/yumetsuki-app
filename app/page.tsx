@@ -351,6 +351,9 @@ export default function Home() {
         <MenuButton href="/gacha/results" color="#a855f7">
           ガチャ結果を見る
         </MenuButton>
+        <MenuButton href="/gacha/archive" color="#a855f7">
+          ガチャアーカイブを見る
+        </MenuButton>
       </Section>
 
       {/* 📦 ポイント */}
