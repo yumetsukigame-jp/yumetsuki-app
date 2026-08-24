@@ -206,7 +206,55 @@ export const getPublicGachaList = functions
         resetType: data.resetType ?? "none",
         publicFlags: data.publicFlags ?? [],
       };
+    }).filter((gacha) => gacha.publicFlags.includes("public"));
+  });
+
+export const unlockGachaCode = functions
+  .region("us-east1")
+  .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
+
+    const code = typeof data?.code === "string" ? data.code.trim() : "";
+    if (!code) {
+      throw new functions.https.HttpsError("invalid-argument", "コードが必要です");
+    }
+
+    const gachaRef = db.collection("gachaCodes").doc(code);
+    const gachaSnap = await gachaRef.get();
+    if (!gachaSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "ガチャが存在しません");
+    }
+
+    const gacha = gachaSnap.data() as GachaDocument;
+    if (gacha.expiresAt && gacha.expiresAt.toDate() < nowJST()) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "期限切れのガチャです"
+      );
+    }
+
+    if (!(gacha.publicFlags ?? []).includes("limited")) {
+      return { message: "ガチャを確認しました" };
+    }
+
+    const historyRef = db.collection("userGachaHistory").doc(`${uid}_${code}`);
+    await db.runTransaction(async (tx) => {
+      const historySnap = await tx.get(historyRef);
+      if (historySnap.exists) {
+        tx.update(historyRef, { unlockedAt: Timestamp.now() });
+        return;
+      }
+
+      tx.set(historyRef, {
+        count: 0,
+        unlockedAt: Timestamp.now(),
+      });
     });
+
+    return { message: "ガチャを解放しました" };
   });
 
 export const useGachaCode = functions
@@ -327,6 +375,13 @@ export const useGachaCode = functions
       const history = historySnap.exists
         ? historySnap.data()!
         : { count: 0 };
+
+      if (flags.includes("limited") && !historySnap.exists) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "このガチャはコードを入力してから引いてください"
+        );
+      }
 
       if (gacha.resetType === "daily" && history.count >= maxPerUser) {
         throw new functions.https.HttpsError(

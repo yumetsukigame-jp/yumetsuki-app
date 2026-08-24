@@ -1,6 +1,7 @@
 export {
   createGachaCode,
   getPublicGachaList,
+  unlockGachaCode,
   useGachaCode,
   getGachaResults,
   resetGachaUsage,

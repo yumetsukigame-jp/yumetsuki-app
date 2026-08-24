@@ -111,6 +111,7 @@ export default function GachaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [requiresCode, setRequiresCode] = useState(false);
 
   const [allResults, setAllResults] = useState<any[]>([]);
 
@@ -128,6 +129,7 @@ export default function GachaDetailPage() {
   const load = async () => {
     setLoading(true);
     setError("");
+    setRequiresCode(false);
 
     const snap = await getDoc(doc(db, "gachaCodes", code as string));
 
@@ -141,6 +143,7 @@ export default function GachaDetailPage() {
     const flags: string[] = data.publicFlags ?? [];
 
     const isPublic = flags.includes("public");
+    const isLimited = flags.includes("limited");
     const isSubscriberOnly = flags.includes("subscriber");
     const isWinnerOnly = flags.includes("nibuichi_winner");
     const isXAccountMatch = flags.includes("x_account_match");
@@ -261,6 +264,23 @@ if (isXAccountMatch) {
   }
 }
 
+    if (isLimited) {
+      if (!uid) {
+        setError("このガチャはコードを入力してから引いてください");
+        setLoading(false);
+        return;
+      }
+
+      const historyRef = doc(db, "userGachaHistory", `${uid}_${code}`);
+      const historySnap = await getDoc(historyRef);
+      if (!historySnap.exists()) {
+        setGacha(data);
+        setRequiresCode(true);
+        setLoading(false);
+        return;
+      }
+    }
+
 
     /* --------------------------------------------------
        結果取得
@@ -303,6 +323,42 @@ if (isXAccountMatch) {
         {error}
       </pre>
     );
+
+  if (requiresCode && gacha) {
+    return (
+      <div style={{ padding: 24, maxWidth: 600, margin: "0 auto", textAlign: "center" }}>
+        <h1>{gacha.title}</h1>
+        <div
+          style={{
+            background: "white",
+            borderRadius: 12,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            marginTop: 20,
+            padding: 24,
+          }}
+        >
+          <p style={{ fontWeight: "bold", marginBottom: 16 }}>
+            このガチャは限定公開です。ガチャコードを入力してください。
+          </p>
+          <button
+            onClick={() => router.push("/gacha")}
+            style={{
+              background: "#4f46e5",
+              border: "none",
+              borderRadius: 8,
+              color: "white",
+              cursor: "pointer",
+              fontSize: 16,
+              fontWeight: "bold",
+              padding: "12px 20px",
+            }}
+          >
+            ガチャコードを入力する
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!gacha) return null;
 

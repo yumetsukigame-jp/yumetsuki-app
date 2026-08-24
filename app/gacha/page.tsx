@@ -264,6 +264,20 @@ const checkCode = async () => {
     }
   }
 
+  try {
+    const unlock = httpsCallable(functions, "unlockGachaCode");
+    await unlock({ code: code.trim() });
+  } catch (error: unknown) {
+    console.error("ガチャコードの確認に失敗しました", error);
+    setError(
+      error instanceof Error
+        ? error.message
+        : "ガチャコードの確認に失敗しました"
+    );
+    setLoading(false);
+    return;
+  }
+
   setGacha(data);
   setLoading(false);
 };

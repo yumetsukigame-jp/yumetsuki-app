@@ -307,32 +307,7 @@ export default function PublicGachaListPage() {
               {/* タイトル */}
               <h2
                 style={{ margin: 0, color: "#2563eb", cursor: "pointer" }}
-                onClick={async () => {
-                  const flags = g.publicFlags ?? [];
-                  const isLimited = flags.includes("limited");
-
-                  if (isLimited) {
-                    const uid = auth.currentUser?.uid;
-                    if (!uid) {
-                      alert("このガチャは限定公開です（コード入力が必要です）トップページの【ガチャを引く】より実行してください。");
-                      return;
-                    }
-
-                    const historyRef = doc(
-                      db,
-                      "userGachaHistory",
-                      `${uid}_${g.code}`
-                    );
-                    const snap = await getDoc(historyRef);
-
-                    if (!snap.exists()) {
-                      alert("このガチャは限定公開です（コード入力が必要です）トップページの【ガチャを引く】より実行してください。");
-                      return;
-                    }
-                  }
-
-                  router.push(`/gacha/${g.code}`);
-                }}
+                onClick={() => router.push(`/gacha/${g.code}`)}
               >
                 {g.title}
               </h2>
