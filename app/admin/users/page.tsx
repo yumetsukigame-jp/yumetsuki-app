@@ -4,15 +4,20 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import {
   collection,
-  getDocs,
-  orderBy,
-  query,
   deleteDoc,
   doc,
+  DocumentData,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  startAfter,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import Link from "next/link";
+
+const PAGE_SIZE = 50;
 
 type UserRecord = {
   id: string;
@@ -23,211 +28,168 @@ type UserRecord = {
   subscriber?: boolean;
   xAccountConfirmed?: boolean;
   points?: number;
-  shippingCount?: number;
-  waitingCount?: number;
   loginCount?: number;
-  lastLogin?: { seconds?: number; toDate?: () => Date } | Date | null;
-  createdAt?: { seconds?: number; toDate?: () => Date } | Date | null;
-  [key: string]: unknown;
+  lastLogin?: { toDate?: () => Date } | Date | null;
+  createdAt?: { toDate?: () => Date } | Date | null;
+};
+
+type SortOrder =
+  | "createdDesc"
+  | "createdAsc"
+  | "pointsDesc"
+  | "pointsAsc"
+  | "lastLoginDesc"
+  | "lastLoginAsc";
+
+const sortConfig: Record<SortOrder, { field: string; direction: "asc" | "desc" }> = {
+  createdDesc: { field: "createdAt", direction: "desc" },
+  createdAsc: { field: "createdAt", direction: "asc" },
+  pointsDesc: { field: "points", direction: "desc" },
+  pointsAsc: { field: "points", direction: "asc" },
+  lastLoginDesc: { field: "lastLogin", direction: "desc" },
+  lastLoginAsc: { field: "lastLogin", direction: "asc" },
 };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [filtered, setFiltered] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [sortOrder, setSortOrder] = useState("createdDesc");
-
+  const [sortOrder, setSortOrder] = useState<SortOrder>("createdDesc");
   const [loading, setLoading] = useState(true);
-
-  // ページネーション
+  const [loadError, setLoadError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const [pageCursors, setPageCursors] = useState<
+    Array<QueryDocumentSnapshot<DocumentData> | null>
+  >([null]);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const filterUsers = (list: UserRecord[], text: string) => {
+    const keyword = text.trim().toLowerCase();
+    if (!keyword) return list;
 
-    // createdAt が無いユーザーを自動修正
-    const allSnap = await getDocs(collection(db, "users"));
-    for (const d of allSnap.docs) {
-      const data = d.data();
-      if (!data.createdAt) {
-        await updateDoc(doc(db, "users", d.id), {
-          createdAt: new Date(),
-        });
-      }
-    }
-
-    // createdAt で並び替え
-    const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-
-    const list: UserRecord[] = snap.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Record<string, unknown>),
-    }));
-
-    // 発送履歴数 & 発送待ち件数
-    for (const user of list) {
-      const hq = query(
-        collection(db, "shippingHistory"),
-        where("uid", "==", user.id)
-      );
-      const hsnap = await getDocs(hq);
-      user.shippingCount = hsnap.size;
-
-      const wq = query(
-        collection(db, "shippingHistory"),
-        where("uid", "==", user.id),
-        where("shipped", "==", false)
-      );
-      const wsnap = await getDocs(wq);
-      user.waitingCount = wsnap.size;
-    }
-
-    // ソート処理
-    let sorted = [...list];
-
-    if (sortOrder === "pointsDesc") {
-      sorted.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-    } else if (sortOrder === "pointsAsc") {
-      sorted.sort((a, b) => (a.points ?? 0) - (b.points ?? 0));
-    } else if (sortOrder === "lastLoginDesc") {
-      sorted.sort((a, b) => {
-        const aValue = typeof a.lastLogin === "object" && a.lastLogin && "seconds" in a.lastLogin ? Number(a.lastLogin.seconds ?? 0) : 0;
-        const bValue = typeof b.lastLogin === "object" && b.lastLogin && "seconds" in b.lastLogin ? Number(b.lastLogin.seconds ?? 0) : 0;
-        return bValue - aValue;
-      });
-    } else if (sortOrder === "lastLoginAsc") {
-      sorted.sort((a, b) => {
-        const aValue = typeof a.lastLogin === "object" && a.lastLogin && "seconds" in a.lastLogin ? Number(a.lastLogin.seconds ?? 0) : 0;
-        const bValue = typeof b.lastLogin === "object" && b.lastLogin && "seconds" in b.lastLogin ? Number(b.lastLogin.seconds ?? 0) : 0;
-        return aValue - bValue;
-      });
-    } else if (sortOrder === "createdAsc") {
-      sorted.sort((a, b) => {
-        const aValue = typeof a.createdAt === "object" && a.createdAt && "seconds" in a.createdAt ? Number(a.createdAt.seconds ?? 0) : 0;
-        const bValue = typeof b.createdAt === "object" && b.createdAt && "seconds" in b.createdAt ? Number(b.createdAt.seconds ?? 0) : 0;
-        return aValue - bValue;
-      });
-    } else {
-      sorted.sort((a, b) => {
-        const aValue = typeof a.createdAt === "object" && a.createdAt && "seconds" in a.createdAt ? Number(a.createdAt.seconds ?? 0) : 0;
-        const bValue = typeof b.createdAt === "object" && b.createdAt && "seconds" in b.createdAt ? Number(b.createdAt.seconds ?? 0) : 0;
-        return bValue - aValue;
-      });
-    }
-
-    setUsers(sorted);
-    setFiltered(sorted);
-    setCurrentPage(1);
-
-    setLoading(false);
+    return list.filter((user) =>
+      [user.email, user.name, user.displayName, user.xAccount].some((value) =>
+        String(value ?? "").toLowerCase().includes(keyword)
+      )
+    );
   };
 
+  const loadPage = async (
+    page: number,
+    cursor: QueryDocumentSnapshot<DocumentData> | null
+  ) => {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const { field, direction } = sortConfig[sortOrder];
+      const usersRef = collection(db, "users");
+      const userQuery = query(
+        usersRef,
+        orderBy(field, direction),
+        ...(cursor ? [startAfter(cursor)] : []),
+        limit(PAGE_SIZE)
+      );
+      const snap = await getDocs(userQuery);
+      const list = snap.docs.map((userDoc) => ({
+        id: userDoc.id,
+        ...(userDoc.data() as Omit<UserRecord, "id">),
+      }));
+
+      setUsers(list);
+      setFiltered(filterUsers(list, search));
+      setCurrentPage(page);
+      setHasNextPage(snap.size === PAGE_SIZE);
+      setPageCursors((previous) => {
+        if (page === 1) {
+          return [cursor, snap.docs.at(-1) ?? null];
+        }
+
+        const next = [...previous];
+        next[page - 1] = cursor;
+        next[page] = snap.docs.at(-1) ?? null;
+        return next;
+      });
+    } catch (error) {
+      console.error("ユーザー一覧の読み込みに失敗しました", error);
+      setUsers([]);
+      setFiltered([]);
+      setLoadError("ユーザー一覧の読み込みに失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // The list intentionally reloads only when the sort field changes.
   useEffect(() => {
-    fetchUsers();
+    const timer = window.setTimeout(() => {
+      void loadPage(1, null);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortOrder]);
 
-  // 検索（メール + 名前 + ニックネーム + Xアカウント）
   const handleSearch = (text: string) => {
     setSearch(text);
-
-    if (!text) {
-      setFiltered(users);
-      setCurrentPage(1);
-      return;
-    }
-
-    const lower = text.toLowerCase();
-
-    const result = users.filter((u) => {
-      const email = String(u.email ?? "").toLowerCase();
-      const name = String(u.name ?? "").toLowerCase();
-      const display = String(u.displayName ?? "").toLowerCase();
-      const x = String(u.xAccount ?? "").toLowerCase();
-
-      return (
-        email.includes(lower) ||
-        name.includes(lower) ||
-        display.includes(lower) ||
-        x.includes(lower)
-      );
-    });
-
-    setFiltered(result);
-    setCurrentPage(1);
+    setFiltered(filterUsers(users, text));
   };
 
-  // ポイント編集
+  const refreshCurrentPage = async () => {
+    await loadPage(currentPage, pageCursors[currentPage - 1] ?? null);
+  };
+
   const editPoints = async (uid: string, currentPoints: number) => {
     const input = prompt("新しいポイント数を入力してください", String(currentPoints));
-
     if (input === null) return;
 
     const newPoints = Number(input);
-    if (isNaN(newPoints)) {
+    if (Number.isNaN(newPoints)) {
       alert("数字を入力してください");
       return;
     }
 
-    await updateDoc(doc(db, "users", uid), {
-      points: newPoints,
-    });
-
+    await updateDoc(doc(db, "users", uid), { points: newPoints });
     alert("ポイントを更新しました");
-    fetchUsers();
+    await refreshCurrentPage();
   };
 
-  // ユーザー削除
   const deleteUser = async (uid: string) => {
-    if (!confirm("このユーザーを削除しますか？")) return;
+    if (!confirm("本当に削除しますか？")) return;
 
     await deleteDoc(doc(db, "users", uid));
-
     alert("ユーザーを削除しました");
-    fetchUsers();
+    await refreshCurrentPage();
   };
 
-  // Xアカウント確定
   const confirmXAccount = async (uid: string) => {
-    await updateDoc(doc(db, "users", uid), {
-      xAccountConfirmed: true,
-    });
-
+    await updateDoc(doc(db, "users", uid), { xAccountConfirmed: true });
     alert("Xアカウントを確定しました");
-    fetchUsers();
+    await refreshCurrentPage();
   };
 
-  // Xアカウント編集
   const editXAccount = async (uid: string, currentX?: string) => {
     const input = prompt("新しいXアカウントを入力してください", currentX ?? "");
-
     if (input === null) return;
 
     await updateDoc(doc(db, "users", uid), {
       xAccount: input,
       xAccountConfirmed: false,
     });
-
     alert("Xアカウントを更新しました");
-    fetchUsers();
+    await refreshCurrentPage();
   };
-
-  // ページネーション
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const currentUsers = filtered.slice(startIndex, startIndex + pageSize);
 
   return (
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>ユーザー一覧</h1>
+      <p style={{ color: "#555" }}>1ページあたり50件を表示しています。</p>
 
-      {/* 検索欄 */}
       <input
         type="text"
         value={search}
-        onChange={(e) => handleSearch(e.target.value)}
-        placeholder="メール・名前・ニックネーム・Xアカウントで検索"
+        onChange={(event) => handleSearch(event.target.value)}
+        placeholder="現在の50件からメール・名前・ニックネーム・Xアカウントを検索"
         style={{
           width: "100%",
           padding: "10px",
@@ -237,12 +199,12 @@ export default function UsersPage() {
         }}
       />
 
-      {/* 並び替え */}
       <div style={{ marginBottom: "15px" }}>
-        <label>並び替え：</label>
+        <label htmlFor="user-sort">並び替え：</label>
         <select
+          id="user-sort"
           value={sortOrder}
-          onChange={(e) => setSortOrder(e.target.value)}
+          onChange={(event) => setSortOrder(event.target.value as SortOrder)}
           style={{
             marginLeft: "10px",
             padding: "6px",
@@ -259,176 +221,49 @@ export default function UsersPage() {
         </select>
       </div>
 
-      {!loading && filtered.length === 0 && <p>ユーザーがいません。</p>}
       {loading && <p>読み込み中…</p>}
+      {loadError && <p style={{ color: "#dc2626" }}>{loadError}</p>}
+      {!loading && !loadError && filtered.length === 0 && (
+        <p>このページに該当するユーザーがいません。</p>
+      )}
 
       {!loading &&
-        currentUsers.map((user) => (
-          <div
+        filtered.map((user) => (
+          <UserCard
             key={user.id}
-            style={{
-              padding: "12px",
-              marginTop: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
+            user={user}
+            onEditPoints={editPoints}
+            onDelete={deleteUser}
+            onConfirmXAccount={confirmXAccount}
+            onEditXAccount={editXAccount}
+            onToggleSubscriber={async () => {
+              await updateDoc(doc(db, "users", user.id), {
+                subscriber: !user.subscriber,
+              });
+              alert("サブスク状態を更新しました");
+              await refreshCurrentPage();
             }}
-          >
-            <p><strong>メール：</strong> {user.email || "不明"}</p>
-            <p><strong>名前：</strong> {user.name || "未登録"}</p>
-
-            {/* ★ ニックネーム追加 */}
-            <p><strong>ニックネーム：</strong> {user.displayName || "未登録"}</p>
-
-            <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
-            <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
-
-            <button
-              onClick={async () => {
-                await updateDoc(doc(db, "users", user.id), {
-                  subscriber: !user.subscriber,
-                });
-                alert("サブスク状態を更新しました");
-                fetchUsers();
-              }}
-              style={{
-                padding: "6px 10px",
-                background: user.subscriber ? "#dc2626" : "#16a34a",
-                color: "white",
-                borderRadius: "6px",
-                border: "none",
-                marginBottom: "8px",
-              }}
-            >
-              {user.subscriber ? "サブスク解除" : "サブスク付与"}
-            </button>
-
-            {!user.xAccountConfirmed ? (
-              <button
-                onClick={() => confirmXAccount(user.id)}
-                style={{
-                  padding: "6px 10px",
-                  background: "#16a34a",
-                  color: "white",
-                  borderRadius: "6px",
-                  border: "none",
-                  marginBottom: "8px",
-                }}
-              >
-                Xアカウントを確定
-              </button>
-            ) : (
-              <button
-                onClick={() => editXAccount(user.id, user.xAccount)}
-                style={{
-                  padding: "6px 10px",
-                  background: "#2563eb",
-                  color: "white",
-                  borderRadius: "6px",
-                  border: "none",
-                  marginBottom: "8px",
-                }}
-              >
-                編集
-              </button>
-            )}
-
-            <p><strong>UID：</strong> {user.id}</p>
-            <p><strong>ポイント：</strong> {user.points ?? 0} pt</p>
-            <p><strong>発送履歴：</strong> {user.shippingCount} 件</p>
-            <p><strong>発送待ち：</strong> {user.waitingCount} 件</p>
-
-            <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
-
-            <p>
-              <strong>最終ログイン：</strong>{" "}
-              {typeof user.lastLogin === "object" && user.lastLogin && "toDate" in user.lastLogin && typeof user.lastLogin.toDate === "function"
-                ? user.lastLogin.toDate().toLocaleString()
-                : "不明"}
-            </p>
-
-            <p>
-              <strong>登録日時：</strong>{" "}
-              {typeof user.createdAt === "object" && user.createdAt && "toDate" in user.createdAt && typeof user.createdAt.toDate === "function"
-                ? user.createdAt.toDate().toLocaleString()
-                : "不明"}
-            </p>
-
-            <button
-              onClick={() => editPoints(user.id, user.points ?? 0)}
-              style={{
-                marginTop: "10px",
-                padding: "8px 12px",
-                background: "#4f46e5",
-                color: "white",
-                borderRadius: "6px",
-                border: "none",
-                marginRight: "10px",
-              }}
-            >
-              ポイント編集
-            </button>
-
-            <Link href={`/admin/users/${user.id}`}>
-              <button
-                style={{
-                  padding: "8px 12px",
-                  background: "#2563eb",
-                  color: "white",
-                  borderRadius: "6px",
-                  border: "none",
-                  marginRight: "10px",
-                }}
-              >
-                履歴を見る
-              </button>
-            </Link>
-
-            <button
-              onClick={() => deleteUser(user.id)}
-              style={{
-                padding: "8px 12px",
-                background: "#dc2626",
-                color: "white",
-                borderRadius: "6px",
-                border: "none",
-              }}
-            >
-              削除
-            </button>
-          </div>
+          />
         ))}
 
-      {/* ページネーション */}
-      {!loading && totalPages > 1 && (
+      {!loading && (
         <div style={{ marginTop: "20px", textAlign: "center" }}>
           <button
             disabled={currentPage === 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-            style={{
-              padding: "6px 12px",
-              marginRight: "10px",
-              borderRadius: "6px",
-              border: "1px solid #ccc",
-              background: currentPage === 1 ? "#eee" : "white",
-            }}
+            onClick={() =>
+              void loadPage(currentPage - 1, pageCursors[currentPage - 2] ?? null)
+            }
+            style={paginationButtonStyle(currentPage === 1)}
           >
             前へ
           </button>
-
-          <span>
-            {currentPage} / {totalPages}
-          </span>
-
+          <span style={{ margin: "0 12px" }}>第 {currentPage} ページ</span>
           <button
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-            style={{
-              padding: "6px 12px",
-              marginLeft: "10px",
-              borderRadius: "6px",
-              border: "1px solid #ccc",
-              background: currentPage === totalPages ? "#eee" : "white",
-            }}
+            disabled={!hasNextPage}
+            onClick={() =>
+              void loadPage(currentPage + 1, pageCursors[currentPage] ?? null)
+            }
+            style={paginationButtonStyle(!hasNextPage)}
           >
             次へ
           </button>
@@ -436,4 +271,93 @@ export default function UsersPage() {
       )}
     </div>
   );
+}
+
+function UserCard({
+  user,
+  onEditPoints,
+  onDelete,
+  onConfirmXAccount,
+  onEditXAccount,
+  onToggleSubscriber,
+}: {
+  user: UserRecord;
+  onEditPoints: (uid: string, points: number) => Promise<void>;
+  onDelete: (uid: string) => Promise<void>;
+  onConfirmXAccount: (uid: string) => Promise<void>;
+  onEditXAccount: (uid: string, currentX?: string) => Promise<void>;
+  onToggleSubscriber: () => Promise<void>;
+}) {
+  return (
+    <div
+      style={{
+        padding: "12px",
+        marginTop: "12px",
+        border: "1px solid #ccc",
+        borderRadius: "8px",
+      }}
+    >
+      <p><strong>メール：</strong> {user.email || "不明"}</p>
+      <p><strong>名前：</strong> {user.name || "未登録"}</p>
+      <p><strong>ニックネーム：</strong> {user.displayName || "未登録"}</p>
+      <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
+      <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
+      <p><strong>UID：</strong> {user.id}</p>
+      <p><strong>ポイント：</strong> {user.points ?? 0} pt</p>
+      <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
+      <p><strong>最終ログイン：</strong> {formatDate(user.lastLogin)}</p>
+      <p><strong>登録日時：</strong> {formatDate(user.createdAt)}</p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+        <button onClick={onToggleSubscriber} style={buttonStyle(user.subscriber ? "#dc2626" : "#16a34a")}>
+          {user.subscriber ? "サブスク解除" : "サブスク付与"}
+        </button>
+        {!user.xAccountConfirmed ? (
+          <button onClick={() => void onConfirmXAccount(user.id)} style={buttonStyle("#16a34a")}>
+            Xアカウントを確定
+          </button>
+        ) : (
+          <button onClick={() => void onEditXAccount(user.id, user.xAccount)} style={buttonStyle("#2563eb")}>
+            Xアカウントを編集
+          </button>
+        )}
+        <button onClick={() => void onEditPoints(user.id, user.points ?? 0)} style={buttonStyle("#4f46e5")}>
+          ポイント編集
+        </button>
+        <Link href={`/admin/users/${user.id}`} style={{ ...buttonStyle("#2563eb"), textDecoration: "none" }}>
+          履歴を見る
+        </Link>
+        <button onClick={() => void onDelete(user.id)} style={buttonStyle("#dc2626")}>
+          削除
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatDate(value: UserRecord["createdAt"]) {
+  if (value instanceof Date) return value.toLocaleString();
+  if (value && typeof value.toDate === "function") return value.toDate().toLocaleString();
+  return "不明";
+}
+
+function buttonStyle(background: string) {
+  return {
+    padding: "6px 10px",
+    color: "white",
+    background,
+    borderRadius: "6px",
+    border: "none",
+    cursor: "pointer",
+  };
+}
+
+function paginationButtonStyle(disabled: boolean) {
+  return {
+    padding: "6px 12px",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+    background: disabled ? "#eee" : "white",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
 }
