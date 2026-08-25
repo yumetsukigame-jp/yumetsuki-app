@@ -325,7 +325,10 @@ export default function Home() {
 </div>
 
 {/* 🎯 今日のニブイチ */}
-<Section title="🎯 今日のニブイチ" color="#eab308">
+<Section title="🎯 今日のニブイチ" color="#eab308" alwaysVisible={2}>
+  <MenuButton href="/nibuichi/guide" color="#eab308">
+    ニブイチの遊び方を見る
+  </MenuButton>
   {/* ★ 初期表示は「参加ボタン」だけ */}
   <MenuButton href="/nibuichi" color="#eab308">
     今日のニブイチに参加する
@@ -454,14 +457,21 @@ export default function Home() {
 /* ------------------------------
    セクションコンポーネント
 ------------------------------ */
-function Section({ title, color, icon, children, forceCollapseAll = false }: any) {
+function Section({
+  title,
+  color,
+  icon,
+  children,
+  forceCollapseAll = false,
+  alwaysVisible = 1,
+}: any) {
   const [open, setOpen] = useState(false);
 
   const items = React.Children.toArray(children);
-  const firstItem = items[0];
-  const restItems = items.slice(1);
+  const visibleItems = items.slice(0, alwaysVisible);
+  const restItems = items.slice(alwaysVisible);
 
-  const showFirst = !forceCollapseAll;
+  const showVisibleItems = !forceCollapseAll;
 
   return (
     <div
@@ -510,7 +520,7 @@ function Section({ title, color, icon, children, forceCollapseAll = false }: any
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {showFirst && firstItem}
+        {showVisibleItems && visibleItems}
         {open && (forceCollapseAll ? items : restItems)}
       </div>
     </div>

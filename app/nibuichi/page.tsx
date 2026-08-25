@@ -8,6 +8,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import Link from "next/link";
 
 export default function NibuichiPage() {
   const [user, setUser] = useState<any>(null);
@@ -127,7 +128,14 @@ export default function NibuichiPage() {
   }
 
   if (!user) {
-    return <div className="p-6 text-center text-gray-600">ログインしてください</div>;
+    return (
+      <div className="p-6 text-center text-gray-600">
+        <p>ログインしてください</p>
+        <Link href="/nibuichi/guide" className="font-bold text-blue-600 underline">
+          ニブイチの遊び方を見る
+        </Link>
+      </div>
+    );
   }
 
   const options = [
@@ -151,6 +159,13 @@ export default function NibuichiPage() {
           className="rounded-lg"
         />
       </div>
+
+      <Link
+        href="/nibuichi/guide"
+        className="block rounded-lg border-2 border-sky-400 bg-sky-50 p-4 text-center font-bold text-sky-800 shadow"
+      >
+        📖 ニブイチの遊び方・ルールを見る
+      </Link>
 
       {/* ★ ニブイチの参加方法（ルール） */}
       <div className="bg-white shadow p-4 rounded-lg">
