@@ -326,12 +326,11 @@ export default function Home() {
 
 {/* 🎯 今日のニブイチ */}
 <Section title="🎯 今日のニブイチ" color="#eab308" alwaysVisible={2}>
-  <MenuButton href="/nibuichi/guide" color="#eab308">
-    ニブイチの遊び方を見る
-  </MenuButton>
-  {/* ★ 初期表示は「参加ボタン」だけ */}
   <MenuButton href="/nibuichi" color="#eab308">
     今日のニブイチに参加する
+  </MenuButton>
+  <MenuButton href="/nibuichi/guide" color="#eab308" subtle>
+    ニブイチの遊び方を見る
   </MenuButton>
 
   {/* ★ 折りたたみ部分 */}
@@ -470,8 +469,14 @@ function Section({
   const items = React.Children.toArray(children);
   const visibleItems = items.slice(0, alwaysVisible);
   const restItems = items.slice(alwaysVisible);
-
   const showVisibleItems = !forceCollapseAll;
+  const hiddenItems = forceCollapseAll ? items : restItems;
+  const hiddenMenuLabels = hiddenItems.map((item, index) => (
+    <React.Fragment key={index}>
+      {index > 0 && " ・ "}
+      {React.isValidElement(item) ? item.props.children : item}
+    </React.Fragment>
+  ));
 
   return (
     <div
@@ -521,7 +526,22 @@ function Section({
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {showVisibleItems && visibleItems}
-        {open && (forceCollapseAll ? items : restItems)}
+        {!open && hiddenItems.length > 0 && (
+          <div
+            style={{
+              color: "#6b7280",
+              fontSize: "12px",
+              lineHeight: 1.5,
+              padding: "0 4px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            詳細：{hiddenMenuLabels}
+          </div>
+        )}
+        {open && hiddenItems}
       </div>
     </div>
   );
@@ -530,7 +550,7 @@ function Section({
 /* ------------------------------
    メニューボタン
 ------------------------------ */
-function MenuButton({ href, color, children }: any) {
+function MenuButton({ href, color, children, subtle = false }: any) {
   return (
     <Link
       href={href}
@@ -538,14 +558,14 @@ function MenuButton({ href, color, children }: any) {
       style={{
         display: "block",
         width: "100%",
-        padding: "12px",
-        background: color,
-        color: "white",
+        padding: subtle ? "9px" : "12px",
+        background: subtle ? "#fffbeb" : color,
+        color: subtle ? "#a16207" : "white",
         borderRadius: "8px",
-        fontSize: "18px",
-        fontWeight: "bold",
+        fontSize: subtle ? "15px" : "18px",
+        fontWeight: subtle ? 600 : "bold",
         textAlign: "center",
-        border: "none",
+        border: subtle ? `1px solid ${color}` : "none",
         cursor: "pointer",
         boxSizing: "border-box",
         textDecoration: "none",
