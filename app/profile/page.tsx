@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "@/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { auth, db, functions } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 
@@ -13,6 +14,7 @@ export default function ProfilePage() {
   const [xAccount, setXAccount] = useState("");
   const [xAccountConfirmed, setXAccountConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -42,7 +44,7 @@ export default function ProfilePage() {
 
   const save = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || saving) return;
 
     // ★ 必須チェック
     if (!displayName.trim()) {
@@ -60,13 +62,29 @@ export default function ProfilePage() {
       return;
     }
 
-    await updateDoc(doc(db, "users", user.uid), {
-      name,
-      displayName,
-      ...(xAccountConfirmed ? {} : { xAccount }),
-    });
-
-    alert("保存しました！");
+    setSaving(true);
+    try {
+      await httpsCallable<
+        { name: string; displayName: string; xAccount: string },
+        { updated: boolean }
+      >(functions, "updateUserProfile")({
+        name,
+        displayName,
+        xAccount,
+      });
+      alert("保存しました！");
+    } catch (error) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "functions/already-exists"
+          ? "このXアカウントはすでに登録されています"
+          : "保存に失敗しました。もう一度お試しください。";
+      alert(message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -181,18 +199,19 @@ export default function ProfilePage() {
 
         <button
           onClick={save}
+          disabled={saving}
           style={{
             padding: "12px",
-            background: "#4f46e5",
+            background: saving ? "#999" : "#4f46e5",
             color: "white",
             borderRadius: "8px",
             border: "none",
             fontSize: "18px",
-            cursor: "pointer",
+            cursor: saving ? "not-allowed" : "pointer",
             marginTop: "10px",
           }}
         >
-          保存する
+          {saving ? "保存中…" : "保存する"}
         </button>
       </div>
 

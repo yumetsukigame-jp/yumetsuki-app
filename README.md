@@ -34,3 +34,28 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## パスワード再設定メールの配信設定
+
+パスワード再設定メールは `sendPasswordResetLink` Cloud Function から送信します。
+この Function がサーバー側で Firebase Authentication の再設定リンクを生成し、
+SendGrid を使ってメールを配信します。
+
+1. SendGrid で送信元メールアドレスを認証します。
+2. プロジェクトのルートディレクトリで、次のコマンドを順に実行します。
+
+```bash
+firebase functions:secrets:set SENDGRID_API_KEY
+firebase functions:secrets:set SENDGRID_FROM_EMAIL
+```
+
+3. `SENDGRID_API_KEY` には `SG.` で始まる SendGrid の API キーを入力します。
+4. `SENDGRID_FROM_EMAIL` には、手順 1 で認証した送信元メールアドレスを入力します。
+5. 両方を設定した後、次のコマンドで Function をデプロイします。
+
+```bash
+firebase deploy --only functions
+```
+
+6. Firebase Console の **Authentication** → **Settings** → **Authorized domains** で、
+パスワード再設定後の遷移先に使うドメインを許可します。

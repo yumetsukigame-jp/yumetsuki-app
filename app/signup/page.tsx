@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { auth, db } from "@/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { auth, functions } from "@/firebase";
+import { createUserWithEmailAndPassword, type User } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -31,6 +31,7 @@ export default function SignupPage() {
 
     setLoading(true);
 
+    let createdUser: User | undefined;
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -38,25 +39,41 @@ export default function SignupPage() {
         password
       );
       const user = userCredential.user;
+      createdUser = user;
 
-      await setDoc(doc(db, "users", user.uid), {
-        email,
+      await httpsCallable<
+        { name: string; displayName: string; xAccount: string },
+        { created: boolean }
+      >(functions, "createUserProfile")({
         name,
         displayName,
         xAccount,
-        points: 0,
-        createdAt: new Date(),
-        lastLogin: new Date(),
-        xAccountConfirmed: false,
       });
 
       alert("登録が完了しました！");
       router.push("/");
-    } catch (error: any) {
-      alert("登録に失敗しました：" + error.message);
-    }
+    } catch (error) {
+      const isDuplicateXAccount =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "functions/already-exists";
+      if (isDuplicateXAccount && createdUser) {
+        try {
+          await createdUser.delete();
+        } catch (deleteError) {
+          console.error("重複登録後の認証ユーザー削除に失敗しました", deleteError);
+        }
+      }
 
-    setLoading(false);
+      const message =
+        isDuplicateXAccount
+          ? "このXアカウントはすでに登録されています"
+          : "登録に失敗しました。もう一度お試しください。";
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

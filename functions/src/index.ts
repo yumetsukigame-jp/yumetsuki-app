@@ -13,6 +13,9 @@ export {
   confirmQuizAnswer,
 } from "./quiz";
 
+export { sendPasswordResetLink } from "./passwordReset";
+export { createUserProfile, updateUserProfile } from "./userProfile";
+
 export * from "./nibuichi";
 
 /* ============================================================

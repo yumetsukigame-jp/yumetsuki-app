@@ -4,11 +4,12 @@ import { useState } from "react";
 import { auth, db } from "@/firebase";
 import {
   signInWithEmailAndPassword,
-  sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, getDocFromServer } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/firebase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -68,8 +69,13 @@ export default function LoginPage() {
     }
 
     try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage("パスワード再設定メールを送信しました");
+      await httpsCallable<{ email: string }, { accepted: boolean }>(
+        functions,
+        "sendPasswordResetLink"
+      )({ email });
+      setMessage(
+        "メールアドレスが登録されている場合は、パスワード再設定メールを送信しました"
+      );
     } catch (error) {
       console.error(error);
       setMessage("メール送信に失敗しました");
