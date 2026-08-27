@@ -388,9 +388,6 @@ export default function PublicGachaListPage() {
                         ...previous,
                         [g.code]: !isXAccountsOpen,
                       }));
-                      if (!isXAccountsOpen) {
-                        void loadDrawnXAccounts(g.code);
-                      }
                     }}
                     style={{
                       padding: "8px 12px",
@@ -418,34 +415,56 @@ export default function PublicGachaListPage() {
                       }}
                     >
                       {targetXAccounts.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: 20 }}>
-                          {targetXAccounts.map((account) => {
-                            const hasDrawn = drawnAccountsForThis.has(
-                              normalizeXAccount(account)
-                            );
+                        <>
+                          <button
+                            type="button"
+                            disabled={loadingDrawnXAccounts[g.code]}
+                            onClick={() => void loadDrawnXAccounts(g.code)}
+                            style={{
+                              marginBottom: 10,
+                              padding: "7px 10px",
+                              background: loadingDrawnXAccounts[g.code]
+                                ? "#9ca3af"
+                                : "#f59e0b",
+                              color: "white",
+                              borderRadius: 6,
+                              border: "none",
+                              cursor: loadingDrawnXAccounts[g.code]
+                                ? "not-allowed"
+                                : "pointer",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {drawnXAccounts[g.code]
+                              ? "抽選済みアカウントを確認済み"
+                              : loadingDrawnXAccounts[g.code]
+                                ? "抽選済みアカウントを確認中…"
+                                : "抽選済みアカウントを確認する"}
+                          </button>
+                          <ul style={{ margin: 0, paddingLeft: 20 }}>
+                            {targetXAccounts.map((account) => {
+                              const hasDrawn = drawnAccountsForThis.has(
+                                normalizeXAccount(account)
+                              );
 
-                            return (
-                              <li
-                                key={account}
-                                style={{
-                                  color: hasDrawn ? "#b45309" : "#111827",
-                                  fontWeight: hasDrawn ? "bold" : "normal",
-                                }}
-                              >
-                                {account}
-                                {hasDrawn && "（抽選済み）"}
-                              </li>
-                            );
-                          })}
-                        </ul>
+                              return (
+                                <li
+                                  key={account}
+                                  style={{
+                                    color: hasDrawn ? "#b45309" : "#111827",
+                                    fontWeight: hasDrawn ? "bold" : "normal",
+                                  }}
+                                >
+                                  {account}
+                                  {hasDrawn && "（抽選済み）"}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </>
                       ) : (
                         <p style={{ margin: 0 }}>
                           対象のXアカウントはまだ登録されていません。
-                        </p>
-                      )}
-                      {loadingDrawnXAccounts[g.code] && (
-                        <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
-                          抽選済みアカウントを確認中…
                         </p>
                       )}
                       {drawnXAccountErrors[g.code] && (
