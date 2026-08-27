@@ -205,6 +205,9 @@ export const getPublicGachaList = functions
         createdAt: data.createdAt ?? null,
         resetType: data.resetType ?? "none",
         publicFlags: data.publicFlags ?? [],
+        xAccountList: Array.isArray(data.xAccountList)
+          ? data.xAccountList.filter((account): account is string => typeof account === "string")
+          : [],
       };
     }).filter((gacha) => gacha.publicFlags.includes("public"));
   });

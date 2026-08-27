@@ -67,14 +67,22 @@ function toDateSafe(ts: FirestoreDateLike): Date | null {
 /* --------------------------------------------------
    ★ ユーザー情報キャッシュ付き取得（＠重複修正済み）
 -------------------------------------------------- */
-const userCache: Record<string, { name: string }> = {};
+const userCache: Record<string, { name: string; xAccount: string }> = {};
+
+function normalizeXAccount(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[\s\r\n\t]+/g, "")
+    .replace(/[@＠]/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "");
+}
 
 async function getUserInfo(uid: string) {
   if (userCache[uid]) return userCache[uid];
 
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) {
-    userCache[uid] = { name: "名無し" };
+    userCache[uid] = { name: "名無し", xAccount: "" };
     return userCache[uid];
   }
 
@@ -86,7 +94,10 @@ async function getUserInfo(uid: string) {
   const normalizedX = rawX.replace(/^@+/, ""); // 先頭の @ を全部削除
   const x = normalizedX ? `（@${normalizedX}）` : "";
 
-  userCache[uid] = { name: `${name}${x}` };
+  userCache[uid] = {
+    name: `${name}${x}`,
+    xAccount: normalizeXAccount(rawX),
+  };
   return userCache[uid];
 }
 
@@ -99,6 +110,8 @@ export default function PublicGachaListPage() {
   const [countCache, setCountCache] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [openXAccounts, setOpenXAccounts] = useState<Record<string, boolean>>({});
+  const [drawnXAccounts, setDrawnXAccounts] = useState<Record<string, string[]>>({});
+  const [drawnXAccountErrors, setDrawnXAccountErrors] = useState<Record<string, string>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -192,6 +205,30 @@ export default function PublicGachaListPage() {
     }));
   };
 
+  const loadDrawnXAccounts = async (code: string) => {
+    if (drawnXAccounts[code]) return;
+
+    try {
+      const results = await getDocs(collection(db, "gachaResults", code, "results"));
+      const accounts = await Promise.all(
+        Array.from(new Set(results.docs.map((result) => result.get("uid"))))
+          .filter((uid): uid is string => typeof uid === "string")
+          .map(async (uid) => (await getUserInfo(uid)).xAccount)
+      );
+
+      setDrawnXAccounts((previous) => ({
+        ...previous,
+        [code]: accounts.filter(Boolean),
+      }));
+    } catch (error) {
+      console.error("抽選済みXアカウントの読み込みに失敗しました", error);
+      setDrawnXAccountErrors((previous) => ({
+        ...previous,
+        [code]: "抽選履歴を読み込めませんでした。",
+      }));
+    }
+  };
+
   /* --------------------------------------------------
      publicFlags 表示
   -------------------------------------------------- */
@@ -250,6 +287,7 @@ export default function PublicGachaListPage() {
           const isOpen = open[g.code] ?? false;
           const isXAccountsOpen = openXAccounts[g.code] ?? false;
           const resultsForThis = resultsMap[g.code] ?? [];
+          const drawnAccountsForThis = new Set(drawnXAccounts[g.code] ?? []);
           const targetXAccounts = Array.from(
             new Set(
               (g.xAccountList ?? []).flatMap((account) =>
@@ -332,12 +370,15 @@ export default function PublicGachaListPage() {
                   <button
                     type="button"
                     aria-expanded={isXAccountsOpen}
-                    onClick={() =>
+                    onClick={() => {
                       setOpenXAccounts((previous) => ({
                         ...previous,
                         [g.code]: !isXAccountsOpen,
-                      }))
-                    }
+                      }));
+                      if (!isXAccountsOpen) {
+                        void loadDrawnXAccounts(g.code);
+                      }
+                    }}
                     style={{
                       padding: "8px 12px",
                       background: "#e0e7ff",
@@ -365,13 +406,33 @@ export default function PublicGachaListPage() {
                     >
                       {targetXAccounts.length > 0 ? (
                         <ul style={{ margin: 0, paddingLeft: 20 }}>
-                          {targetXAccounts.map((account) => (
-                            <li key={account}>{account}</li>
-                          ))}
+                          {targetXAccounts.map((account) => {
+                            const hasDrawn = drawnAccountsForThis.has(
+                              normalizeXAccount(account)
+                            );
+
+                            return (
+                              <li
+                                key={account}
+                                style={{
+                                  color: hasDrawn ? "#b45309" : "#111827",
+                                  fontWeight: hasDrawn ? "bold" : "normal",
+                                }}
+                              >
+                                {account}
+                                {hasDrawn && "（抽選済み）"}
+                              </li>
+                            );
+                          })}
                         </ul>
                       ) : (
                         <p style={{ margin: 0 }}>
                           対象のXアカウントはまだ登録されていません。
+                        </p>
+                      )}
+                      {drawnXAccountErrors[g.code] && (
+                        <p style={{ margin: "8px 0 0", color: "#dc2626" }}>
+                          {drawnXAccountErrors[g.code]}
                         </p>
                       )}
                     </div>
