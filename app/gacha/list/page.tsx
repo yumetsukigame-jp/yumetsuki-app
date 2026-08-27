@@ -41,6 +41,7 @@ type GachaRecord = {
   mode?: "count" | "probability";
   resetType?: string;
   thumbnail?: string;
+  xAccountList?: string[];
   [key: string]: unknown;
 };
 
@@ -97,6 +98,7 @@ export default function PublicGachaListPage() {
   const [resultsMap, setResultsMap] = useState<Record<string, GachaResultRecord[]>>({});
   const [countCache, setCountCache] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [openXAccounts, setOpenXAccounts] = useState<Record<string, boolean>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -246,7 +248,18 @@ export default function PublicGachaListPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {gachas.map((g) => {
           const isOpen = open[g.code] ?? false;
+          const isXAccountsOpen = openXAccounts[g.code] ?? false;
           const resultsForThis = resultsMap[g.code] ?? [];
+          const targetXAccounts = Array.from(
+            new Set(
+              (g.xAccountList ?? []).flatMap((account) =>
+                Array.from(account.matchAll(/@([A-Za-z0-9_]{1,15})/g)).map(
+                  ([, handle]) => `@${handle}`
+                )
+              )
+            )
+          );
+          const isXAccountMatch = g.publicFlags?.includes("x_account_match") ?? false;
 
           /* --------------------------------------------------
              ★ グレーアウト判定
@@ -313,6 +326,58 @@ export default function PublicGachaListPage() {
               </h2>
 
               <p style={{ margin: "6px 0" }}>{renderFlags(g.publicFlags)}</p>
+
+              {isXAccountMatch && (
+                <div style={{ margin: "10px 0" }}>
+                  <button
+                    type="button"
+                    aria-expanded={isXAccountsOpen}
+                    onClick={() =>
+                      setOpenXAccounts((previous) => ({
+                        ...previous,
+                        [g.code]: !isXAccountsOpen,
+                      }))
+                    }
+                    style={{
+                      padding: "8px 12px",
+                      background: "#e0e7ff",
+                      color: "#3730a3",
+                      borderRadius: 8,
+                      border: "1px solid #818cf8",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {isXAccountsOpen
+                      ? "▲ 対象のXアカウントを閉じる"
+                      : "▼ 対象のXアカウントを確認する"}
+                  </button>
+
+                  {isXAccountsOpen && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: 12,
+                        background: "#f8fafc",
+                        borderRadius: 8,
+                        textAlign: "left",
+                      }}
+                    >
+                      {targetXAccounts.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: 20 }}>
+                          {targetXAccounts.map((account) => (
+                            <li key={account}>{account}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p style={{ margin: 0 }}>
+                          対象のXアカウントはまだ登録されていません。
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <p style={{ margin: "6px 0" }}>
                 抽選方式：
