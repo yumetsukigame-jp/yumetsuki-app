@@ -107,11 +107,13 @@ export default function PublicGachaListPage() {
   const [sort, setSort] = useState<"new" | "popular">("new");
 
   const [resultsMap, setResultsMap] = useState<Record<string, GachaResultRecord[]>>({});
+  const [resultErrors, setResultErrors] = useState<Record<string, string>>({});
   const [countCache, setCountCache] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [openXAccounts, setOpenXAccounts] = useState<Record<string, boolean>>({});
   const [drawnXAccounts, setDrawnXAccounts] = useState<Record<string, string[]>>({});
   const [drawnXAccountErrors, setDrawnXAccountErrors] = useState<Record<string, string>>({});
+  const [loadingDrawnXAccounts, setLoadingDrawnXAccounts] = useState<Record<string, boolean>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -185,29 +187,38 @@ export default function PublicGachaListPage() {
   const loadResultsForCode = async (code: string) => {
     if (resultsMap[code]) return;
 
-    const snap = await getDocs(
-      query(
-        collection(db, "gachaResults", code, "results"),
-        orderBy("createdAt", "desc")
-      )
-    );
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "gachaResults", code, "results"),
+          orderBy("createdAt", "desc")
+        )
+      );
 
-    const list = snap.docs
-      .map((d) => ({
-        id: d.id,
-        ...(d.data() as Record<string, unknown>),
-      } as GachaResultRecord))
-      .filter((d) => !!d.createdAt);
+      const list = snap.docs
+        .map((d) => ({
+          id: d.id,
+          ...(d.data() as Record<string, unknown>),
+        } as GachaResultRecord))
+        .filter((d) => !!d.createdAt);
 
-    setResultsMap((prev) => ({
-      ...prev,
-      [code]: list,
-    }));
+      setResultsMap((prev) => ({
+        ...prev,
+        [code]: list,
+      }));
+    } catch (error) {
+      console.error("ガチャ結果の読み込みに失敗しました", error);
+      setResultErrors((previous) => ({
+        ...previous,
+        [code]: "詳細を読み込めませんでした。",
+      }));
+    }
   };
 
   const loadDrawnXAccounts = async (code: string) => {
-    if (drawnXAccounts[code]) return;
+    if (drawnXAccounts[code] || loadingDrawnXAccounts[code]) return;
 
+    setLoadingDrawnXAccounts((previous) => ({ ...previous, [code]: true }));
     try {
       const results = await getDocs(collection(db, "gachaResults", code, "results"));
       const accounts = await Promise.all(
@@ -226,6 +237,8 @@ export default function PublicGachaListPage() {
         ...previous,
         [code]: "抽選履歴を読み込めませんでした。",
       }));
+    } finally {
+      setLoadingDrawnXAccounts((previous) => ({ ...previous, [code]: false }));
     }
   };
 
@@ -430,6 +443,11 @@ export default function PublicGachaListPage() {
                           対象のXアカウントはまだ登録されていません。
                         </p>
                       )}
+                      {loadingDrawnXAccounts[g.code] && (
+                        <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
+                          抽選済みアカウントを確認中…
+                        </p>
+                      )}
                       {drawnXAccountErrors[g.code] && (
                         <p style={{ margin: "8px 0 0", color: "#dc2626" }}>
                           {drawnXAccountErrors[g.code]}
@@ -479,7 +497,13 @@ export default function PublicGachaListPage() {
                 {isOpen ? "▲ 詳細を閉じる" : "▼ 詳細を見る"}
               </button>
 
-              {isOpen && !resultsMap[g.code] && (
+              {isOpen && resultErrors[g.code] && (
+                <p style={{ marginTop: 12, color: "#dc2626" }}>
+                  {resultErrors[g.code]}
+                </p>
+              )}
+
+              {isOpen && !resultsMap[g.code] && !resultErrors[g.code] && (
                 <p style={{ marginTop: 12 }}>読み込み中…</p>
               )}
 
