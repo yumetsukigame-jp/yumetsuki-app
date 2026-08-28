@@ -435,6 +435,11 @@ export default function PublicGachaListPage() {
                     >
                       {targetXAccounts.length > 0 ? (
                         <>
+                          {hasCheckedDrawnXAccounts && (
+                            <p style={{ margin: "0 0 8px", fontWeight: "bold" }}>
+                              抽選済み：{drawnTargetCount} / {targetXAccounts.length}人（{drawnTargetPercent}%）
+                            </p>
+                          )}
                           <button
                             type="button"
                             disabled={loadingDrawnXAccounts[g.code]}
@@ -480,11 +485,6 @@ export default function PublicGachaListPage() {
                               );
                             })}
                           </ul>
-                          {hasCheckedDrawnXAccounts && (
-                            <p style={{ margin: "8px 0 0", fontWeight: "bold" }}>
-                              抽選済み：{drawnTargetCount} / {targetXAccounts.length}人（{drawnTargetPercent}%）
-                            </p>
-                          )}
                         </>
                       ) : (
                         <p style={{ margin: 0 }}>
