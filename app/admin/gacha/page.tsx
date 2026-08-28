@@ -14,7 +14,8 @@ type PublicFlag =
   | "limited"
   | "subscriber"
   | "nibuichi_winner"
-  | "x_account_match";
+  | "x_account_match"
+  | "featured";
 
 type FrameInput = {
   label: string;
@@ -289,6 +290,15 @@ export default function GachaCreatePage() {
               onChange={() => toggleFlag("x_account_match")}
             />{" "}
             Xアカウント一致
+          </label>
+
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="checkbox"
+              checked={publicFlags.includes("featured")}
+              onChange={() => toggleFlag("featured")}
+            />{" "}
+            強調表示（一覧で上位表示）
           </label>
         </div>
 

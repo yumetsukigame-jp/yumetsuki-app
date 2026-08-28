@@ -130,6 +130,7 @@ export const createGachaCode = functions
         "subscriber",
         "nibuichi_winner",
         "x_account_match",
+        "featured",
       ];
 
       for (const flag of publicFlags) {

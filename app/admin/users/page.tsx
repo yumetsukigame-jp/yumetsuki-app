@@ -54,6 +54,11 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [filtered, setFiltered] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchCursor, setSearchCursor] =
+    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreSearchResults, setHasMoreSearchResults] = useState(false);
+  const [searchedCount, setSearchedCount] = useState(0);
   const [sortOrder, setSortOrder] = useState<SortOrder>("createdDesc");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -74,6 +79,29 @@ export default function UsersPage() {
     );
   };
 
+  const getUsers = async (
+    cursor: QueryDocumentSnapshot<DocumentData> | null
+  ) => {
+    const { field, direction } = sortConfig[sortOrder];
+    const usersRef = collection(db, "users");
+    const userQuery = query(
+      usersRef,
+      orderBy(field, direction),
+      ...(cursor ? [startAfter(cursor)] : []),
+      limit(PAGE_SIZE)
+    );
+    const snap = await getDocs(userQuery);
+
+    return {
+      list: snap.docs.map((userDoc) => ({
+        id: userDoc.id,
+        ...(userDoc.data() as Omit<UserRecord, "id">),
+      })),
+      lastDocument: snap.docs.at(-1) ?? null,
+      hasMore: snap.size === PAGE_SIZE,
+    };
+  };
+
   const loadPage = async (
     page: number,
     cursor: QueryDocumentSnapshot<DocumentData> | null
@@ -82,32 +110,20 @@ export default function UsersPage() {
     setLoadError("");
 
     try {
-      const { field, direction } = sortConfig[sortOrder];
-      const usersRef = collection(db, "users");
-      const userQuery = query(
-        usersRef,
-        orderBy(field, direction),
-        ...(cursor ? [startAfter(cursor)] : []),
-        limit(PAGE_SIZE)
-      );
-      const snap = await getDocs(userQuery);
-      const list = snap.docs.map((userDoc) => ({
-        id: userDoc.id,
-        ...(userDoc.data() as Omit<UserRecord, "id">),
-      }));
+      const { list, lastDocument, hasMore } = await getUsers(cursor);
 
       setUsers(list);
-      setFiltered(filterUsers(list, search));
+      setFiltered(list);
       setCurrentPage(page);
-      setHasNextPage(snap.size === PAGE_SIZE);
+      setHasNextPage(hasMore);
       setPageCursors((previous) => {
         if (page === 1) {
-          return [cursor, snap.docs.at(-1) ?? null];
+          return [cursor, lastDocument];
         }
 
         const next = [...previous];
         next[page - 1] = cursor;
-        next[page] = snap.docs.at(-1) ?? null;
+        next[page] = lastDocument;
         return next;
       });
     } catch (error) {
@@ -130,12 +146,41 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortOrder]);
 
-  const handleSearch = (text: string) => {
-    setSearch(text);
-    setFiltered(filterUsers(users, text));
+  const searchUsers = async (
+    cursor: QueryDocumentSnapshot<DocumentData> | null,
+    reset = false
+  ) => {
+    const keyword = search.trim();
+    if (!keyword) {
+      setIsSearching(false);
+      setFiltered(users);
+      return;
+    }
+
+    setLoading(true);
+    setLoadError("");
+    try {
+      const { list, lastDocument, hasMore } = await getUsers(cursor);
+      const matches = filterUsers(list, keyword);
+
+      setFiltered((previous) => (reset ? matches : [...previous, ...matches]));
+      setIsSearching(true);
+      setSearchCursor(lastDocument);
+      setHasMoreSearchResults(hasMore);
+      setSearchedCount((previous) => (reset ? list.length : previous + list.length));
+    } catch (error) {
+      console.error("ユーザー検索に失敗しました", error);
+      setLoadError("ユーザー検索に失敗しました。");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const refreshCurrentPage = async () => {
+    if (isSearching && search.trim()) {
+      await searchUsers(null, true);
+      return;
+    }
     await loadPage(currentPage, pageCursors[currentPage - 1] ?? null);
   };
 
@@ -183,28 +228,47 @@ export default function UsersPage() {
   return (
     <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
       <h1>ユーザー一覧</h1>
-      <p style={{ color: "#555" }}>1ページあたり50件を表示しています。</p>
+      <p style={{ color: "#555", lineHeight: 1.6 }}>
+        通常表示は1ページあたり50件です。検索は50件ずつ確認し、一致したユーザーがあればそこで停止します。
+      </p>
 
-      <input
-        type="text"
-        value={search}
-        onChange={(event) => handleSearch(event.target.value)}
-        placeholder="現在の50件からメール・名前・ニックネーム・Xアカウントを検索"
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "15px",
-          borderRadius: "6px",
-          border: "1px solid #ccc",
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void searchUsers(null, true);
         }}
-      />
+        style={{ display: "flex", gap: "8px", marginBottom: "15px" }}
+      >
+        <input
+          type="text"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="メール・名前・ニックネーム・Xアカウントを検索"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: "10px",
+            borderRadius: "6px",
+            border: "1px solid #ccc",
+          }}
+        />
+        <button type="submit" style={buttonStyle("#2563eb")}>
+          検索
+        </button>
+      </form>
 
       <div style={{ marginBottom: "15px" }}>
         <label htmlFor="user-sort">並び替え：</label>
         <select
           id="user-sort"
           value={sortOrder}
-          onChange={(event) => setSortOrder(event.target.value as SortOrder)}
+          onChange={(event) => {
+            setIsSearching(false);
+            setSearchCursor(null);
+            setHasMoreSearchResults(false);
+            setSearchedCount(0);
+            setSortOrder(event.target.value as SortOrder);
+          }}
           style={{
             marginLeft: "10px",
             padding: "6px",
@@ -223,8 +287,26 @@ export default function UsersPage() {
 
       {loading && <p>読み込み中…</p>}
       {loadError && <p style={{ color: "#dc2626" }}>{loadError}</p>}
+      {!loading && !loadError && isSearching && (
+        <div
+          style={{
+            padding: "10px 12px",
+            marginBottom: "12px",
+            background: "#eff6ff",
+            borderRadius: "8px",
+            color: "#1e40af",
+          }}
+        >
+          {searchedCount}件を確認中：{filtered.length}件一致
+          {hasMoreSearchResults && "（次の50件も検索できます）"}
+        </div>
+      )}
       {!loading && !loadError && filtered.length === 0 && (
-        <p>このページに該当するユーザーがいません。</p>
+        <p>
+          {isSearching
+            ? "この50件には該当するユーザーがいません。"
+            : "このページにユーザーがいません。"}
+        </p>
       )}
 
       {!loading &&
@@ -246,7 +328,15 @@ export default function UsersPage() {
           />
         ))}
 
-      {!loading && (
+      {!loading && isSearching && hasMoreSearchResults && (
+        <div style={{ marginTop: "20px", textAlign: "center" }}>
+          <button onClick={() => void searchUsers(searchCursor)} style={buttonStyle("#2563eb")}>
+            継続して次の50件を検索
+          </button>
+        </div>
+      )}
+
+      {!loading && !isSearching && (
         <div style={{ marginTop: "20px", textAlign: "center" }}>
           <button
             disabled={currentPage === 1}
@@ -291,22 +381,52 @@ function UserCard({
   return (
     <div
       style={{
-        padding: "12px",
+        padding: "16px",
         marginTop: "12px",
         border: "1px solid #ccc",
         borderRadius: "8px",
+        background: "#fff",
       }}
     >
-      <p><strong>メール：</strong> {user.email || "不明"}</p>
-      <p><strong>名前：</strong> {user.name || "未登録"}</p>
-      <p><strong>ニックネーム：</strong> {user.displayName || "未登録"}</p>
-      <p><strong>X：</strong> {user.xAccount || "未登録"}</p>
-      <p><strong>サブスク：</strong> {user.subscriber ? "✔ サブスクライバー" : "—"}</p>
-      <p><strong>UID：</strong> {user.id}</p>
-      <p><strong>ポイント：</strong> {user.points ?? 0} pt</p>
-      <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
-      <p><strong>最終ログイン：</strong> {formatDate(user.lastLogin)}</p>
-      <p><strong>登録日時：</strong> {formatDate(user.createdAt)}</p>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+        <div>
+          <strong style={{ fontSize: "1.05rem" }}>{user.displayName || user.name || "名称未登録"}</strong>
+          <div style={{ color: "#555", fontSize: "0.9rem", marginTop: "3px", overflowWrap: "anywhere" }}>
+            {user.email || "メールアドレス未登録"}
+          </div>
+        </div>
+        <span
+          style={{
+            flexShrink: 0,
+            padding: "4px 8px",
+            borderRadius: "999px",
+            background: user.subscriber ? "#dcfce7" : "#f3f4f6",
+            color: user.subscriber ? "#166534" : "#4b5563",
+            fontSize: "0.8rem",
+            fontWeight: 700,
+          }}
+        >
+          {user.subscriber ? "サブスク中" : "通常"}
+        </span>
+      </div>
+
+      <dl
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "8px 16px",
+          margin: "16px 0 0",
+          fontSize: "0.9rem",
+        }}
+      >
+        <UserDetail label="氏名" value={user.name || "未登録"} />
+        <UserDetail label="Xアカウント" value={user.xAccount || "未登録"} />
+        <UserDetail label="ポイント" value={`${user.points ?? 0} pt`} />
+        <UserDetail label="ログイン回数" value={`${user.loginCount ?? 0} 回`} />
+        <UserDetail label="最終ログイン" value={formatDate(user.lastLogin)} />
+        <UserDetail label="登録日時" value={formatDate(user.createdAt)} />
+        <UserDetail label="UID" value={user.id} fullWidth />
+      </dl>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
         <button onClick={onToggleSubscriber} style={buttonStyle(user.subscriber ? "#dc2626" : "#16a34a")}>
@@ -331,6 +451,23 @@ function UserCard({
           削除
         </button>
       </div>
+    </div>
+  );
+}
+
+function UserDetail({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value: string;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={fullWidth ? { gridColumn: "1 / -1" } : undefined}>
+      <dt style={{ color: "#6b7280", fontSize: "0.8rem", fontWeight: 700 }}>{label}</dt>
+      <dd style={{ margin: "2px 0 0", overflowWrap: "anywhere" }}>{value}</dd>
     </div>
   );
 }

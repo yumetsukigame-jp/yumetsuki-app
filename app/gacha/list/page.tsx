@@ -145,6 +145,11 @@ export default function PublicGachaListPage() {
 
     if (sort === "new") {
       sorted.sort((a, b) => {
+        const featuredDifference =
+          Number(b.publicFlags?.includes("featured")) -
+          Number(a.publicFlags?.includes("featured"));
+        if (featuredDifference !== 0) return featuredDifference;
+
         const bDate = toDateSafe(b.createdAt)?.getTime() ?? 0;
         const aDate = toDateSafe(a.createdAt)?.getTime() ?? 0;
         return bDate - aDate;
@@ -166,6 +171,11 @@ export default function PublicGachaListPage() {
       setCountCache(newCache);
 
       sorted.sort((a, b) => {
+        const featuredDifference =
+          Number(b.publicFlags?.includes("featured")) -
+          Number(a.publicFlags?.includes("featured"));
+        if (featuredDifference !== 0) return featuredDifference;
+
         const aUsed = newCache[a.code] ?? 0;
         const bUsed = newCache[b.code] ?? 0;
         return bUsed - aUsed;
@@ -252,6 +262,7 @@ export default function PublicGachaListPage() {
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
       x_account_match: "📝 Xアカウント一致",
+      featured: "📌 注目",
     };
     if (!Array.isArray(flags)) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -311,6 +322,14 @@ export default function PublicGachaListPage() {
             )
           );
           const isXAccountMatch = g.publicFlags?.includes("x_account_match") ?? false;
+          const hasCheckedDrawnXAccounts = g.code in drawnXAccounts;
+          const drawnTargetCount = targetXAccounts.filter((account) =>
+            drawnAccountsForThis.has(normalizeXAccount(account))
+          ).length;
+          const drawnTargetPercent =
+            targetXAccounts.length > 0
+              ? Math.round((drawnTargetCount / targetXAccounts.length) * 100)
+              : 0;
 
           /* --------------------------------------------------
              ★ グレーアウト判定
@@ -461,6 +480,11 @@ export default function PublicGachaListPage() {
                               );
                             })}
                           </ul>
+                          {hasCheckedDrawnXAccounts && (
+                            <p style={{ margin: "8px 0 0", fontWeight: "bold" }}>
+                              抽選済み：{drawnTargetCount} / {targetXAccounts.length}人（{drawnTargetPercent}%）
+                            </p>
+                          )}
                         </>
                       ) : (
                         <p style={{ margin: 0 }}>

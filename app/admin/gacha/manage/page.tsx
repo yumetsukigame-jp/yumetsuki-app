@@ -367,6 +367,7 @@ function GachaItem({
       subscriber: "⭐ サブスク限定",
       nibuichi_winner: "🎯 的中者限定",
       x_account_match: "📝 Xアカウント一致",
+      featured: "📌 注目",
     };
     if (flags.length === 0) return "（未設定）";
     return flags.map((f) => map[f] ?? f).join(" / ");
@@ -539,7 +540,7 @@ function GachaItem({
 
         {/* 公開設定の編集 */}
         <div style={{ marginBottom: 12 }}>
-          {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match"].map((flag) => (
+          {["public", "limited", "subscriber", "nibuichi_winner", "x_account_match", "featured"].map((flag) => (
             <label key={flag} style={{ marginRight: 12 }}>
               <input
                 type="checkbox"

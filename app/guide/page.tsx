@@ -40,14 +40,14 @@ export default function GuidePage() {
           <div>
             <span className={styles.kicker}>完全自作のゆめつきアプリ</span>
             <h1>
-              遊んで、貯めて、
+              週間のお裾分け、
               <br />
-              選べる。
+              トップを飾る大賞はガチャから。
             </h1>
             <p>
-              「ゆめつきの書斎」は、ニブイチ・ゆめつきクイズ・ガチャ・ポイント機能などをひとつにまとめた、ゆめつきのためのWebアプリです。
+              「ゆめつきの書斎」は、週間のお裾分け企画を楽しむうえでも重要なWebアプリです。メインの当たりである「ゆめつき賞」は、このアプリのガチャによって当選者が決まります。
             </p>
-            <p>ホーム画面に追加すれば、アプリのような感覚でいつでも開けます。</p>
+            <p>企画に参加したら、ガチャを引くところまでが大切です。</p>
             <Link className={styles.primaryButton} href="/">
               ゆめつきの書斎を開く
             </Link>
@@ -58,20 +58,48 @@ export default function GuidePage() {
         </div>
       </section>
 
+      <section className={styles.award}>
+        <div className={styles.container}>
+          <div className={styles.awardInner}>
+            <p className={styles.awardLabel}>WEEKLY SHARE</p>
+            <h2>
+              「ゆめつき賞」は
+              <br />
+              <span>ゆめつきの書斎のガチャ</span>で決まります。
+            </h2>
+            <p>
+              毎週開催している「ゆめつきのお裾分け企画」。企画に参加するだけでは終わりません。メインの当たり「ゆめつき賞」の当選決定に、アプリのガチャが使われます。
+            </p>
+            <div className={styles.awardFlow}>
+              <FlowStep title="企画に参加" description="Xなどからお裾分け企画へ" />
+              <span>→</span>
+              <FlowStep title="アプリを開く" description="yumetsuki.jpへアクセス" />
+              <span>→</span>
+              <FlowStep title="ガチャを引く" description="ここを忘れない！" />
+              <span>→</span>
+              <FlowStep title="ゆめつき賞の当選決定" description="ガチャ結果を確認" highlighted />
+            </div>
+            <p className={styles.awardWarning}>
+              「企画には参加したけど、ガチャを引いていない」と、せっかくのチャンスを逃してしまう可能性があります。参加したら、忘れずにガチャまで！
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className={styles.section}>
         <div className={styles.container}>
-          <SectionHeading eyebrow="START" title="はじめ方は、とてもシンプル。">
-            ブラウザからアクセスして登録。トップページから、いろいろな企画や機能を楽しめます。
+          <SectionHeading eyebrow="START" title="企画に参加したら、ガチャまでやろう。">
+            お裾分け企画への参加後は、ブラウザから「ゆめつきの書斎」へ。登録・アクセスして、忘れずにガチャを引きましょう。
           </SectionHeading>
           <div className={styles.steps}>
             <Step image={searchImage} number="01" title="yumetsuki.jpで検索">
-              ブラウザからアクセスして、ゆめつきの書斎を開きます。
+              ブラウザからアクセス。まずは「yumetsuki.jp」を検索・入力するところからスタートです。
             </Step>
             <Step image={addToHomeImage} number="02" title="ホーム画面に追加">
               iPhoneでは「共有」から「ホーム画面に追加」を選ぶと、アプリのようにすぐ開けます。
             </Step>
             <Step image={signupImage} number="03" title="新規登録">
-              名前・ニックネーム・Xアカウント・メールアドレス・パスワードを入力して登録します。
+              ニックネームなどを入力して登録。登録後はトップページから各機能へ進めます。
             </Step>
           </div>
           <div className={styles.note}>
@@ -87,23 +115,23 @@ export default function GuidePage() {
             主な機能を、実際の画面と一緒に紹介します。
           </SectionHeading>
           <div className={styles.features}>
-            <Feature image={homeImage} number="04" title="今日のニブイチ">
-              4つの選択肢から今日の予想を選んで参加。ランキングや自分の結果履歴も確認できます。
+            <Feature image={homeImage} number="04" title="ニブイチ企画">
+              ガチャ結果を予想する参加型コンテンツ。リアルタイムの参加状況も楽しめます。
             </Feature>
-            <Feature image={gachaCodeImage} number="05" title="ガチャを楽しむ">
-              ガチャコードを入力して確認。限定公開のガチャは、初回にコード入力が必要です。
+            <Feature image={gachaCodeImage} number="05" title="ガチャを引く【重要】">
+              週間のお裾分け企画では、メインの当たり「ゆめつき賞」の当選決定にガチャを使用します。企画に参加したら、忘れずにガチャを引きましょう。
             </Feature>
             <Feature image={gachaListImage} number="06" title="ガチャ一覧">
-              開催中の公開ガチャを一覧から確認できます。抽選状況や結果も閲覧できます。
+              開催中のガチャや「お裾分け」企画を一覧から確認できます。
             </Feature>
-            <Feature image={quizImage} number="07" title="クイズに挑戦">
-              クイズ一覧から問題に回答。完了済みクイズやランキングも確認できます。
+            <Feature image={quizImage} number="07" title="クイズでポイントGET">
+              「ゆめつきクイズ」で問題に挑戦。正解や参加を通じてポイントを獲得できます。
             </Feature>
             <Feature image={menuImage} number="08" title="ポイントを活用">
-              コード入力や企画参加でポイントを獲得し、発送物の選択に利用できます。
+              貯めたポイントを使って、景品選択などの楽しみに繋げられます。
             </Feature>
-            <Feature image={topImage} number="09" title="アカウントを管理">
-              プロフィールの編集や、書庫に保存された思い出・オリカの確認ができます。
+            <Feature image={topImage} number="09" title="機能をまとめて利用">
+              クイズ、ガチャ、ミッション、ランキング、アカウント関連などをひとまとめに。
             </Feature>
           </div>
         </div>
@@ -115,13 +143,13 @@ export default function GuidePage() {
             <p className={styles.lightEyebrow}>QUIZ</p>
             <h2>クイズに挑戦して、ポイントをためよう。</h2>
             <p>
-              「ゆめつきクイズ」では、配信やゲームなどに関するクイズに挑戦できます。回答後は結果やランキングを確認できます。
+              「ゆめつきクイズ」では、配信やゲームなどに関するクイズに挑戦できます。参加・正解を通じてポイントを獲得し、貯めたポイントを景品選択などに活用できます。
             </p>
             <ol>
               <li>クイズ一覧から参加したい問題を選択</li>
               <li>答えを選んで回答</li>
-              <li>結果を確認</li>
-              <li>ポイントを次の楽しみに活用</li>
+              <li>結果を確認してポイントGET</li>
+              <li>貯めたポイントを次の楽しみに活用</li>
             </ol>
           </div>
           <div className={styles.quizImage}>
@@ -137,8 +165,8 @@ export default function GuidePage() {
             <TextStep number="01" title="企画を見つける">
               開催中のガチャやニブイチをチェック。気になる企画を見つけたら参加してみましょう。
             </TextStep>
-            <TextStep number="02" title="クイズや企画で遊ぶ">
-              クイズに答えたり、ニブイチで予想したり、ガチャを引いたり。いろいろな楽しみ方があります。
+            <TextStep number="02" title="企画参加後はガチャまで">
+              お裾分け企画に参加したら、ガチャを引くところまで忘れずに。ゆめつき賞の当選決定に関わる大切なステップです。
             </TextStep>
             <TextStep number="03" title="ポイントを次の楽しみに">
               ためたポイントを活用して、発送物を選択できます。
@@ -270,5 +298,22 @@ function TextStep({
         <p>{children}</p>
       </div>
     </article>
+  );
+}
+
+function FlowStep({
+  title,
+  description,
+  highlighted = false,
+}: {
+  title: string;
+  description: string;
+  highlighted?: boolean;
+}) {
+  return (
+    <div className={highlighted ? styles.flowWin : undefined}>
+      <strong>{title}</strong>
+      <small>{description}</small>
+    </div>
   );
 }
