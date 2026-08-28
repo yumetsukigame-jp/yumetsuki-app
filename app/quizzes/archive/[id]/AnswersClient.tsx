@@ -59,12 +59,17 @@ export default function AnswersClient({ quizId, correctAnswer }: { quizId: strin
         });
       }
 
+      all.sort(
+        (first, second) =>
+          Number(second.answer === correctAnswer) -
+          Number(first.answer === correctAnswer)
+      );
       setAnswers(all);
       setLoading(false);
     };
 
     load();
-  }, [quizId]);
+  }, [quizId, correctAnswer]);
 
   if (loading) return <p>回答読み込み中…</p>;
 

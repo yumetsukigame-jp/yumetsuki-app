@@ -108,15 +108,14 @@ export default function ShippingAdminPage() {
       (item): item is PendingItem => item !== null
     );
 
-    if (data.length === 0) {
-      const legacySnap = await withRetry(
-        () => getDocs(collection(db, "selectedRewards")),
-        2,
-        500,
-        10_000
-      );
-      const legacyItems = await Promise.all(
-        legacySnap.docs.map(async (d) => {
+    const legacySnap = await withRetry(
+      () => getDocs(collection(db, "selectedRewards")),
+      2,
+      500,
+      10_000
+    );
+    const legacyItems = await Promise.all(
+      legacySnap.docs.map(async (d) => {
         const rewardId = d.id;
         const rewardData = d.data();
         const uid = rewardData.uid;
@@ -143,12 +142,17 @@ export default function ShippingAdminPage() {
           userNickname: userData?.displayName ?? "名無し",
           xAccountConfirmed: userData?.xAccountConfirmed ?? false,
         } satisfies PendingItem;
-        })
-      );
-      data.push(
-        ...legacyItems.filter((item): item is PendingItem => item !== null)
-      );
+      })
+    );
+
+    // Include old records while preferring shippingPending when both exist.
+    const itemByUser = new Map(data.map((item) => [item.uid, item]));
+    for (const item of legacyItems) {
+      if (item && !itemByUser.has(item.uid)) {
+        itemByUser.set(item.uid, item);
+      }
     }
+    data.splice(0, data.length, ...itemByUser.values());
 
     data.sort((a, b) => {
       const toComparableTime = (value?: PendingItem["requestedAt"] | PendingItem["timestamp"]) => {

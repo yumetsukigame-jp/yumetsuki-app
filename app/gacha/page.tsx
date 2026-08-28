@@ -7,10 +7,9 @@ import { functions, db, auth } from "@/firebase";
 import {
   doc,
   getDoc,
-  updateDoc,
   increment,
-  setDoc,
-  collection,
+  serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
@@ -53,6 +52,7 @@ export default function GachaInner() {
   const [gif, setGif] = useState<"win" | "lose" | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isShipping, setIsShipping] = useState(false);
 
   /* --------------------------------------------------
      Auth 状態
@@ -340,6 +340,8 @@ const checkCode = async () => {
    発送処理（ガチャ）
 -------------------------------------------------- */
 const handleShipping = async () => {
+  if (isShipping) return;
+
   if (!uid) {
     alert("ログインが必要です");
     return;
@@ -353,43 +355,44 @@ const handleShipping = async () => {
   const frameName = result.frame;
   const rewardPoints = result.reward;
 
-  // ★ ユーザー情報取得（発送管理で必要）
-  const userSnap = await getDoc(doc(db, "users", uid));
-  const userData = userSnap.data() ?? {};
+  setIsShipping(true);
+  try {
+    const userSnap = await getDoc(doc(db, "users", uid));
+    const userData = userSnap.data() ?? {};
 
-  const rewardData = {
-    uid,                                // ★ 必須
-    rewardId: `gacha_${code}_${Date.now()}`,
-    name: `${frameName}（ガチャ）`,
-    cost: rewardPoints,
-    image: "/rewards/gacha.webp",
-    timestamp: new Date(),
-    shipped: false,
+    const rewardData = {
+      uid,
+      rewardId: `gacha_${code}_${Date.now()}`,
+      name: `${frameName}（ガチャ）`,
+      cost: rewardPoints,
+      image: "/rewards/gacha.webp",
+      timestamp: new Date(),
+      requestedAt: serverTimestamp(),
+      status: "pending",
+      shipped: false,
+      userName: userData.name ?? "",
+      userEmail: userData.email ?? "",
+      userX: userData.xAccount ?? "",
+      userNickname: userData.displayName ?? "",
+      xAccountConfirmed: userData.xAccountConfirmed ?? false,
+    };
 
-    // ★ 発送管理で必要なユーザー情報
-    userName: userData.name ?? "",
-    userEmail: userData.email ?? "",
-    userX: userData.xAccount ?? "",
-    userNickname: userData.displayName ?? "",
-    xAccountConfirmed: userData.xAccountConfirmed ?? false,
-  };
+    const batch = writeBatch(db);
+    // shippingPending is the source of truth for unshipped requests.
+    batch.set(doc(db, "shippingPending", uid), rewardData);
+    batch.set(doc(db, "selectedRewards", uid), rewardData);
+    batch.update(doc(db, "users", uid), {
+      points: increment(-rewardPoints),
+    });
+    await batch.commit();
 
-  // ★ selectedRewards に保存（発送管理が参照する）
-  await setDoc(doc(db, "selectedRewards", uid), rewardData);
-
-  // ★ shippingHistory に履歴保存
-  await setDoc(doc(collection(db, "shippingHistory")), {
-    ...rewardData,
-    requestedAt: new Date(),
-  });
-
-  // ★ ポイント減算
-  await updateDoc(doc(db, "users", uid), {
-    points: increment(-rewardPoints),
-  });
-
-  alert("発送物を作成しました！");
-  router.push("/reward/complete");
+    alert("発送依頼を受け付けました！");
+    router.push("/reward/complete");
+  } catch (error) {
+    console.error("発送依頼の保存に失敗しました", error);
+    alert("発送依頼を保存できませんでした。時間をおいてもう一度お試しください。");
+    setIsShipping(false);
+  }
 };
 
   /* --------------------------------------------------
@@ -608,22 +611,38 @@ const handleShipping = async () => {
 
                 if (frameInfo?.shippingEnabled) {
                   return (
-                    <button
-                      onClick={handleShipping}
-                      style={{
-                        marginTop: 20,
-                        padding: "12px 20px",
-                        background: "#ef4444",
-                        color: "white",
-                        borderRadius: 8,
-                        border: "none",
-                        cursor: "pointer",
-                        width: "100%",
-                        fontSize: 16,
-                      }}
-                    >
-                      📦 この商品を発送する
-                    </button>
+                    <>
+                      <p
+                        style={{
+                          margin: "18px 0 0",
+                          padding: "10px",
+                          background: "#fffbeb",
+                          borderRadius: 8,
+                          color: "#92400e",
+                          fontSize: 14,
+                          textAlign: "left",
+                        }}
+                      >
+                        発送処理を選択しない場合は、当選報酬のポイントが付与されます。
+                      </p>
+                      <button
+                        onClick={handleShipping}
+                        disabled={isShipping}
+                        style={{
+                          marginTop: 12,
+                          padding: "12px 20px",
+                          background: isShipping ? "#9ca3af" : "#ef4444",
+                          color: "white",
+                          borderRadius: 8,
+                          border: "none",
+                          cursor: isShipping ? "not-allowed" : "pointer",
+                          width: "100%",
+                          fontSize: 16,
+                        }}
+                      >
+                        {isShipping ? "発送依頼を保存中…" : "📦 この商品を発送する"}
+                      </button>
+                    </>
                   );
                 }
 
