@@ -29,6 +29,7 @@ type UserData = {
 type PendingItem = {
   id: string;
   uid: string;
+  source: "pending" | "done" | "legacy" | "history";
   rewardId?: string;
   name?: string;
   cost?: number;
@@ -47,6 +48,9 @@ type PendingItem = {
 
 export default function ShippingAdminPage() {
   const [list, setList] = useState<PendingItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"pending" | "done" | "all">(
+    "pending"
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -60,21 +64,29 @@ export default function ShippingAdminPage() {
   };
 
   /* --------------------------------------------------
-     データ取得（selectedRewards → shippingHistory）
+     データ取得（未発送・発送済み・過去履歴を統合）
   -------------------------------------------------- */
   const fetchData = useCallback(async () => {
     try {
-    const pendingSnap = await withRetry(
-      () =>
-        getDocs(
-          query(collection(db, "shippingPending"), orderBy("requestedAt", "desc"))
-        ),
-      2,
-      500,
-      10_000
-    );
+    const [pendingSnap, doneSnap, legacySnap, historySnap] = await Promise.all([
+      withRetry(
+        () =>
+          getDocs(
+            query(collection(db, "shippingPending"), orderBy("requestedAt", "desc"))
+          ),
+        2,
+        500,
+        10_000
+      ),
+      withRetry(() => getDocs(collection(db, "shippingDone")), 2, 500, 10_000),
+      withRetry(() => getDocs(collection(db, "selectedRewards")), 2, 500, 10_000),
+      withRetry(() => getDocs(collection(db, "shippingHistory")), 2, 500, 10_000),
+    ]);
 
-    const loadPendingItem = async (d: (typeof pendingSnap.docs)[number]) => {
+    const loadShippingItem = async (
+      d: (typeof pendingSnap.docs)[number],
+      source: PendingItem["source"]
+    ) => {
       const rewardId = d.id;
       const rewardData = d.data();
       const uid = rewardData.uid;
@@ -96,6 +108,9 @@ export default function ShippingAdminPage() {
         id: rewardId,
         uid,
         ...rewardData,
+        name: rewardData.name ?? rewardData.rewardName ?? "名称不明",
+        requestedAt: rewardData.requestedAt ?? rewardData.timestamp ?? null,
+        source,
         userName: userData?.name ?? "不明",
         userEmail: userData?.email ?? "不明",
         userX: userData?.xAccount ?? "不明",
@@ -104,55 +119,36 @@ export default function ShippingAdminPage() {
       } satisfies PendingItem;
     };
 
-    const data = (await Promise.all(pendingSnap.docs.map(loadPendingItem))).filter(
-      (item): item is PendingItem => item !== null
-    );
+    const loadItems = async (
+      docs: (typeof pendingSnap.docs),
+      source: PendingItem["source"]
+    ) =>
+      (await Promise.all(docs.map((item) => loadShippingItem(item, source)))).filter(
+        (item): item is PendingItem => item !== null
+      );
 
-    const legacySnap = await withRetry(
-      () => getDocs(collection(db, "selectedRewards")),
-      2,
-      500,
-      10_000
-    );
-    const legacyItems = await Promise.all(
-      legacySnap.docs.map(async (d) => {
-        const rewardId = d.id;
-        const rewardData = d.data();
-        const uid = rewardData.uid;
+    const [pendingItems, doneItems, legacyItems, historyItems] = await Promise.all([
+      loadItems(pendingSnap.docs, "pending"),
+      loadItems(doneSnap.docs, "done"),
+      loadItems(legacySnap.docs, "legacy"),
+      loadItems(historySnap.docs, "history"),
+    ]);
 
-        if (!uid) {
-          return null;
-        }
+    const requestKey = (item: PendingItem) => `${item.uid}:${item.rewardId ?? item.id}`;
+    const currentItems = [...pendingItems, ...doneItems];
+    const currentRequestKeys = new Set(currentItems.map(requestKey));
 
-        const userSnap = await withRetry(
-          () => getDoc(doc(db, "users", uid)),
-          2,
-          500,
-          10_000
-        );
-        const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
-
-        return {
-          id: rewardId,
-          uid,
-          ...rewardData,
-          userName: userData?.name ?? "不明",
-          userEmail: userData?.email ?? "不明",
-          userX: userData?.xAccount ?? "不明",
-          userNickname: userData?.displayName ?? "名無し",
-          xAccountConfirmed: userData?.xAccountConfirmed ?? false,
-        } satisfies PendingItem;
-      })
-    );
-
-    // Include old records while preferring shippingPending when both exist.
-    const itemByUser = new Map(data.map((item) => [item.uid, item]));
     for (const item of legacyItems) {
-      if (item && !itemByUser.has(item.uid)) {
-        itemByUser.set(item.uid, item);
+      if (!currentRequestKeys.has(requestKey(item))) {
+        currentItems.push(item);
+        currentRequestKeys.add(requestKey(item));
       }
     }
-    data.splice(0, data.length, ...itemByUser.values());
+
+    const data = [
+      ...currentItems,
+      ...historyItems.filter((item) => !currentRequestKeys.has(requestKey(item))),
+    ];
 
     data.sort((a, b) => {
       const toComparableTime = (value?: PendingItem["requestedAt"] | PendingItem["timestamp"]) => {
@@ -162,8 +158,8 @@ export default function ShippingAdminPage() {
         return new Date(value).getTime();
       };
 
-      const tA = toComparableTime(a.requestedAt ?? a.timestamp);
-      const tB = toComparableTime(b.requestedAt ?? b.timestamp);
+      const tA = toComparableTime(a.requestedAt ?? a.timestamp ?? a.shippedAt);
+      const tB = toComparableTime(b.requestedAt ?? b.timestamp ?? b.shippedAt);
       return tB - tA;
     });
 
@@ -297,7 +293,16 @@ export default function ShippingAdminPage() {
     );
   }
 
-  const paginatedList = list.slice((page - 1) * perPage, page * perPage);
+  const isDone = (item: PendingItem) =>
+    item.source === "done" ||
+    item.source === "history" ||
+    item.status === "done" ||
+    Boolean(item.shipped);
+  const filteredList = list.filter((item) => {
+    if (statusFilter === "all") return true;
+    return statusFilter === "done" ? isDone(item) : !isDone(item);
+  });
+  const paginatedList = filteredList.slice((page - 1) * perPage, page * perPage);
 
   const formatDate = (value: PendingItem["requestedAt"] | PendingItem["timestamp"] | PendingItem["shippedAt"] | null | undefined) => {
     if (!value) return "日時不明";
@@ -309,13 +314,49 @@ export default function ShippingAdminPage() {
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
       <h1 style={{ fontSize: "24px", marginBottom: "20px" }}>
-        発送管理（ユーザーが選んだ発送物一覧）
+        発送管理
       </h1>
+      <p style={{ color: "#555", marginTop: -12 }}>
+        未発送の依頼確認と発送済み履歴を、この画面でまとめて管理できます。
+      </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        {([
+          ["pending", "未発送"],
+          ["done", "発送済み"],
+          ["all", "すべて"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => {
+              setStatusFilter(value);
+              setPage(1);
+            }}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #2563eb",
+              borderRadius: 6,
+              background: statusFilter === value ? "#2563eb" : "white",
+              color: statusFilter === value ? "white" : "#2563eb",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            {label}（
+            {value === "all"
+              ? list.length
+              : list.filter((item) => (value === "done" ? isDone(item) : !isDone(item)))
+                .length}
+            ）
+          </button>
+        ))}
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         {paginatedList.map((item) => {
-          const isDone = item.status === "done" || item.shipped;
-          const isOpen = openMap[item.id] ?? !isDone;
+          const itemIsDone = isDone(item);
+          const isOpen = openMap[item.id] ?? !itemIsDone;
 
           return (
             <div
@@ -324,7 +365,7 @@ export default function ShippingAdminPage() {
                 border: "1px solid #ddd",
                 borderRadius: "8px",
                 padding: "16px",
-                background: isDone ? "#f5f5f5" : "#fffbe6",
+                background: itemIsDone ? "#f5f5f5" : "#fffbe6",
               }}
             >
               {/* ▼ ヘッダー */}
@@ -359,7 +400,7 @@ export default function ShippingAdminPage() {
                     </span>
                     <br />
                     <span style={{ fontSize: "12px", color: "#666" }}>
-                      {isDone
+                      {itemIsDone
                         ? `発送済み：${formatDate(item.shippedAt)}`
                         : "未発送"}
                     </span>
@@ -401,11 +442,11 @@ export default function ShippingAdminPage() {
                   <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
                   <button
-                    onClick={() => toggleShipped(item.id, Boolean(isDone), item)}
+                    onClick={() => toggleShipped(item.id, itemIsDone, item)}
                     style={{
                       marginTop: "12px",
                       padding: "10px 16px",
-                      background: isDone ? "#aaa" : "#10b981",
+                      background: itemIsDone ? "#aaa" : "#10b981",
                       color: "white",
                       borderRadius: "8px",
                       border: "none",
@@ -413,7 +454,7 @@ export default function ShippingAdminPage() {
                       minWidth: "140px",
                     }}
                   >
-                    {isDone ? "未発送に戻す" : "発送済みにする"}
+                    {itemIsDone ? "未発送に戻す" : "発送済みにする"}
                   </button>
                 </div>
               )}
@@ -421,6 +462,16 @@ export default function ShippingAdminPage() {
           );
         })}
       </div>
+
+      {filteredList.length === 0 && (
+        <p style={{ textAlign: "center", color: "#666", marginTop: 32 }}>
+          {statusFilter === "pending"
+            ? "未発送の依頼はありません。"
+            : statusFilter === "done"
+              ? "発送済みの履歴はありません。"
+              : "発送依頼はありません。"}
+        </p>
+      )}
 
       {/* ページネーション */}
       <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
@@ -431,7 +482,7 @@ export default function ShippingAdminPage() {
         <span>ページ {page}</span>
 
         <button
-          disabled={page * perPage >= list.length}
+          disabled={page * perPage >= filteredList.length}
           onClick={() => setPage(page + 1)}
         >
           次へ

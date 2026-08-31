@@ -26,6 +26,7 @@ type GachaFrame = {
   label?: string;
   name?: string;
   maxCount?: number;
+  usedCount?: number;
   [key: string]: unknown;
 };
 
@@ -53,6 +54,11 @@ type GachaResultRecord = {
   [key: string]: unknown;
 };
 
+type Playability = {
+  canPlay: boolean;
+  reason: string;
+};
+
 /* --------------------------------------------------
    Timestamp を安全に Date に変換
 -------------------------------------------------- */
@@ -75,6 +81,14 @@ function normalizeXAccount(value: string): string {
     .replace(/[\s\r\n\t]+/g, "")
     .replace(/[@＠]/g, "")
     .replace(/[\u200B-\u200D\uFEFF]/g, "");
+}
+
+function getYesterdayJST6() {
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+  now.setDate(now.getDate() - (now.getHours() < 6 ? 2 : 1));
+  return now.toISOString().slice(0, 10);
 }
 
 async function getUserInfo(uid: string) {
@@ -114,6 +128,9 @@ export default function PublicGachaListPage() {
   const [drawnXAccounts, setDrawnXAccounts] = useState<Record<string, string[]>>({});
   const [drawnXAccountErrors, setDrawnXAccountErrors] = useState<Record<string, string>>({});
   const [loadingDrawnXAccounts, setLoadingDrawnXAccounts] = useState<Record<string, boolean>>({});
+  const [playability, setPlayability] = useState<Record<string, Playability>>({});
+  const [checkingPlayability, setCheckingPlayability] = useState(false);
+  const [playabilityError, setPlayabilityError] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -252,6 +269,108 @@ export default function PublicGachaListPage() {
     }
   };
 
+  const checkPlayableGachas = async () => {
+    if (checkingPlayability) return;
+
+    setCheckingPlayability(true);
+    setPlayabilityError("");
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        setPlayability(
+          Object.fromEntries(
+            gachas.map((gacha) => [
+              gacha.code,
+              { canPlay: false, reason: "ログインが必要です" },
+            ])
+          )
+        );
+        setOpen({});
+        setOpenXAccounts({});
+        return;
+      }
+
+      const userSnap = await getDoc(doc(db, "users", user.uid));
+      if (!userSnap.exists()) {
+        throw new Error("ユーザー情報を取得できませんでした。");
+      }
+
+      const userData = userSnap.data();
+      const points = Number(userData.points ?? 0);
+      const userXAccount = normalizeXAccount(String(userData.xAccount ?? ""));
+      const yesterday = getYesterdayJST6();
+
+      const checks = await Promise.all(
+        gachas.map(async (gacha): Promise<[string, Playability]> => {
+          const flags = gacha.publicFlags ?? [];
+          const historySnap = await getDoc(
+            doc(db, "userGachaHistory", `${user.uid}_${gacha.code}`)
+          );
+          const history = historySnap.data();
+
+          if (flags.includes("limited") && !historySnap.exists()) {
+            return [gacha.code, { canPlay: false, reason: "ガチャコードの入力が必要です" }];
+          }
+          if (flags.includes("subscriber") && !userData.subscriber) {
+            return [gacha.code, { canPlay: false, reason: "サブスク会員限定です" }];
+          }
+          if (flags.includes("nibuichi_winner")) {
+            const predictionSnap = await getDoc(
+              doc(db, "nibuichi_daily", yesterday, "predictions", user.uid)
+            );
+            const prediction = predictionSnap.data();
+            if (!prediction || prediction.prediction !== prediction.result) {
+              return [gacha.code, { canPlay: false, reason: "前日のニブイチ的中者限定です" }];
+            }
+          }
+          if (flags.includes("x_account_match")) {
+            const isMatched = Boolean(userXAccount) &&
+              (gacha.xAccountList ?? []).some((account) =>
+                normalizeXAccount(account).includes(userXAccount)
+              );
+            if (!isMatched) {
+              return [gacha.code, { canPlay: false, reason: "対象のXアカウントではありません" }];
+            }
+          }
+          if (points < (gacha.point?.cost ?? 0)) {
+            return [gacha.code, { canPlay: false, reason: "ポイントが不足しています" }];
+          }
+          if ((history?.count ?? 0) >= (gacha.point?.maxPerUser ?? 0)) {
+            return [gacha.code, { canPlay: false, reason: "回数上限に達しています" }];
+          }
+          if (
+            gacha.mode === "count" &&
+            (gacha.frames ?? []).every(
+              (frame) => (frame.maxCount ?? 0) - (frame.usedCount ?? 0) <= 0
+            )
+          ) {
+            return [gacha.code, { canPlay: false, reason: "すべての枠が終了しています" }];
+          }
+
+          return [gacha.code, { canPlay: true, reason: "" }];
+        })
+      );
+
+      const nextPlayability = Object.fromEntries(checks);
+      setPlayability(nextPlayability);
+      setOpen((previous) =>
+        Object.fromEntries(
+          Object.entries(previous).filter(([code]) => nextPlayability[code]?.canPlay)
+        )
+      );
+      setOpenXAccounts((previous) =>
+        Object.fromEntries(
+          Object.entries(previous).filter(([code]) => nextPlayability[code]?.canPlay)
+        )
+      );
+    } catch (error) {
+      console.error("ガチャの利用可否確認に失敗しました", error);
+      setPlayabilityError("利用可否を確認できませんでした。時間をおいてもう一度お試しください。");
+    } finally {
+      setCheckingPlayability(false);
+    }
+  };
+
   /* --------------------------------------------------
      publicFlags 表示
   -------------------------------------------------- */
@@ -271,6 +390,29 @@ export default function PublicGachaListPage() {
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 20 }}>🌟 ガチャ一覧</h1>
+
+      <button
+        type="button"
+        onClick={() => void checkPlayableGachas()}
+        disabled={checkingPlayability || loading}
+        style={{
+          width: "100%",
+          marginBottom: 12,
+          padding: 12,
+          background: checkingPlayability ? "#9ca3af" : "#16a34a",
+          color: "white",
+          borderRadius: 8,
+          border: "none",
+          cursor: checkingPlayability || loading ? "not-allowed" : "pointer",
+          fontWeight: "bold",
+          fontSize: 16,
+        }}
+      >
+        {checkingPlayability ? "引けるガチャを確認中…" : "引けるガチャを確認する"}
+      </button>
+      {playabilityError && (
+        <p style={{ margin: "0 0 12px", color: "#dc2626" }}>{playabilityError}</p>
+      )}
 
       {/* ソート */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -322,6 +464,8 @@ export default function PublicGachaListPage() {
             )
           );
           const isXAccountMatch = g.publicFlags?.includes("x_account_match") ?? false;
+          const playabilityResult = playability[g.code];
+          const isUnavailable = playabilityResult?.canPlay === false;
           const hasCheckedDrawnXAccounts = g.code in drawnXAccounts;
           const drawnTargetCount = targetXAccounts.filter((account) =>
             drawnAccountsForThis.has(normalizeXAccount(account))
@@ -339,6 +483,7 @@ export default function PublicGachaListPage() {
           const upperFrames = frames.slice(0, lastIndex);
 
           const isGrayOut =
+            isUnavailable ||
             upperFrames.length > 0 &&
             upperFrames.every((f: GachaFrame) => {
               const used = resultsForThis.filter(
@@ -396,6 +541,11 @@ export default function PublicGachaListPage() {
               </h2>
 
               <p style={{ margin: "6px 0" }}>{renderFlags(g.publicFlags)}</p>
+              {isUnavailable && (
+                <p style={{ margin: "6px 0", color: "#4b5563", fontWeight: "bold" }}>
+                  現在は引けません：{playabilityResult.reason}
+                </p>
+              )}
 
               {isXAccountMatch && (
                 <div style={{ margin: "10px 0" }}>

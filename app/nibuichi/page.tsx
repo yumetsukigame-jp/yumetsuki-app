@@ -166,6 +166,12 @@ export default function NibuichiPage() {
       >
         📖 ニブイチの遊び方・ルールを見る
       </Link>
+      <Link
+        href="/nibuichi/calendar"
+        className="block rounded-lg border-2 border-violet-400 bg-violet-50 p-4 text-center font-bold text-violet-800 shadow"
+      >
+        📅 ニブイチ勝敗カレンダーを見る
+      </Link>
 
       {/* ★ ニブイチの参加方法（ルール） */}
       <div className="bg-white shadow p-4 rounded-lg">

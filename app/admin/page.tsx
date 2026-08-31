@@ -232,8 +232,7 @@ export default function AdminTopPage() {
       <Section title="📦 発送管理" forceCollapseAll>
         <MenuLink href="/admin/rewards">発送物一覧</MenuLink>
         <MenuLink href="/admin/rewards/add">発送物を作成</MenuLink>
-        <MenuLink href="/admin/shipping">発送管理（発送物確認）</MenuLink>
-        <MenuLink href="/admin/shipping/history">発送履歴</MenuLink>
+        <MenuLink href="/admin/shipping">発送管理・発送履歴</MenuLink>
         <MenuLink href="/admin/shipping/stats">発送数集計</MenuLink>
       </Section>
 
