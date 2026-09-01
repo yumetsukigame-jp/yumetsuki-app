@@ -92,6 +92,12 @@ export default function NibuichiCalendarPage() {
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
   ];
+  const monthlyCounts = Object.fromEntries(
+    Object.keys(resultStyles).map((result) => [
+      result,
+      Object.values(results).filter((value) => value === result).length,
+    ])
+  ) as Record<string, number>;
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
@@ -111,6 +117,32 @@ export default function NibuichiCalendarPage() {
         <button type="button" onClick={() => setSelectedMonth((month) => moveMonth(month, 1))} style={monthButtonStyle}>
           翌月 →
         </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 8,
+          marginBottom: 16,
+        }}
+      >
+        {Object.entries(resultStyles).map(([result, value]) => (
+          <div
+            key={result}
+            style={{
+              padding: "10px 4px",
+              background: value.background,
+              borderRadius: 8,
+              color: value.color,
+              fontWeight: "bold",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: "0.85rem" }}>{value.label}</div>
+            <div style={{ marginTop: 2, fontSize: "1.15rem" }}>{monthlyCounts[result]}回</div>
+          </div>
+        ))}
       </div>
 
       <div
