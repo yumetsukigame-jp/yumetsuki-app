@@ -47,6 +47,21 @@ export default function ArchivePage() {
         >
           過去の企画
         </a>
+
+        <a
+          href="/archive/osusowake"
+          style={{
+            padding: "12px",
+            background: "#db2777",
+            color: "white",
+            borderRadius: "8px",
+            textDecoration: "none",
+            fontSize: "18px",
+            fontWeight: "bold",
+          }}
+        >
+          ゆめつきのお裾分け100回記念動画
+        </a>
       </div>
     </div>
   );
