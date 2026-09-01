@@ -25,15 +25,15 @@ export default function OsusowakeAnniversaryPage() {
         }}
       >
         <source
-          src="/archive/osusowake/yumetsuki100Anniv.MOV"
-          type="video/quicktime"
+          src="/archive/osusowake/yumetsuki100Anniv.mp4"
+          type="video/mp4"
         />
         このブラウザでは動画を再生できません。
       </video>
 
       <p style={{ marginTop: 16, textAlign: "center" }}>
         <a
-          href="/archive/osusowake/yumetsuki100Anniv.MOV"
+          href="/archive/osusowake/yumetsuki100Anniv.mp4"
           style={{ color: "#2563eb", fontWeight: "bold" }}
         >
           動画を開く
