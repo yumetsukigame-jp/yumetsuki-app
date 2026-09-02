@@ -387,6 +387,15 @@ export default function PublicGachaListPage() {
     return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
+  const displayGachas =
+    Object.keys(playability).length > 0
+      ? [...gachas].sort(
+          (first, second) =>
+            Number(playability[second.code]?.canPlay) -
+            Number(playability[first.code]?.canPlay)
+        )
+      : gachas;
+
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 20 }}>🌟 ガチャ一覧</h1>
@@ -449,7 +458,7 @@ export default function PublicGachaListPage() {
       {!loading && gachas.length === 0 && <p>表示できるガチャがありません。</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {gachas.map((g) => {
+        {displayGachas.map((g) => {
           const isOpen = open[g.code] ?? false;
           const isXAccountsOpen = openXAccounts[g.code] ?? false;
           const resultsForThis = resultsMap[g.code] ?? [];
