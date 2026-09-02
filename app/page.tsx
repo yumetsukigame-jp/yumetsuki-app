@@ -385,7 +385,7 @@ export default function Home() {
       </Section>
 
       {/* 👤 アカウント */}
-      <Section title="👤 アカウント" color="#16a34a" forceCollapseAll={true}>
+      <Section title="👤 アカウント" color="#16a34a">
         <MenuButton href="/archive" color="#16a34a">
           書庫を見る
         </MenuButton>
