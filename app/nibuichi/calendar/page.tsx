@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { collection, documentId, endAt, getDocs, orderBy, query, startAt } from "firebase/firestore";
-import { db } from "@/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, documentId, endAt, getDocs, orderBy, query, startAt, where } from "firebase/firestore";
+import { auth, db } from "@/firebase";
 import LoadingState from "@/app/components/LoadingState";
 
 type DailyResult = {
   result?: string;
+};
+
+type DailyPrediction = {
+  date?: string;
+  prediction?: string;
 };
 
 const resultStyles: Record<string, { label: string; background: string; color: string }> = {
@@ -35,8 +41,12 @@ export default function NibuichiCalendarPage() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [results, setResults] = useState<Record<string, string>>({});
+  const [predictions, setPredictions] = useState<Record<string, string>>({});
+  const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  useEffect(() => onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,27 +57,61 @@ export default function NibuichiCalendarPage() {
       const month = formatMonth(selectedMonth);
 
       try {
-        const resultQuery = query(
-          collection(db, "nibuichi_global"),
-          orderBy(documentId()),
-          startAt(`${month}-01`),
-          endAt(`${month}-\uf8ff`)
+        const resultRequest = getDocs(
+          query(
+            collection(db, "nibuichi_global"),
+            orderBy(documentId()),
+            startAt(`${month}-01`),
+            endAt(`${month}-\uf8ff`)
+          )
         );
-        const snapshot = await getDocs(resultQuery);
+        const archivedPredictionsRequest = uid
+          ? getDocs(
+              query(
+                collection(db, "nibuichi_user_predictions_archive"),
+                where("uid", "==", uid)
+              )
+            )
+          : Promise.resolve(null);
+        const currentPredictionsRequest = uid
+          ? getDocs(
+              query(
+                collection(db, "nibuichi_user_predictions"),
+                where("uid", "==", uid)
+              )
+            )
+          : Promise.resolve(null);
+        const [snapshot, archivedPredictions, currentPredictions] = await Promise.all([
+          resultRequest,
+          archivedPredictionsRequest,
+          currentPredictionsRequest,
+        ]);
         const nextResults = Object.fromEntries(
           snapshot.docs.map((result) => [
             result.id,
             (result.data() as DailyResult).result ?? "",
           ])
         );
+        const nextPredictions = Object.fromEntries(
+          [...(archivedPredictions?.docs ?? []), ...(currentPredictions?.docs ?? [])]
+            .map((prediction) => prediction.data() as DailyPrediction)
+            .filter(
+              (prediction) =>
+                prediction.date?.startsWith(`${month}-`) &&
+                typeof prediction.prediction === "string"
+            )
+            .map((prediction) => [prediction.date!, prediction.prediction!])
+        );
 
         if (!cancelled) {
           setResults(nextResults);
+          setPredictions(nextPredictions);
         }
       } catch (error) {
         console.error("ニブイチ勝敗カレンダーの読み込みに失敗しました", error);
         if (!cancelled) {
           setResults({});
+          setPredictions({});
           setLoadError("勝敗データを読み込めませんでした。");
         }
       } finally {
@@ -82,7 +126,7 @@ export default function NibuichiCalendarPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedMonth]);
+  }, [selectedMonth, uid]);
 
   const year = selectedMonth.getFullYear();
   const monthIndex = selectedMonth.getMonth();
@@ -176,6 +220,7 @@ export default function NibuichiCalendarPage() {
           const date = `${formatMonth(selectedMonth)}-${String(day).padStart(2, "0")}`;
           const result = results[date];
           const resultStyle = resultStyles[result];
+          const isHit = Boolean(result) && predictions[date] === result;
 
           return (
             <div
@@ -183,6 +228,7 @@ export default function NibuichiCalendarPage() {
               style={{
                 ...calendarCellStyle,
                 background: resultStyle?.background ?? "white",
+                position: "relative",
               }}
             >
               <span style={{ color: index % 7 === 0 ? "#dc2626" : index % 7 === 6 ? "#2563eb" : "#111827" }}>
@@ -192,6 +238,28 @@ export default function NibuichiCalendarPage() {
                 <strong style={{ display: "block", marginTop: 8, color: resultStyle.color, fontSize: "0.85rem" }}>
                   {resultStyle.label}
                 </strong>
+              )}
+              {isHit && (
+                <span
+                  aria-label="あなたの予想が的中"
+                  title="あなたの予想が的中"
+                  style={{
+                    position: "absolute",
+                    right: 4,
+                    bottom: 4,
+                    display: "grid",
+                    width: 22,
+                    height: 22,
+                    placeItems: "center",
+                    borderRadius: "50%",
+                    background: "#16a34a",
+                    color: "white",
+                    fontSize: "0.8rem",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ✓
+                </span>
               )}
             </div>
           );
