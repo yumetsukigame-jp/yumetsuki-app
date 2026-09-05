@@ -15,7 +15,11 @@ export {
 
 export { sendPasswordResetLink } from "./passwordReset";
 export { sendTestResendEmail } from "./testEmail";
-export { createUserProfile, updateUserProfile } from "./userProfile";
+export {
+  createUserProfile,
+  updateUserProfile,
+  syncUserEmail,
+} from "./userProfile";
 
 export * from "./nibuichi";
 

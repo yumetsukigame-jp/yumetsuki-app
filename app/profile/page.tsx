@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { auth, db, functions } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  signOut,
+  updateEmail,
+  updatePassword,
+} from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
@@ -13,8 +20,15 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState("");
   const [xAccount, setXAccount] = useState("");
   const [xAccountConfirmed, setXAccountConfirmed] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingEmail, setUpdatingEmail] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -23,6 +37,7 @@ export default function ProfilePage() {
         return;
       }
 
+      setAccountEmail(user.email ?? "");
       try {
         const snap = await withRetry(() => getDoc(doc(db, "users", user.uid)));
         if (snap.exists()) {
@@ -90,6 +105,75 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     await signOut(auth);
     window.location.href = "/";
+  };
+
+  const reauthenticate = async () => {
+    const user = auth.currentUser;
+    if (!user?.email) {
+      throw new Error("メールアドレスの確認に失敗しました。再度ログインしてください。");
+    }
+
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    return user;
+  };
+
+  const handleUpdateEmail = async () => {
+    if (updatingEmail) return;
+
+    const email = newEmail.trim();
+    if (!currentPassword || !email) {
+      alert("現在のパスワードと新しいメールアドレスを入力してください。");
+      return;
+    }
+
+    setUpdatingEmail(true);
+    try {
+      const user = await reauthenticate();
+      await updateEmail(user, email);
+      await httpsCallable<undefined, { updated: boolean; email: string }>(
+        functions,
+        "syncUserEmail"
+      )();
+      setAccountEmail(email);
+      setNewEmail("");
+      setCurrentPassword("");
+      alert("メールアドレスを変更しました。");
+    } catch (error) {
+      console.error("メールアドレスの変更に失敗しました", error);
+      alert(getAccountUpdateErrorMessage(error));
+    } finally {
+      setUpdatingEmail(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (updatingPassword) return;
+
+    if (!currentPassword || !newPassword || !passwordConfirmation) {
+      alert("現在のパスワードと新しいパスワードを入力してください。");
+      return;
+    }
+
+    if (newPassword !== passwordConfirmation) {
+      alert("新しいパスワードが一致しません。");
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      const user = await reauthenticate();
+      await updatePassword(user, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordConfirmation("");
+      alert("パスワードを変更しました。");
+    } catch (error) {
+      console.error("パスワードの変更に失敗しました", error);
+      alert(getAccountUpdateErrorMessage(error));
+    } finally {
+      setUpdatingPassword(false);
+    }
   };
 
   if (loading) {
@@ -215,6 +299,73 @@ export default function ProfilePage() {
         </button>
       </div>
 
+      <section
+        style={{
+          background: "white",
+          padding: "20px",
+          borderRadius: "12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          marginTop: "24px",
+          textAlign: "left",
+        }}
+      >
+        <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>ログイン情報の変更</h2>
+        <p style={{ margin: "0 0 16px", fontSize: "14px", color: "#4b5563" }}>
+          現在のメールアドレス：{accountEmail || "未設定"}
+        </p>
+
+        <input
+          type="password"
+          autoComplete="current-password"
+          placeholder="現在のパスワード"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          style={{ ...inputStyle, marginBottom: "12px" }}
+        />
+
+        <input
+          type="email"
+          autoComplete="email"
+          placeholder="新しいメールアドレス"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          style={{ ...inputStyle, marginBottom: "12px" }}
+        />
+        <button
+          onClick={handleUpdateEmail}
+          disabled={updatingEmail}
+          style={accountButtonStyle(updatingEmail)}
+        >
+          {updatingEmail ? "メールアドレスを変更中…" : "メールアドレスを変更する"}
+        </button>
+
+        <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "24px 0" }} />
+
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="新しいパスワード（6文字以上）"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          style={{ ...inputStyle, marginBottom: "12px" }}
+        />
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="新しいパスワード（確認）"
+          value={passwordConfirmation}
+          onChange={(e) => setPasswordConfirmation(e.target.value)}
+          style={{ ...inputStyle, marginBottom: "12px" }}
+        />
+        <button
+          onClick={handleUpdatePassword}
+          disabled={updatingPassword}
+          style={accountButtonStyle(updatingPassword)}
+        >
+          {updatingPassword ? "パスワードを変更中…" : "パスワードを変更する"}
+        </button>
+      </section>
+
       {/* ログアウト */}
       <button
         onClick={handleLogout}
@@ -242,3 +393,41 @@ const inputStyle = {
   fontSize: "16px",
   width: "100%",
 };
+
+function accountButtonStyle(disabled: boolean) {
+  return {
+    width: "100%",
+    padding: "12px",
+    background: disabled ? "#9ca3af" : "#4f46e5",
+    color: "white",
+    borderRadius: "8px",
+    border: "none",
+    fontSize: "16px",
+    fontWeight: "bold",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+function getAccountUpdateErrorMessage(error: unknown): string {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? error.code
+      : "";
+
+  switch (code) {
+    case "auth/wrong-password":
+      return "現在のパスワードが正しくありません。";
+    case "auth/invalid-credential":
+      return "現在のパスワードが正しくありません。";
+    case "auth/email-already-in-use":
+      return "このメールアドレスはすでに使用されています。";
+    case "auth/invalid-email":
+      return "メールアドレスの形式が正しくありません。";
+    case "auth/weak-password":
+      return "新しいパスワードは6文字以上で設定してください。";
+    case "auth/requires-recent-login":
+      return "安全のため、いったんログアウトしてから再度ログインしてください。";
+    default:
+      return "変更に失敗しました。もう一度お試しください。";
+  }
+}

@@ -212,3 +212,28 @@ export const updateUserProfile = functions
 
     return { updated: true };
   });
+
+export const syncUserEmail = functions
+  .region("us-east1")
+  .https.onCall(async (_data: unknown, context) => {
+    const uid = requireUid(context);
+    const authUser = await admin.auth().getUser(uid);
+    if (!authUser.email) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "メールアドレスが設定されていません。"
+      );
+    }
+
+    const userRef = db.collection("users").doc(uid);
+    const user = await userRef.get();
+    if (!user.exists) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "プロフィールが見つかりません。"
+      );
+    }
+
+    await userRef.update({ email: authUser.email });
+    return { updated: true, email: authUser.email };
+  });

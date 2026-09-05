@@ -82,6 +82,20 @@ type GachaResultRow = {
   thumbnail?: string;
 };
 
+function matchesXAccount(gacha: GachaDocument, xAccount: unknown): boolean {
+  const userX = normalizeX(
+    typeof xAccount === "string" ? xAccount : undefined
+  );
+  if (!userX) {
+    return false;
+  }
+
+  return (gacha.xAccountList ?? [])
+    .filter((account): account is string => typeof account === "string" && account.includes("@"))
+    .map((account) => normalizeX(account))
+    .some((account) => account.includes(userX));
+}
+
 /* ============================================================
    ガチャ機能（v1 化）
 ============================================================ */
@@ -335,21 +349,14 @@ export const useGachaCode = functions
         const userSnap = await userRef.get();
         const userData = userSnap.data();
 
-        const userX = normalizeX(userData?.xAccount);
-        if (!userX) {
+        if (!normalizeX(userData?.xAccount)) {
           throw new functions.https.HttpsError(
             "permission-denied",
             "このガチャはXアカウント登録者のみ引けます"
           );
         }
 
-        const rawList = (gacha.xAccountList ?? []).filter((s: string) =>
-          s.includes("@")
-        );
-        const list = rawList.map((s: string) => normalizeX(s));
-        const matched = list.some((entry: string) => entry.includes(userX));
-
-        if (!matched) {
+        if (!matchesXAccount(gacha, userData?.xAccount)) {
           throw new functions.https.HttpsError(
             "permission-denied",
             "このガチャは指定されたXアカウントのみ引けます"
@@ -467,6 +474,19 @@ export const useGachaCode = functions
           );
         }
 
+        const shouldConfirmXAccount =
+          freshGacha.publicFlags.includes("x_account_match") &&
+          freshUser.xAccountConfirmed !== true;
+        if (
+          shouldConfirmXAccount &&
+          !matchesXAccount(freshGacha, freshUser.xAccount)
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Xアカウントの確認が必要です。もう一度お試しください"
+          );
+        }
+
         const freshHistorySnap = await tx.get(historyRef);
         const freshHistory = freshHistorySnap.exists
           ? freshHistorySnap.data()!
@@ -474,6 +494,7 @@ export const useGachaCode = functions
 
         tx.update(userRef, {
           points: freshPoints - cost + reward,
+          ...(shouldConfirmXAccount ? { xAccountConfirmed: true } : {}),
         });
 
         tx.set(historyRef, {
