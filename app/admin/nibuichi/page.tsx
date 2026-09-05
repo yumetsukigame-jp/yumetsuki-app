@@ -66,6 +66,14 @@ export default function AdminNibuichiPage() {
         return;
       }
 
+      const adminRef = doc(db, "admins", currentUser.uid);
+      const adminSnap = await getDoc(adminRef);
+      if (!adminSnap.exists()) {
+        setUser(null);
+        setAccessChecked(true);
+        return;
+      }
+
       setUser(currentUser);
       setAccessChecked(true);
       void fetchStats().catch((error) => {

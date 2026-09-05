@@ -2,7 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { Timestamp } from "firebase-admin/firestore";
 import { createHash } from "crypto";
-import sgMail from "@sendgrid/mail";
+import { Resend } from "resend";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -27,7 +27,7 @@ function emailHash(email: string): string {
 
 export const sendPasswordResetLink = functions
   .region("us-east1")
-  .runWith({ secrets: ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"] })
+  .runWith({ secrets: ["RESEND_API_KEY", "RESEND_FROM_EMAIL"] })
   .https.onCall(async (data: unknown) => {
     if (!isRequestData(data)) {
       throw new functions.https.HttpsError(
@@ -44,10 +44,10 @@ export const sendPasswordResetLink = functions
       );
     }
 
-    const apiKey = process.env.SENDGRID_API_KEY;
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+    const apiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
     if (!apiKey || !fromEmail) {
-      console.error("SendGrid secrets are not configured.");
+      console.error("Resend secrets are not configured.");
       throw new functions.https.HttpsError(
         "internal",
         "メール送信の設定に問題があります。"
@@ -99,14 +99,17 @@ export const sendPasswordResetLink = functions
         url: PASSWORD_RESET_CONTINUE_URL,
       });
 
-      sgMail.setApiKey(apiKey);
-      await sgMail.send({
+      const resend = new Resend(apiKey);
+      const { error } = await resend.emails.send({
         to: email,
         from: fromEmail,
         subject: "【ゆめつきの書斎】パスワード再設定のご案内",
         text: `パスワードを再設定するには、以下のリンクを開いてください。\n\n${resetLink}\n\nこのメールに心当たりがない場合は、何もせず削除してください。`,
         html: `<p>パスワードを再設定するには、以下のリンクを開いてください。</p><p><a href="${resetLink}">パスワードを再設定する</a></p><p>このメールに心当たりがない場合は、何もせず削除してください。</p>`,
       });
+      if (error) {
+        throw error;
+      }
     } catch (error) {
       console.error("Failed to send password reset email.", error);
       throw new functions.https.HttpsError(

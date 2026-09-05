@@ -9,6 +9,7 @@ if (!admin.apps.length) {
 }
 
 const db = getFirestore();
+const validPredictions = ["bakuado", "nibuni", "nibuichi", "nibuzero"];
 
 /* ============================================================
    ★ 自動：ニブイチ前日集計（v1 化）
@@ -168,6 +169,13 @@ export const manualResetNibuichiDaily = functions
         "ログインが必要です"
       );
     }
+    const adminSnap = await db.collection("admins").doc(adminUid).get();
+    if (!adminSnap.exists) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "管理者のみ手動集計を実行できます"
+      );
+    }
 
     const targetDate = getYesterdayJST6();
     const dailyRef = db.collection("nibuichi_global").doc(targetDate);
@@ -215,13 +223,15 @@ export const manualResetNibuichiDaily = functions
 
       const userStats = userStatsSnap.exists
         ? userStatsSnap.data()!
-        : { total: 0, hit: 0 };
+        : { total: 0, hit: 0, weeklyTotal: 0, weeklyHit: 0 };
 
       statsBatch.set(
         userStatsRef,
         {
           total: userStats.total + 1,
           hit: userStats.hit + (isHit ? 1 : 0),
+          weeklyTotal: (userStats.weeklyTotal ?? 0) + 1,
+          weeklyHit: (userStats.weeklyHit ?? 0) + (isHit ? 1 : 0),
           updatedAt: Timestamp.now(),
         },
         { merge: true }
@@ -232,6 +242,18 @@ export const manualResetNibuichiDaily = functions
 
         userBatch.update(userRef, {
           points: FieldValue.increment(perUserReward),
+        });
+
+        const phRef = db.collection("pointHistory").doc();
+        userBatch.set(phRef, {
+          id: phRef.id,
+          user: uid,
+          type: "nibuichi",
+          added: perUserReward,
+          prediction,
+          result,
+          date: targetDate,
+          createdAt: Timestamp.now(),
         });
       }
 
@@ -270,6 +292,14 @@ export const manualResetNibuichiDaily = functions
     await userBatch.commit();
     await archiveBatch.commit();
     await deleteBatch.commit();
+
+    await db.collection("systemLogs").add({
+      type: "nibuichiDailyReset",
+      executedAt: Timestamp.now(),
+      targetDate,
+      hitCount,
+      manual: true,
+    });
 
     return { message: `ニブイチ手動集計完了（対象日：${targetDate}）` };
   });
@@ -386,8 +416,8 @@ export const saveNibuichiPrediction = functions
     }
 
     const prediction = data.prediction;
-    if (!prediction) {
-      throw new functions.https.HttpsError("invalid-argument", "prediction が必要です");
+    if (!validPredictions.includes(prediction)) {
+      throw new functions.https.HttpsError("invalid-argument", "予想の値が不正です");
     }
 
     const date = getTodayJST6();
@@ -423,8 +453,16 @@ export const submitNibuichiResult = functions
     const result = data.result;
     const rewardPoints = data.rewardPoints ?? 0;
 
-    if (!result) {
-      throw new functions.https.HttpsError("invalid-argument", "result が必要です");
+    const adminSnap = await db.collection("admins").doc(uid).get();
+    if (!adminSnap.exists) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "管理者のみ結果を登録できます"
+      );
+    }
+
+    if (!validPredictions.includes(result)) {
+      throw new functions.https.HttpsError("invalid-argument", "結果の値が不正です");
     }
 
     const date = getTodayJST6();

@@ -5,12 +5,24 @@ import { httpsCallable } from "firebase/functions";
 import { functions, db } from "@/firebase";
 import { doc, getDoc, getDocs, collection } from "firebase/firestore";
 
+// functions/src/common/normalize.ts の normalizeX と同じ正規化ルール
+function normalizeX(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[\s\r\n\t]+/g, "")
+    .replace(/[()（）【】［］]/g, "")
+    .replace(/[@＠]/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[^\x20-\x7E]/g, "");
+}
+
 export default function AdminGachaResultsPage() {
   const [results, setResults] = useState<any[]>([]);
   const [grouped, setGrouped] = useState<any>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const [xOpen, setXOpen] = useState<{ [key: string]: boolean }>({}); // ★ Xアカ用折りたたみ
   const [gachaInfo, setGachaInfo] = useState<any>({});
+  const [xDrawnCounts, setXDrawnCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +53,43 @@ export default function AdminGachaResultsPage() {
     });
     setGachaInfo(info);
 
+    setXDrawnCounts(await computeXDrawnCounts(groupedData, info));
+
     setLoading(false);
+  };
+
+  // ★ 対象Xアカウントのうち、実際に抽選済み（既に結果がある）ユーザー数を集計
+  const computeXDrawnCounts = async (
+    groupedData: Record<string, any[]>,
+    info: Record<string, any>
+  ) => {
+    const counts: Record<string, number> = {};
+
+    for (const [code, items] of Object.entries(groupedData)) {
+      const flags = info[code]?.publicFlags ?? [];
+      if (!flags.includes("x_account_match")) continue;
+
+      const xList = (info[code]?.xAccountList ?? [])
+        .filter((s: string) => s.includes("@"))
+        .map((s: string) => normalizeX(s));
+      if (xList.length === 0) continue;
+
+      const uniqueUids = Array.from(new Set(items.map((r: any) => r.uid)));
+      const matchedUids = new Set<string>();
+
+      for (const uid of uniqueUids) {
+        const userSnap = await getDoc(doc(db, "users", uid));
+        if (!userSnap.exists()) continue;
+        const userX = normalizeX(userSnap.data()?.xAccount);
+        if (userX && xList.some((entry: string) => entry.includes(userX))) {
+          matchedUids.add(uid);
+        }
+      }
+
+      counts[code] = matchedUids.size;
+    }
+
+    return counts;
   };
 
   const getUserInfo = async (uid: string) => {
@@ -124,6 +172,10 @@ export default function AdminGachaResultsPage() {
                   {/* ★ Xアカウント一致ガチャなら折りたたみ表示 */}
                   {flags.includes("x_account_match") && (
                     <div style={{ marginBottom: 16 }}>
+                      <p style={{ margin: "0 0 6px", fontWeight: "bold" }}>
+                        抽選済み人数：{xDrawnCounts[code] ?? 0} / {xList.length} 件
+                      </p>
+
                       <button
                         onClick={() =>
                           setXOpen((prev) => ({
