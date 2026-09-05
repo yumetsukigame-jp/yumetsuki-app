@@ -273,9 +273,6 @@ export default function Home() {
   return (
     <div
       style={{
-        padding: "20px",
-        maxWidth: "480px",
-        margin: "0 auto",
         textAlign: "center",
       }}
     >
@@ -284,10 +281,11 @@ export default function Home() {
         alt="ゆめつきの書斎 トップ画像"
         width={960}
         height={540}
-        sizes="(max-width: 480px) 100vw, 480px"
+        sizes="(max-width: 960px) 100vw, 960px"
         priority
         style={{
           width: "100%",
+          maxWidth: "960px",
           height: "auto",
           margin: "0 auto 20px",
           display: "block",
@@ -295,6 +293,13 @@ export default function Home() {
         }}
       />
 
+      <div
+        style={{
+          maxWidth: "480px",
+          margin: "0 auto",
+          padding: "0 20px 20px",
+        }}
+      >
       {subscriber && (
         <div
           style={{
@@ -474,6 +479,7 @@ export default function Home() {
         </Link>
       </div>
 
+      </div>
     </div>
   );
 }
