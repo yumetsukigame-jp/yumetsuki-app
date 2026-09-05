@@ -1,0 +1,17 @@
+[debug] [2026-09-05T06:49:40.319Z] ----------------------------------------------------------------------
+[debug] [2026-09-05T06:49:40.325Z] Command:       /opt/homebrew/Cellar/node/26.4.0/bin/node /opt/homebrew/bin/firebase functions:list
+[debug] [2026-09-05T06:49:40.325Z] CLI Version:   15.22.2
+[debug] [2026-09-05T06:49:40.325Z] Platform:      darwin
+[debug] [2026-09-05T06:49:40.325Z] Node Version:  v26.4.0
+[debug] [2026-09-05T06:49:40.326Z] Detected Agent: unknown
+[debug] [2026-09-05T06:49:40.326Z] Time:          Sat Sep 05 2026 15:49:40 GMT+0900 (Japan Standard Time)
+[debug] [2026-09-05T06:49:40.326Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-05T06:49:40.416Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-05T06:49:40.416Z] > authorizing via signed-in user (yumetsukigame@gmail.com)
+[debug] [2026-09-05T06:49:40.416Z] [iam] checking project point-app-1f854 for permissions ["cloudfunctions.functions.list","firebase.projects.get","run.services.list"]
+[debug] [2026-09-05T06:49:40.416Z] Checked if tokens are valid: true, expires at: 1788592109661
+[debug] [2026-09-05T06:49:40.416Z] Checked if tokens are valid: true, expires at: 1788592109661
+[debug] [2026-09-05T06:49:40.417Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions [none]
+[debug] [2026-09-05T06:49:40.417Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions  x-goog-user-project=point-app-1f854
+[debug] [2026-09-05T06:49:40.417Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/point-app-1f854:testIamPermissions {"permissions":["cloudfunctions.functions.list","firebase.projects.get","run.services.list"]}

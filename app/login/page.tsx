@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [accountCheckFailed, setAccountCheckFailed] = useState(false);
   const router = useRouter();
 
@@ -63,11 +64,15 @@ export default function LoginPage() {
   };
 
   const handleResetPassword = async () => {
+    if (resettingPassword) return;
+
     if (!email) {
       setMessage("パスワード再発行にはメールアドレスを入力してください");
       return;
     }
 
+    setResettingPassword(true);
+    setMessage("");
     try {
       await httpsCallable<{ email: string }, { accepted: boolean }>(
         functions,
@@ -76,9 +81,15 @@ export default function LoginPage() {
       setMessage(
         "メールアドレスが登録されている場合は、パスワード再設定メールを送信しました"
       );
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
-      setMessage("メール送信に失敗しました");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "メール送信に失敗しました。";
+      setMessage(`メール送信に失敗しました：${message}`);
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -155,18 +166,20 @@ export default function LoginPage() {
         {/* パスワード再発行 */}
         <button
           onClick={handleResetPassword}
+          disabled={resettingPassword}
           style={{
             width: "100%",
             padding: "10px",
-            background: "#4f46e5",
+            background: resettingPassword ? "#9ca3af" : "#4f46e5",
             color: "white",
             borderRadius: "8px",
             fontSize: "14px",
             fontWeight: "bold",
             marginBottom: "12px",
+            cursor: resettingPassword ? "not-allowed" : "pointer",
           }}
         >
-          パスワードを忘れた方はこちら
+          {resettingPassword ? "メールを送信中…" : "パスワードを忘れた方はこちら"}
         </button>
 
         {/* 新規登録 */}
