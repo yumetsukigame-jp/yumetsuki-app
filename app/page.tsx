@@ -9,6 +9,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import Link from "next/link";
+import Image from "next/image";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 
@@ -28,6 +29,23 @@ function getTodayJST6() {
   const m = String(jst.getMonth() + 1).padStart(2, "0");
   const d = String(jst.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+const weekdayTopImages = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+function getJSTWeekdayImage() {
+  const jstNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+  return weekdayTopImages[jstNow.getDay()];
 }
 
 type CachedUser = {
@@ -72,6 +90,7 @@ export default function Home() {
   const [totalLose, setTotalLose] = useState(0);
   const [totalBakuado, setTotalBakuado] = useState(0);
   const [nibuichiLoaded, setNibuichiLoaded] = useState(false);
+  const [topImage] = useState(getJSTWeekdayImage);
 
   /* --------------------------------------------------
      ① Auth 初期化（未ログインなら即ログイン画面へ）
@@ -260,13 +279,19 @@ export default function Home() {
         textAlign: "center",
       }}
     >
-      <img
-        src="/whiteMageGirl.webp"
-        alt="white mage girl"
+      <Image
+        src={`/topimage/${topImage}.webp`}
+        alt="ゆめつきの書斎 トップ画像"
+        width={960}
+        height={540}
+        sizes="(max-width: 480px) 100vw, 480px"
+        priority
         style={{
-          width: "70%",
+          width: "100%",
+          height: "auto",
           margin: "0 auto 20px",
           display: "block",
+          borderRadius: "12px",
         }}
       />
 

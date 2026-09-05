@@ -142,6 +142,10 @@ export default function NibuichiCalendarPage() {
       Object.values(results).filter((value) => value === result).length,
     ])
   ) as Record<string, number>;
+  const monthlyPredictionCount = Object.keys(predictions).length;
+  const monthlyHitCount = Object.entries(predictions).filter(
+    ([date, prediction]) => results[date] === prediction
+  ).length;
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
@@ -247,23 +251,50 @@ export default function NibuichiCalendarPage() {
                     position: "absolute",
                     right: 4,
                     bottom: 4,
-                    display: "grid",
-                    width: 22,
-                    height: 22,
-                    placeItems: "center",
-                    borderRadius: "50%",
-                    background: "#16a34a",
-                    color: "white",
-                    fontSize: "0.8rem",
-                    fontWeight: "bold",
+                    fontSize: "1.35rem",
+                    lineHeight: 1,
                   }}
                 >
-                  ✓
+                  🎯
                 </span>
               )}
             </div>
           );
         })}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 8,
+          marginTop: 16,
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 8px",
+            borderRadius: 8,
+            background: "#eff6ff",
+            color: "#1d4ed8",
+            fontWeight: "bold",
+            textAlign: "center",
+          }}
+        >
+          月間予想数：{monthlyPredictionCount}回
+        </div>
+        <div
+          style={{
+            padding: "12px 8px",
+            borderRadius: 8,
+            background: "#ecfdf5",
+            color: "#15803d",
+            fontWeight: "bold",
+            textAlign: "center",
+          }}
+        >
+          月間的中数：{monthlyHitCount}回
+        </div>
       </div>
 
       {loading && <LoadingState message="勝敗データを読み込み中…" />}
