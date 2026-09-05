@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/firebase";
@@ -107,26 +109,22 @@ export default function GachaDetailPage() {
   /* --------------------------------------------------
      ページ状態
   -------------------------------------------------- */
-  const [gacha, setGacha] = useState<any>(null);
+  const [gacha, setGacha] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(true);
   const [error, setError] = useState("");
   const [requiresCode, setRequiresCode] = useState(false);
 
-  const [allResults, setAllResults] = useState<any[]>([]);
+  const [allResults, setAllResults] = useState<DocumentData[]>([]);
 
   /* --------------------------------------------------
      Auth 初期化後にのみ load() を実行
   -------------------------------------------------- */
-  useEffect(() => {
-    if (!authReady) return;
-    load();
-  }, [authReady, uid, code]);
 
   /* --------------------------------------------------
      ガチャ情報 + アクセス制御 + 結果取得
   -------------------------------------------------- */
-  const load = async () => {
+  async function load() {
     setLoading(true);
     setError("");
     setRequiresCode(false);
@@ -223,7 +221,6 @@ if (isXAccountMatch) {
     setLoading(false);
     return;
   }
-
   const userSnap = await getDoc(doc(db, "users", uid));
   const user = userSnap.data();
 
@@ -306,7 +303,12 @@ if (isXAccountMatch) {
 
     setGacha(data);
     setLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    if (!authReady) return;
+    void Promise.resolve().then(load);
+  }, [authReady, uid, code]);
 
   /* --------------------------------------------------
      Auth 初期化前は UI を動かさない
@@ -460,13 +462,13 @@ function SimpleFrameList({
   results,
   currentUid,
   getUserInfo,
-}: any) {
+}: DocumentData) {
   return (
     <div style={{ marginTop: 16 }}>
-      {frames.map((f: any) => {
+      {frames.map((f: DocumentData) => {
         const frameName = f.label;
 
-        const list = results.filter((r: any) => r.frame === frameName);
+        const list = results.filter((r: DocumentData) => r.frame === frameName);
 
         return (
           <div key={frameName} style={{ marginBottom: 20 }}>
@@ -481,7 +483,7 @@ function SimpleFrameList({
               <p style={{ marginLeft: 20 }}>当選者なし</p>
             ) : (
               <ul style={{ paddingLeft: 20 }}>
-                {list.map((r: any) => (
+                {list.map((r: DocumentData) => (
                   <UserNameItem
                     key={r.id}
                     result={r}
@@ -501,7 +503,7 @@ function SimpleFrameList({
 /* ------------------------------------------
    名前表示
 ------------------------------------------ */
-function UserNameItem({ result, currentUid, getUserInfo }: any) {
+function UserNameItem({ result, currentUid, getUserInfo }: DocumentData) {
   const [name, setName] = useState("読み込み中…");
 
   useEffect(() => {

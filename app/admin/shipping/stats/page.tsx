@@ -30,7 +30,7 @@ export default function ShippingStatsPage() {
   };
 
   useEffect(() => {
-    fetchStats();
+    void Promise.resolve().then(fetchStats);
   }, []);
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;

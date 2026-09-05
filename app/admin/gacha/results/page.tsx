@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db } from "@/firebase";
@@ -16,28 +18,58 @@ function normalizeX(value: string | null | undefined): string {
     .replace(/[^\x20-\x7E]/g, "");
 }
 
+async function computeXDrawnCounts(
+  groupedData: Record<string, DocumentData[]>,
+  info: Record<string, DocumentData>
+) {
+  const counts: Record<string, number> = {};
+
+  for (const [code, items] of Object.entries(groupedData)) {
+    const flags = info[code]?.publicFlags ?? [];
+    if (!flags.includes("x_account_match")) continue;
+
+    const xList = (info[code]?.xAccountList ?? [])
+      .filter((s: string) => s.includes("@"))
+      .map((s: string) => normalizeX(s));
+    if (xList.length === 0) continue;
+
+    const uniqueUids = Array.from(new Set(items.map((r: DocumentData) => r.uid)));
+    const matchedUids = new Set<string>();
+
+    for (const uid of uniqueUids) {
+      const userSnap = await getDoc(doc(db, "users", uid));
+      if (!userSnap.exists()) continue;
+      const userX = normalizeX(userSnap.data()?.xAccount);
+      if (userX && xList.some((entry: string) => entry.includes(userX))) {
+        matchedUids.add(uid);
+      }
+    }
+
+    counts[code] = matchedUids.size;
+  }
+
+  return counts;
+}
+
 export default function AdminGachaResultsPage() {
-  const [results, setResults] = useState<any[]>([]);
-  const [grouped, setGrouped] = useState<any>({});
+  const [results, setResults] = useState<DocumentData[]>([]);
+  const [grouped, setGrouped] = useState<Record<string, DocumentData[]>>({});
   const [open, setOpen] = useState<{ [key: string]: boolean }>({});
   const [xOpen, setXOpen] = useState<{ [key: string]: boolean }>({}); // ★ Xアカ用折りたたみ
-  const [gachaInfo, setGachaInfo] = useState<any>({});
+  const [gachaInfo, setGachaInfo] = useState<Record<string, DocumentData>>({});
   const [xDrawnCounts, setXDrawnCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadResults();
-  }, []);
 
-  const loadResults = async () => {
+  async function loadResults() {
     setLoading(true);
 
     const fn = httpsCallable(functions, "getGachaResults");
-    const res: any = await fn();
+    const res: DocumentData = await fn();
 
     const list = res.data || [];
 
-    const groupedData: any = {};
+    const groupedData: DocumentData = {};
     for (const r of list) {
       if (!groupedData[r.code]) groupedData[r.code] = [];
       groupedData[r.code].push(r);
@@ -47,7 +79,7 @@ export default function AdminGachaResultsPage() {
     setGrouped(groupedData);
 
     const snap = await getDocs(collection(db, "gachaCodes"));
-    const info: any = {};
+    const info: DocumentData = {};
     snap.docs.forEach((d) => {
       info[d.id] = d.data();
     });
@@ -56,41 +88,10 @@ export default function AdminGachaResultsPage() {
     setXDrawnCounts(await computeXDrawnCounts(groupedData, info));
 
     setLoading(false);
-  };
-
-  // ★ 対象Xアカウントのうち、実際に抽選済み（既に結果がある）ユーザー数を集計
-  const computeXDrawnCounts = async (
-    groupedData: Record<string, any[]>,
-    info: Record<string, any>
-  ) => {
-    const counts: Record<string, number> = {};
-
-    for (const [code, items] of Object.entries(groupedData)) {
-      const flags = info[code]?.publicFlags ?? [];
-      if (!flags.includes("x_account_match")) continue;
-
-      const xList = (info[code]?.xAccountList ?? [])
-        .filter((s: string) => s.includes("@"))
-        .map((s: string) => normalizeX(s));
-      if (xList.length === 0) continue;
-
-      const uniqueUids = Array.from(new Set(items.map((r: any) => r.uid)));
-      const matchedUids = new Set<string>();
-
-      for (const uid of uniqueUids) {
-        const userSnap = await getDoc(doc(db, "users", uid));
-        if (!userSnap.exists()) continue;
-        const userX = normalizeX(userSnap.data()?.xAccount);
-        if (userX && xList.some((entry: string) => entry.includes(userX))) {
-          matchedUids.add(uid);
-        }
-      }
-
-      counts[code] = matchedUids.size;
-    }
-
-    return counts;
-  };
+  }
+  useEffect(() => {
+    void Promise.resolve().then(loadResults);
+  }, []);
 
   const getUserInfo = async (uid: string) => {
     const snap = await getDoc(doc(db, "users", uid));
@@ -125,7 +126,7 @@ export default function AdminGachaResultsPage() {
       )}
 
       {!loading &&
-        Object.entries(grouped).map(([code, items]: any) => {
+        Object.entries(grouped).map(([code, items]) => {
           const title = items[0]?.title ?? "（タイトルなし）";
           const info = gachaInfo[code] ?? {};
           const flags = info.publicFlags ?? [];
@@ -226,8 +227,11 @@ export default function AdminGachaResultsPage() {
 /* ------------------------------------------
    枠ごとの表示（reward 昇順）
 ------------------------------------------ */
-function renderFrames(items: any[], getUserInfo: any) {
-  const frames: any = {};
+function renderFrames(
+  items: DocumentData[],
+  getUserInfo: (uid: string) => Promise<string>
+) {
+  const frames: Record<string, DocumentData[]> = {};
   for (const r of items) {
     const key = r.frameName;
     if (!frames[key]) frames[key] = [];
@@ -236,8 +240,8 @@ function renderFrames(items: any[], getUserInfo: any) {
 
   return (
     <div>
-      {Object.entries(frames).map(([frameName, list]: any) => {
-        const sorted = list.sort((a: any, b: any) => a.reward - b.reward);
+      {Object.entries(frames).map(([frameName, list]) => {
+        const sorted = list.sort((a: DocumentData, b: DocumentData) => a.reward - b.reward);
 
         return (
           <div key={frameName} style={{ marginBottom: 20 }}>
@@ -246,7 +250,7 @@ function renderFrames(items: any[], getUserInfo: any) {
             </h3>
 
             <ul style={{ paddingLeft: 20 }}>
-              {sorted.map((r: any) => (
+              {sorted.map((r: DocumentData) => (
                 <UserResultItem key={r.id} result={r} getUserInfo={getUserInfo} />
               ))}
             </ul>
@@ -260,7 +264,13 @@ function renderFrames(items: any[], getUserInfo: any) {
 /* ------------------------------------------
    ユーザー表示
 ------------------------------------------ */
-function UserResultItem({ result, getUserInfo }: any) {
+function UserResultItem({
+  result,
+  getUserInfo,
+}: {
+  result: DocumentData;
+  getUserInfo: (uid: string) => Promise<string>;
+}) {
   const [name, setName] = useState("読み込み中…");
 
   useEffect(() => {

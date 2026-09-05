@@ -225,7 +225,7 @@ export default function GachaManagePage() {
   };
 
   useEffect(() => {
-    loadCodes();
+    void Promise.resolve().then(loadCodes);
   }, []);
 
   return (

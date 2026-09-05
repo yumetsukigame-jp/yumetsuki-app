@@ -7,6 +7,7 @@ export {
   resetGachaUsage,
   cleanExpiredGacha,
   resetDailyGacha,
+  manualResetDailyGacha,
 } from "./gacha";
 
 export {

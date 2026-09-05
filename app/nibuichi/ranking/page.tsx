@@ -64,11 +64,8 @@ export default function NibuichiRankingPage() {
     });
   };
 
-  useEffect(() => {
-    fetchRanking();
-  }, []);
 
-  const fetchRanking = async () => {
+  async function fetchRanking() {
     setLoading(true);
     try {
       const snap = await withRetry(() => getDocs(collection(db, "nibuichi_user_stats")));
@@ -185,7 +182,11 @@ export default function NibuichiRankingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+  useEffect(() => {
+    void Promise.resolve().then(fetchRanking);
+  }, []);
+
 
   if (loading) {
     return <LoadingState className="p-6 text-center" />;

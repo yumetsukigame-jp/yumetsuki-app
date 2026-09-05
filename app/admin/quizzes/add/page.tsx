@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useState, useEffect } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -33,7 +35,7 @@ async function sha256(text: string): Promise<string> {
    タイトルからID生成（必ず10文字以上）
 -------------------------------------------------- */
 function generateIdFromTitle(title: string) {
-  let base = title
+  const base = title
     .normalize("NFKD")
     .replace(/[^\w]/g, "")
     .toLowerCase();
@@ -57,7 +59,7 @@ export default function AddQuizForm() {
 
   const [title, setTitle] = useState("");
   const [thumbnail, setThumbnail] = useState("");
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<DocumentData[]>([]);
 
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -84,7 +86,7 @@ export default function AddQuizForm() {
   /* --------------------------------------------------
      保存処理
   -------------------------------------------------- */
-  const handleSave = async (e: any) => {
+  const handleSave = async (e: DocumentData) => {
     e.preventDefault();
 
     if (!title.trim() || !thumbnail || !question.trim()) {

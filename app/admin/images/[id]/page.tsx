@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, storage } from "@/firebase";
@@ -15,7 +17,7 @@ export default function ImageDetailPage() {
   const { id } = useParams();
   const router = useRouter();
 
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DocumentData | null>(null);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [folder, setFolder] = useState("");
   const [prefix, setPrefix] = useState("");
@@ -51,15 +53,16 @@ export default function ImageDetailPage() {
   };
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
   }, []);
 
   // 差し替え処理
   const handleReplace = async () => {
-    if (!newFile) {
+    if (!newFile || !data) {
       alert("新しい画像を選択してください");
       return;
     }
+    const currentData = data;
 
     setSaving(true);
 
@@ -91,7 +94,7 @@ export default function ImageDetailPage() {
 
         // ③ 古い画像を削除
         try {
-          await deleteObject(ref(storage, data.path));
+          await deleteObject(ref(storage, currentData.path));
         } catch (e) {
           console.error("delete old image error:", e);
         }
@@ -109,7 +112,7 @@ export default function ImageDetailPage() {
     );
   };
 
-  if (loading) return <p>読み込み中…</p>;
+  if (loading || !data) return <p>読み込み中…</p>;
 
   return (
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>

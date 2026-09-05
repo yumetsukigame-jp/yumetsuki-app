@@ -2,6 +2,7 @@
  * Storage の images/* を読み取り、
  * Firestore の imageMeta に自動登録するスクリプト（CJS版）
  */
+/* eslint-disable @typescript-eslint/no-require-imports -- This standalone CommonJS script runs without changing the app package module type. */
 
 const admin = require("firebase-admin");
 const serviceAccount = require("../serviceAccountKey.json");

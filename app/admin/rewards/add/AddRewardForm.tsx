@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
@@ -30,7 +32,7 @@ export default function AddRewardForm() {
   const [cost, setCost] = useState(0);   // ← 修正済み（the → const）
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<DocumentData[]>([]);
 
   // Firestore から rewards フォルダの画像一覧を取得
   useEffect(() => {

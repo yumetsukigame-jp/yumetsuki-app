@@ -99,7 +99,7 @@ export default function ValidCodesPage() {
   };
 
   useEffect(() => {
-    fetchCodes();
+    void Promise.resolve().then(fetchCodes);
   }, [sortOrder]);
 
   // 検索

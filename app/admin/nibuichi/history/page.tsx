@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { auth, db } from "../../../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -13,18 +15,18 @@ import {
 } from "firebase/firestore";
 
 export default function NibuichiHistoryPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
 
-  const [daily, setDaily] = useState<any>(null);
-  const [predictions, setPredictions] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [winners, setWinners] = useState<any[]>([]);
+  const [daily, setDaily] = useState<DocumentData | null>(null);
+  const [predictions, setPredictions] = useState<DocumentData[]>([]);
+  const [history, setHistory] = useState<DocumentData[]>([]);
+  const [winners, setWinners] = useState<DocumentData[]>([]);
   const [perUserReward, setPerUserReward] = useState<number>(0);
 
-  const [userMap, setUserMap] = useState<Record<string, any>>({});
+  const [userMap, setUserMap] = useState<Record<string, DocumentData>>({});
 
   /* ============================================================
      管理者チェック
@@ -58,15 +60,11 @@ export default function NibuichiHistoryPage() {
   /* ============================================================
      日付変更 → データ取得
   ============================================================ */
-  useEffect(() => {
-    if (!selectedDate) return;
-    fetchDailyData(selectedDate);
-  }, [selectedDate]);
 
   /* ============================================================
      日別データ取得（結果・投票状況・履歴）
   ============================================================ */
-  const fetchDailyData = async (date: string) => {
+  async function fetchDailyData(date: string) {
     setDaily(null);
     setPredictions([]);
     setHistory([]);
@@ -126,7 +124,7 @@ export default function NibuichiHistoryPage() {
     /* -----------------------------
        ⑤ ユーザー情報取得
     ----------------------------- */
-    const map: Record<string, any> = {};
+    const map: Record<string, DocumentData> = {};
 
     const allUids = new Set([
       ...preds.map((p) => p.uid),
@@ -152,7 +150,12 @@ export default function NibuichiHistoryPage() {
     }
 
     setUserMap(map);
-  };
+  }
+  useEffect(() => {
+    if (!selectedDate) return;
+    void Promise.resolve().then(() => fetchDailyData(selectedDate));
+  }, [selectedDate]);
+
 
   /* ============================================================
      UI

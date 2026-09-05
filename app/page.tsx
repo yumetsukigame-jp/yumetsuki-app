@@ -481,6 +481,15 @@ export default function Home() {
 /* ------------------------------
    セクションコンポーネント
 ------------------------------ */
+type SectionProps = {
+  title: React.ReactNode;
+  color: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  forceCollapseAll?: boolean;
+  alwaysVisible?: number;
+};
+
 function Section({
   title,
   color,
@@ -488,7 +497,7 @@ function Section({
   children,
   forceCollapseAll = false,
   alwaysVisible = 1,
-}: any) {
+}: SectionProps) {
   const [open, setOpen] = useState(false);
 
   const items = React.Children.toArray(children);
@@ -499,7 +508,9 @@ function Section({
   const hiddenMenuLabels = hiddenItems.map((item, index) => (
     <React.Fragment key={index}>
       {index > 0 && " ・ "}
-      {React.isValidElement(item) ? item.props.children : item}
+      {React.isValidElement<{ children?: React.ReactNode }>(item)
+        ? item.props.children
+        : item}
     </React.Fragment>
   ));
 
@@ -575,7 +586,19 @@ function Section({
 /* ------------------------------
    メニューボタン
 ------------------------------ */
-function MenuButton({ href, color, children, subtle = false }: any) {
+type MenuButtonProps = {
+  href: string;
+  color: string;
+  children: React.ReactNode;
+  subtle?: boolean;
+};
+
+function MenuButton({
+  href,
+  color,
+  children,
+  subtle = false,
+}: MenuButtonProps) {
   return (
     <Link
       href={href}

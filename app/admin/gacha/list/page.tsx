@@ -145,7 +145,7 @@ export default function AdminGachaListPage() {
   };
 
   useEffect(() => {
-    loadCodes();
+    void Promise.resolve().then(loadCodes);
   }, []);
 
   /* -----------------------------------------

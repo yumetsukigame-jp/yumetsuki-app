@@ -20,6 +20,22 @@ const PAGE_SIZE = 10;
 
 type DateLike = { toDate: () => Date } | Date | null | undefined;
 
+function isTimestampLike(value: unknown): value is { toDate: () => Date } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  );
+}
+
+function toDateLike(value: unknown): DateLike {
+  if (value instanceof Date || value === null || isTimestampLike(value)) {
+    return value;
+  }
+  return undefined;
+}
+
 type GachaCode = {
   id: string;
   title: string;
@@ -49,6 +65,14 @@ type ResultPage = {
   items: GachaResult[];
   loading: boolean;
   error?: string;
+};
+
+type RawGachaResult = {
+  id: string;
+  uid: unknown;
+  frame: unknown;
+  reward: unknown;
+  createdAt: unknown;
 };
 
 type Props = {
@@ -178,22 +202,28 @@ export default function GachaResultsBrowser({
     try {
       const resultsRef = collection(db, resultsCollection, code, "results");
       const snap = await getDocs(query(resultsRef, orderBy("createdAt", "desc")));
-      const rawItems = snap.docs.map((document) => ({
-        id: document.id,
-        ...document.data(),
-      }));
+      const rawItems: RawGachaResult[] = snap.docs.map((document) => {
+        const data = document.data();
+        return {
+          id: document.id,
+          uid: data.uid,
+          frame: data.frame,
+          reward: data.reward,
+          createdAt: data.createdAt,
+        };
+      });
       const items = await Promise.all(
         rawItems
           .filter(
-            (item): item is Record<string, unknown> & { uid: string } =>
+            (item): item is RawGachaResult & { uid: string } =>
               typeof item.uid === "string"
           )
           .map(async (item) => ({
-            id: item.id as string,
+            id: item.id,
             uid: item.uid,
             frame: typeof item.frame === "string" ? item.frame : "未設定",
             reward: typeof item.reward === "number" ? item.reward : 0,
-            createdAt: item.createdAt as DateLike,
+            createdAt: toDateLike(item.createdAt),
             userName: await getUserName(item.uid),
           }))
       );

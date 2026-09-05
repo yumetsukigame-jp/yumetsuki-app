@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import {
@@ -12,14 +14,14 @@ import {
 } from "firebase/firestore";
 
 export default function CodesPage() {
-  const [codes, setCodes] = useState<any[]>([]);
+  const [codes, setCodes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCodes = async () => {
     const q = query(collection(db, "validCodes"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
 
-    const list: any[] = [];
+    const list: DocumentData[] = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
 
     setCodes(list);
@@ -27,7 +29,7 @@ export default function CodesPage() {
   };
 
   useEffect(() => {
-    fetchCodes();
+    void Promise.resolve().then(fetchCodes);
   }, []);
 
   // ★ コード削除処理

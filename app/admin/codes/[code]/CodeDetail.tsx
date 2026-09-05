@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import {
@@ -13,8 +15,8 @@ import {
 } from "firebase/firestore";
 
 export default function CodeDetail({ code }: { code: string }) {
-  const [codeInfo, setCodeInfo] = useState<any>(null);
-  const [usageList, setUsageList] = useState<any[]>([]);
+  const [codeInfo, setCodeInfo] = useState<DocumentData | null>(null);
+  const [usageList, setUsageList] = useState<DocumentData[]>([]);
 
   const fetchCodeInfo = async () => {
     const codeRef = doc(db, "validCodes", code);
@@ -34,7 +36,7 @@ export default function CodeDetail({ code }: { code: string }) {
 
     const snap = await getDocs(q);
 
-    const list: any[] = [];
+    const list: DocumentData[] = [];
 
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
@@ -55,8 +57,10 @@ export default function CodeDetail({ code }: { code: string }) {
   };
 
   useEffect(() => {
-    fetchCodeInfo();
-    fetchUsage();
+    void Promise.all([
+      Promise.resolve().then(fetchCodeInfo),
+      Promise.resolve().then(fetchUsage),
+    ]);
   }, [code]);
 
   if (!codeInfo) return <p>読み込み中…</p>;

@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
@@ -8,12 +10,12 @@ import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 
 export default function QuizRankingPage() {
-  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [openQuizId, setOpenQuizId] = useState<string | null>(null);
 
-  const [answers, setAnswers] = useState<Record<string, any[]>>({});
+  const [answers, setAnswers] = useState<Record<string, DocumentData[]>>({});
   const [answersLoading, setAnswersLoading] = useState<Record<string, boolean>>({});
 
   /* --------------------------------------------------
@@ -61,7 +63,7 @@ export default function QuizRankingPage() {
   };
 
   useEffect(() => {
-    fetchQuizzes();
+    void Promise.resolve().then(fetchQuizzes);
   }, []);
 
   /* --------------------------------------------------
@@ -74,7 +76,7 @@ export default function QuizRankingPage() {
       collection(db, "quizzes_archive", quizId, "answers")
     );
 
-    const allAnswers: any[] = [];
+    const allAnswers: DocumentData[] = [];
 
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id;

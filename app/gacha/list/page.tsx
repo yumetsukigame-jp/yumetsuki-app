@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { functions, db, auth } from "@/firebase";
 import { httpsCallable } from "firebase/functions";
@@ -133,14 +135,11 @@ export default function PublicGachaListPage() {
   const [playabilityError, setPlayabilityError] = useState("");
   const router = useRouter();
 
-  useEffect(() => {
-    load();
-  }, [sort]);
 
   /* --------------------------------------------------
      ★ 公開ガチャ一覧を取得
   -------------------------------------------------- */
-  const load = async () => {
+  async function load() {
     setLoading(true);
     try {
       const fnList = httpsCallable(functions, "getPublicGachaList");
@@ -158,7 +157,7 @@ export default function PublicGachaListPage() {
 
     filtered = filtered.filter((g) => g.createdAt);
 
-    let sorted = [...filtered];
+    const sorted = [...filtered];
 
     if (sort === "new") {
       sorted.sort((a, b) => {
@@ -206,7 +205,11 @@ export default function PublicGachaListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+  useEffect(() => {
+    void Promise.resolve().then(load);
+  }, [sort]);
+
 
   /* --------------------------------------------------
      ★ 個別ガチャの結果を遅延読み込み
@@ -754,7 +757,7 @@ export default function PublicGachaListPage() {
                           : "∞";
 
                       const grouped: Record<string, number> = {};
-                      frameResults.forEach((r: any) => {
+                      frameResults.forEach((r: DocumentData) => {
                         grouped[r.uid] = (grouped[r.uid] || 0) + 1;
                       });
 

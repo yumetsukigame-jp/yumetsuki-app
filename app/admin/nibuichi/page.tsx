@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -76,7 +78,7 @@ export default function AdminNibuichiPage() {
 
       setUser(currentUser);
       setAccessChecked(true);
-      void fetchStats().catch((error) => {
+      void Promise.resolve().then(fetchStats).catch((error) => {
         console.error("ニブイチ管理データの読み込みに失敗しました", error);
       });
     };
@@ -116,10 +118,10 @@ export default function AdminNibuichiPage() {
   /* --------------------------------------------------
      戦績 & 今日の結果取得（修正版）
   -------------------------------------------------- */
-  const fetchStats = async () => {
+  async function fetchStats() {
     try {
       const fn = httpsCallable(functions, "getNibuichiUserStats");
-      const res: any = await withRetry(() => fn({}), 2, 500, 15000);
+      const res: DocumentData = await withRetry(() => fn({}), 2, 500, 15000);
 
       setGlobalStats(res.data.global ?? null);
 
@@ -139,7 +141,7 @@ export default function AdminNibuichiPage() {
       console.error(err);
     }
 
-  };
+  }
 
   /* --------------------------------------------------
      今日の結果を確定 or 修正

@@ -75,7 +75,7 @@ export default function ImageUploadPage() {
 
   // フォルダ変更時に prefix をリセット
   useEffect(() => {
-    setPrefix(prefixes[0].value);
+    void Promise.resolve().then(() => setPrefix(prefixes[0].value));
   }, [folder]);
 
   /* ------------------------------

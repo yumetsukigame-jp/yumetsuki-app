@@ -86,10 +86,10 @@ export default function ShippingAdminPage() {
     const loadShippingItem = async (
       d: (typeof pendingSnap.docs)[number],
       source: PendingItem["source"]
-    ) => {
+    ): Promise<PendingItem | null> => {
       const rewardId = d.id;
       const rewardData = d.data();
-      const uid = rewardData.uid;
+      const uid = typeof rewardData.uid === "string" ? rewardData.uid : null;
 
       if (!uid) {
         console.warn("shippingPending に uid がありません:", rewardId);
@@ -116,7 +116,7 @@ export default function ShippingAdminPage() {
         userX: userData?.xAccount ?? "不明",
         userNickname: userData?.displayName ?? "名無し",
         xAccountConfirmed: userData?.xAccountConfirmed ?? false,
-      } satisfies PendingItem;
+      };
     };
 
     const loadItems = async (

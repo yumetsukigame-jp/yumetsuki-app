@@ -1,4 +1,5 @@
 // scripts/convert-images.js
+/* eslint-disable @typescript-eslint/no-require-imports -- This standalone CommonJS script runs without changing the app package module type. */
 
 const fs = require("fs");
 const path = require("path");

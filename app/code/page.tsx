@@ -59,7 +59,7 @@ export default function CodePage() {
       const { points, type } = codeSnap.data();
 
       // 使用済みコードチェック
-      let usedKey = type === "global" ? code : `${uid}_${code}`;
+      const usedKey = type === "global" ? code : `${uid}_${code}`;
 
       const usedRef = doc(db, "usedCodes", usedKey);
       const usedSnap = await getDoc(usedRef);

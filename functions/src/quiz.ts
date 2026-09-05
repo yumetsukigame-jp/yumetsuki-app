@@ -8,10 +8,31 @@ if (!admin.apps.length) {
 
 const db = getFirestore();
 
+async function requireAdmin(
+  context: functions.https.CallableContext
+): Promise<void> {
+  const uid = context.auth?.uid;
+  if (!uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "ログインが必要です"
+    );
+  }
+
+  const adminSnap = await db.collection("admins").doc(uid).get();
+  if (!adminSnap.exists) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "管理者のみ実行できます"
+    );
+  }
+}
+
 export const confirmQuizAnswer = functions
   .region("us-east1")
-  .https.onCall(async (data) => {
+  .https.onCall(async (data, context) => {
     try {
+      await requireAdmin(context);
       const quizId = data.quizId;
       if (!quizId) {
         throw new functions.https.HttpsError(
@@ -156,6 +177,9 @@ export const confirmQuizAnswer = functions
       };
     } catch (err: unknown) {
       console.error("confirmQuizAnswer ERROR:", err);
+      if (err instanceof functions.https.HttpsError) {
+        throw err;
+      }
       throw new functions.https.HttpsError("internal", "内部エラーが発生しました");
     }
   });

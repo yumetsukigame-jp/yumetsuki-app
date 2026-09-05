@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
@@ -37,11 +39,11 @@ export default function GachaInner() {
   const router = useRouter();
 
   const [code, setCode] = useState("");
-  const [gacha, setGacha] = useState<any>(null);
+  const [gacha, setGacha] = useState<DocumentData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<DocumentData | null>(null);
 
   const [spinning, setSpinning] = useState(false);
   const [stop, setStop] = useState(false);
@@ -75,7 +77,7 @@ export default function GachaInner() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const c = params.get("code") ?? "";
-      setCode(c);
+      void Promise.resolve().then(() => setCode(c));
     }
   }, []);
 
@@ -287,7 +289,7 @@ const checkCode = async () => {
      ★ ガチャ実行（連打防止付き）
   -------------------------------------------------- */
   const play = async () => {
-    if (isPlaying) return;
+    if (isPlaying || !gacha) return;
     setIsPlaying(true);
 
     setError("");
@@ -296,14 +298,14 @@ const checkCode = async () => {
 
     try {
       const fn = httpsCallable(functions, "useGachaCode");
-      const res: any = await fn({ code });
+      const res: DocumentData = await fn({ code });
 
       const frame = res.data.frame;
       const reward = res.data.reward;
 
       setFinalFrame(frame);
 
-      const frames = gacha.frames.map((f: any) => f.label);
+      const frames = gacha.frames.map((f: DocumentData) => f.label);
       const lastFrame = frames[frames.length - 1];
       const isLose = frame === lastFrame;
 
@@ -328,10 +330,10 @@ const checkCode = async () => {
         setGif(null);
         setIsPlaying(false);
       }, 10000);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setSpinning(false);
       setGif(null);
-      setError(e.message);
+      setError(e instanceof Error ? e.message : "抽選に失敗しました");
       setIsPlaying(false);
     }
   };
@@ -398,7 +400,7 @@ const handleShipping = async () => {
   /* --------------------------------------------------
      1リール（縦3段）
   -------------------------------------------------- */
-  const Reel = ({ frames }: any) => {
+  const renderReel = (frames: DocumentData[]) => {
     return (
       <div
         style={{
@@ -416,7 +418,7 @@ const handleShipping = async () => {
             animation: spinning ? "spin 0.15s linear infinite" : "none",
           }}
         >
-          {frames.map((f: any, i: number) => (
+          {frames.map((f: DocumentData, i: number) => (
             <div
               key={i}
               style={{
@@ -581,7 +583,7 @@ const handleShipping = async () => {
           </button>
 
           <div style={{ marginTop: 30 }}>
-            <Reel frames={gacha.frames} />
+            {renderReel(gacha.frames)}
           </div>
 
           {result && (
@@ -606,7 +608,7 @@ const handleShipping = async () => {
               {/* 発送ボタン */}
               {(() => {
                 const frameInfo = gacha.frames.find(
-                  (f: any) => f.label === result.frame
+                  (f: DocumentData) => f.label === result.frame
                 );
 
                 if (frameInfo?.shippingEnabled) {

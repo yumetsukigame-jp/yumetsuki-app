@@ -1,12 +1,14 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import Link from "next/link";
 
 export default function AdminRewardsPage() {
-  const [rewards, setRewards] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchRewards = async () => {
@@ -23,7 +25,7 @@ export default function AdminRewardsPage() {
   };
 
   useEffect(() => {
-    fetchRewards();
+    void Promise.resolve().then(fetchRewards);
   }, []);
 
   const handleDelete = async (id: string) => {

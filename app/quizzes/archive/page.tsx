@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { collection, getDocs } from "firebase/firestore";
@@ -8,7 +10,7 @@ import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 
 export default function QuizArchivePage() {
-  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchQuizzes = async () => {
@@ -29,7 +31,7 @@ export default function QuizArchivePage() {
   };
 
   useEffect(() => {
-    fetchQuizzes();
+    void Promise.resolve().then(fetchQuizzes);
   }, []);
 
   if (loading) return <LoadingState />;

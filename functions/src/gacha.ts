@@ -82,6 +82,25 @@ type GachaResultRow = {
   thumbnail?: string;
 };
 
+async function resetGachaHistoryCounts(
+  histories: FirebaseFirestore.QueryDocumentSnapshot[],
+  dailyCodes: Set<string>
+): Promise<number> {
+  const matchingHistories = histories.filter((history) =>
+    dailyCodes.has(history.id.split("_")[1])
+  );
+
+  for (let index = 0; index < matchingHistories.length; index += 500) {
+    const batch = db.batch();
+    for (const history of matchingHistories.slice(index, index + 500)) {
+      batch.update(history.ref, { count: 0 });
+    }
+    await batch.commit();
+  }
+
+  return matchingHistories.length;
+}
+
 function matchesXAccount(gacha: GachaDocument, xAccount: unknown): boolean {
   const userX = normalizeX(
     typeof xAccount === "string" ? xAccount : undefined
@@ -96,6 +115,28 @@ function matchesXAccount(gacha: GachaDocument, xAccount: unknown): boolean {
     .some((account) => account.includes(userX));
 }
 
+async function requireAdmin(
+  context: functions.https.CallableContext
+): Promise<string> {
+  const uid = context.auth?.uid;
+  if (!uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "ログインが必要です"
+    );
+  }
+
+  const adminSnap = await db.collection("admins").doc(uid).get();
+  if (!adminSnap.exists) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "管理者のみ実行できます"
+    );
+  }
+
+  return uid;
+}
+
 /* ============================================================
    ガチャ機能（v1 化）
 ============================================================ */
@@ -104,12 +145,7 @@ export const createGachaCode = functions
   .region("us-east1")
   .https.onCall(async (data, context) => {
     try {
-      const uid = context.auth?.uid;
-      if (!uid)
-        throw new functions.https.HttpsError(
-          "unauthenticated",
-          "ログインが必要です"
-        );
+      const uid = await requireAdmin(context);
 
       const {
         title,
@@ -193,6 +229,9 @@ export const createGachaCode = functions
       return { code };
     } catch (err: unknown) {
       console.error("createGachaCode error:", err);
+      if (err instanceof functions.https.HttpsError) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : "unknown error";
       throw new functions.https.HttpsError("internal", message);
     }
@@ -409,7 +448,22 @@ export const useGachaCode = functions
 
       return await db.runTransaction(async (tx) => {
         const freshGachaSnap = await tx.get(gachaRef);
+        if (!freshGachaSnap.exists) {
+          throw new functions.https.HttpsError(
+            "not-found",
+            "ガチャが存在しません"
+          );
+        }
         const freshGacha = freshGachaSnap.data() as GachaDocument;
+        if (
+          freshGacha.expiresAt &&
+          freshGacha.expiresAt.toDate() < nowJST()
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "期限切れのガチャです"
+          );
+        }
         const freshFrames: GachaFrame[] = freshGacha.frames;
 
         let selectedFrame: GachaFrame | null = null;
@@ -492,6 +546,29 @@ export const useGachaCode = functions
           ? freshHistorySnap.data()!
           : { count: 0 };
 
+        if (
+          freshGacha.publicFlags.includes("limited") &&
+          !freshHistorySnap.exists
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "このガチャはコードを入力してから引いてください"
+          );
+        }
+
+        if (
+          (freshGacha.resetType === "daily" ||
+            freshGacha.resetType === "none") &&
+          freshHistory.count >= freshGacha.point.maxPerUser
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            freshGacha.resetType === "daily"
+              ? "今日の回数上限です"
+              : "上限回数に達しています"
+          );
+        }
+
         tx.update(userRef, {
           points: freshPoints - cost + reward,
           ...(shouldConfirmXAccount ? { xAccountConfirmed: true } : {}),
@@ -534,6 +611,9 @@ export const useGachaCode = functions
       });
     } catch (err: unknown) {
       console.error("useGachaCode error:", err);
+      if (err instanceof functions.https.HttpsError) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : "unknown error";
       throw new functions.https.HttpsError("internal", message);
     }
@@ -541,8 +621,9 @@ export const useGachaCode = functions
 
 export const getGachaResults = functions
   .region("us-east1")
-  .https.onCall(async () => {
+  .https.onCall(async (_data, context) => {
     try {
+      await requireAdmin(context);
       const results: GachaResultRow[] = [];
 
       const gachaSnap = await db.collection("gachaCodes").get();
@@ -583,6 +664,9 @@ export const getGachaResults = functions
       return results;
     } catch (err: unknown) {
       console.error("getGachaResults error:", err);
+      if (err instanceof functions.https.HttpsError) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : "unknown error";
       throw new functions.https.HttpsError("internal", message);
     }
@@ -590,7 +674,8 @@ export const getGachaResults = functions
 
 export const resetGachaUsage = functions
   .region("us-east1")
-  .https.onCall(async (data) => {
+  .https.onCall(async (data, context) => {
+    await requireAdmin(context);
     const code = typeof data?.code === "string" ? data.code : "";
     if (!code)
       throw new functions.https.HttpsError(
@@ -654,27 +739,19 @@ export const resetDailyGacha = functions
     let resetGachaCount = 0;
     let resetHistoryCount = 0;
 
+    const historySnap = await db.collection("userGachaHistory").get();
+    const dailyCodes = new Set(gachaSnap.docs.map((docSnap) => docSnap.id));
+    resetHistoryCount = await resetGachaHistoryCounts(
+      historySnap.docs,
+      dailyCodes
+    );
+
     for (const docSnap of gachaSnap.docs) {
       await docSnap.ref.update({
         lastResetAt: now,
       });
       resetGachaCount++;
     }
-
-    const historySnap = await db.collection("userGachaHistory").get();
-    const batch = db.batch();
-
-    for (const d of historySnap.docs) {
-      const code = d.id.split("_")[1];
-      const target = gachaSnap.docs.find((g) => g.id === code);
-
-      if (target) {
-        batch.update(d.ref, { count: 0 });
-        resetHistoryCount++;
-      }
-    }
-
-    await batch.commit();
 
     await db.collection("systemLogs").add({
       type: "dailyReset",
@@ -684,4 +761,42 @@ export const resetDailyGacha = functions
     });
 
     console.log("=== resetDailyGacha END ===");
+  });
+
+export const manualResetDailyGacha = functions
+  .region("us-east1")
+  .https.onCall(async (_data, context) => {
+    await requireAdmin(context);
+
+    const now = Timestamp.now();
+    const gachaSnap = await db
+      .collection("gachaCodes")
+      .where("resetType", "==", "daily")
+      .get();
+    const dailyCodes = new Set(gachaSnap.docs.map((docSnap) => docSnap.id));
+
+    const historySnap = await db.collection("userGachaHistory").get();
+    const resetHistoryCount = await resetGachaHistoryCounts(
+      historySnap.docs,
+      dailyCodes
+    );
+
+    await Promise.all(
+      gachaSnap.docs.map((docSnap) =>
+        docSnap.ref.update({ lastResetAt: now })
+      )
+    );
+
+    await db.collection("systemLogs").add({
+      type: "dailyReset",
+      executedAt: now,
+      resetGachaCount: gachaSnap.size,
+      resetHistoryCount,
+      manual: true,
+    });
+
+    return {
+      resetGachaCount: gachaSnap.size,
+      resetHistoryCount,
+    };
   });

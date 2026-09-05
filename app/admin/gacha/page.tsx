@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, storage } from "@/firebase";
@@ -98,7 +100,7 @@ export default function GachaCreatePage() {
     ]);
   };
 
-  const updateFrame = (index: number, key: keyof FrameInput, value: any) => {
+  const updateFrame = (index: number, key: keyof FrameInput, value: string | boolean) => {
     setFrames((prev) =>
       prev.map((f, i) =>
         i === index
@@ -141,10 +143,11 @@ export default function GachaCreatePage() {
     }
 
     // ★ 最後の枠を自動計算
+    const framesForSubmission = frames.map((frame) => ({ ...frame }));
     if (mode === "count") {
-      const sum = frames.reduce(
+      const sum = framesForSubmission.reduce(
         (acc, f, idx) =>
-          idx === frames.length - 1
+          idx === framesForSubmission.length - 1
             ? acc
             : acc + (typeof f.maxCount === "number" ? f.maxCount : 0),
         0
@@ -154,11 +157,11 @@ export default function GachaCreatePage() {
         alert("枠数の合計が総数を超えています");
         return;
       }
-      frames[frames.length - 1].maxCount = last;
+      framesForSubmission[framesForSubmission.length - 1].maxCount = last;
     } else {
-      const sum = frames.reduce(
+      const sum = framesForSubmission.reduce(
         (acc, f, idx) =>
-          idx === frames.length - 1
+          idx === framesForSubmission.length - 1
             ? acc
             : acc + (typeof f.probability === "number" ? f.probability : 0),
         0
@@ -168,15 +171,16 @@ export default function GachaCreatePage() {
         alert("確率の合計が100%を超えています");
         return;
       }
-      frames[frames.length - 1].probability = last;
+      framesForSubmission[framesForSubmission.length - 1].probability = last;
     }
+    setFrames(framesForSubmission);
 
     setLoading(true);
 
     try {
       const fn = httpsCallable(functions, "createGachaCode");
 
-      const res: any = await fn({
+      const res: DocumentData = await fn({
         title,
         mode: mode === "prob" ? "probability" : "count",
         resetType,
@@ -188,7 +192,7 @@ export default function GachaCreatePage() {
         },
         totalCount: mode === "count" ? Number(totalCount) : null,
 
-        frames: frames.map((f) => ({
+        frames: framesForSubmission.map((f) => ({
           label: f.label,
           maxCount:
             mode === "count" && typeof f.maxCount === "number"
@@ -213,8 +217,8 @@ export default function GachaCreatePage() {
 
       setCreatedCode(res.data.code);
       alert(`作成しました！ コード：${res.data.code}`);
-    } catch (e: any) {
-      alert("作成に失敗：" + e.message);
+    } catch (e: unknown) {
+      alert("作成に失敗：" + (e instanceof Error ? e.message : "不明なエラー"));
     }
 
     setLoading(false);

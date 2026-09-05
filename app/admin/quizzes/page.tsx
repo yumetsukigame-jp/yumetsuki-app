@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db, functions } from "@/firebase";
 import {
@@ -13,13 +15,13 @@ import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
 
 export default function AdminQuizListPage() {
-  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ★ アーカイブ一覧
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
-  const [archiveQuizzes, setArchiveQuizzes] = useState<any[]>([]);
+  const [archiveQuizzes, setArchiveQuizzes] = useState<DocumentData[]>([]);
 
   /* --------------------------------------------------
      本番クイズ読み込み
@@ -39,7 +41,7 @@ export default function AdminQuizListPage() {
   };
 
   useEffect(() => {
-    fetchQuizzes();
+    void Promise.resolve().then(fetchQuizzes);
   }, []);
 
   /* --------------------------------------------------

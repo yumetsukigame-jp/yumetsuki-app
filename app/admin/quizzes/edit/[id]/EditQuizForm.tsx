@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import {
@@ -42,7 +44,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   const [title, setTitle] = useState("");
   const [thumbnail, setThumbnail] = useState("");
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<DocumentData[]>([]);
 
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -110,7 +112,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   /* --------------------------------------------------
      保存処理
   -------------------------------------------------- */
-  const handleSave = async (e: any) => {
+  const handleSave = async (e: DocumentData) => {
     e.preventDefault();
 
     let newSalt = salt;

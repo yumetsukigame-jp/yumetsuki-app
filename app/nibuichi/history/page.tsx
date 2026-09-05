@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { auth, db } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -15,79 +17,22 @@ import {
 import LoadingState from "@/app/components/LoadingState";
 
 export default function NibuichiHistoryPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [history, setHistory] = useState<any[]>([]);
-  const [pointHistory, setPointHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<DocumentData[]>([]);
+  const [pointHistory, setPointHistory] = useState<DocumentData[]>([]);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(u);
-
-      await fetchHistory(u.uid);
-      await fetchPointHistory(u.uid);
-
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, []);
 
   /* ============================================================
      ★ 修正版：予想はアーカイブ + 当日分の両方から取得
   ============================================================ */
-  const fetchHistory = async (uid: string) => {
-    try {
-      const list: any[] = [];
-
-      /* -----------------------------
-         ① 過去の予想（アーカイブ）
-      ----------------------------- */
-      const arcCol = collection(db, "nibuichi_user_predictions_archive");
-      const qArc = query(arcCol, where("uid", "==", uid));
-      const arcSnap = await getDocs(qArc);
-
-      for (const docSnap of arcSnap.docs) {
-        const data = docSnap.data();
-        await pushHistoryItem(list, data, uid);
-      }
-
-      /* -----------------------------
-         ② 今日の予想（まだアーカイブされていない）
-      ----------------------------- */
-      const predCol = collection(db, "nibuichi_user_predictions");
-      const qPred = query(predCol, where("uid", "==", uid));
-      const predSnap = await getDocs(qPred);
-
-      for (const docSnap of predSnap.docs) {
-        const data = docSnap.data();
-        await pushHistoryItem(list, data, uid);
-      }
-
-      /* -----------------------------
-         日付降順にソート
-      ----------------------------- */
-      list.sort((a, b) => (a.date < b.date ? 1 : -1));
-
-      setHistory(list);
-    } catch (err) {
-      console.error("fetchHistory error:", err);
-      setHistory([]);
-    }
-  };
 
   /* ============================================================
      ★ 予想1件分の情報をまとめて history に push する関数
      ★ dailyExists を追加して「未反映」を判定可能にする
   ============================================================ */
-  const pushHistoryItem = async (list: any[], data: any, uid: string) => {
+  async function pushHistoryItem(list: DocumentData[], data: DocumentData, uid: string) {
     const date = data.date;
 
     /* 結果 */
@@ -123,12 +68,52 @@ export default function NibuichiHistoryPage() {
       dailyExists,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : null,
     });
-  };
+  }
+
+  async function fetchHistory(uid: string) {
+    try {
+      const list: DocumentData[] = [];
+
+      /* -----------------------------
+         ① 過去の予想（アーカイブ）
+      ----------------------------- */
+      const arcCol = collection(db, "nibuichi_user_predictions_archive");
+      const qArc = query(arcCol, where("uid", "==", uid));
+      const arcSnap = await getDocs(qArc);
+
+      for (const docSnap of arcSnap.docs) {
+        const data = docSnap.data();
+        await pushHistoryItem(list, data, uid);
+      }
+
+      /* -----------------------------
+         ② 今日の予想（まだアーカイブされていない）
+      ----------------------------- */
+      const predCol = collection(db, "nibuichi_user_predictions");
+      const qPred = query(predCol, where("uid", "==", uid));
+      const predSnap = await getDocs(qPred);
+
+      for (const docSnap of predSnap.docs) {
+        const data = docSnap.data();
+        await pushHistoryItem(list, data, uid);
+      }
+
+      /* -----------------------------
+         日付降順にソート
+      ----------------------------- */
+      list.sort((a, b) => (a.date < b.date ? 1 : -1));
+
+      setHistory(list);
+    } catch (err) {
+      console.error("fetchHistory error:", err);
+      setHistory([]);
+    }
+  }
 
   /* ============================================================
      ニブイチ獲得ポイント履歴（pointHistory）
   ============================================================ */
-  const fetchPointHistory = async (uid: string) => {
+  async function fetchPointHistory(uid: string) {
     try {
       const col = collection(db, "pointHistory");
       const q = query(
@@ -150,7 +135,26 @@ export default function NibuichiHistoryPage() {
       console.error("fetchPointHistory error:", err);
       setPointHistory([]);
     }
-  };
+  }
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      setUser(u);
+
+      await Promise.resolve().then(() => fetchHistory(u.uid));
+      await Promise.resolve().then(() => fetchPointHistory(u.uid));
+
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
 
   if (loading) {
     return <LoadingState className="p-6 text-center" />;

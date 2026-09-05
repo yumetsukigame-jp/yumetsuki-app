@@ -59,6 +59,5 @@ firebase deploy --only functions
 
 6. Firebase Console の **Authentication** → **Settings** → **Authorized domains** で、
 パスワード再設定後の遷移先に使うドメインを許可します。
-7. 設定後の疎通確認には `sendTestResendEmail` Cloud Function（ログイン済みユーザーが呼び出し可能）を利用し、
+7. 設定後の疎通確認には `sendTestResendEmail` Cloud Function（管理者のみ呼び出し可能）を利用し、
 任意の宛先にテストメールを送信して受信を確認できます。
-

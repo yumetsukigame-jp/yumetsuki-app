@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { db, storage } from "@/firebase";
 import {
@@ -12,7 +14,7 @@ import { ref, deleteObject } from "firebase/storage";
 import Link from "next/link";
 
 export default function ImageListPage() {
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<DocumentData[]>([]);
   const [folder, setFolder] = useState("gacha");
   const [loading, setLoading] = useState(true);
 
@@ -42,10 +44,10 @@ export default function ImageListPage() {
   };
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
   }, []);
 
-  const handleDelete = async (item: any) => {
+  const handleDelete = async (item: DocumentData) => {
     if (!confirm("本当に削除しますか？")) return;
 
     // Storage 削除

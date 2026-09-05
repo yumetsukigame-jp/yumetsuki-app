@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { auth, functions, db } from "../../firebase";
@@ -11,18 +13,18 @@ import { withRetry } from "@/app/lib/retry";
 import Link from "next/link";
 
 export default function NibuichiPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [stats, setStats] = useState<any>(null);
-  const [todayPrediction, setTodayPrediction] = useState<any>(null);
-  const [globalStats, setGlobalStats] = useState<any>(null);
-  const [todayResult, setTodayResult] = useState<any>(null);
+  const [stats, setStats] = useState<DocumentData | null>(null);
+  const [todayPrediction, setTodayPrediction] = useState<DocumentData | null>(null);
+  const [globalStats, setGlobalStats] = useState<DocumentData | null>(null);
+  const [todayResult, setTodayResult] = useState<DocumentData | null>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  const [predictionStats, setPredictionStats] = useState<any>(null);
+  const [predictionStats, setPredictionStats] = useState<DocumentData | null>(null);
 
   // JST 今日の日付（6時切り替え）
   const getTodayJST6 = () => {
@@ -37,7 +39,7 @@ export default function NibuichiPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) fetchStats();
+      if (u) void Promise.resolve().then(fetchStats);
       else setLoading(false);
     });
     return () => unsub();
@@ -71,13 +73,13 @@ export default function NibuichiPage() {
   };
 
   // 戦績・今日の予想取得
-  const fetchStats = async () => {
+  async function fetchStats() {
     setLoading(true);
     try {
       const todayJST = getTodayJST6();
 
       const fn = httpsCallable(functions, "getNibuichiUserStats");
-      const res: any = await withRetry(() => fn({ date: todayJST }));
+      const res: DocumentData = await withRetry(() => fn({ date: todayJST }));
 
       const statsData = res.data.stats ?? null;
       const todayPredData = res.data.todayPrediction ?? null;
@@ -102,7 +104,7 @@ export default function NibuichiPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // 今日の予想を確定
   const sendPrediction = async () => {
@@ -226,8 +228,8 @@ export default function NibuichiPage() {
             <div>的中数：{stats?.hit ?? 0}</div>
             <div>
               的中率：
-              {stats?.total > 0
-                ? ((stats.hit / stats.total) * 100).toFixed(1) + "%"
+              {(stats?.total ?? 0) > 0
+                ? (((stats?.hit ?? 0) / (stats?.total ?? 0)) * 100).toFixed(1) + "%"
                 : "0%"}
             </div>
           </div>

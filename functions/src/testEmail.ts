@@ -1,5 +1,10 @@
+import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { Resend } from "resend";
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 function isTestEmailData(value: unknown): value is { to: string } {
   return (
@@ -15,10 +20,19 @@ export const sendTestResendEmail = functions
   .region("us-east1")
   .runWith({ secrets: ["RESEND_API_KEY", "RESEND_FROM_EMAIL"] })
   .https.onCall(async (data: unknown, context) => {
-    if (!context.auth?.uid) {
+    const uid = context.auth?.uid;
+    if (!uid) {
       throw new functions.https.HttpsError(
         "unauthenticated",
         "ログインが必要です"
+      );
+    }
+
+    const adminSnap = await admin.firestore().collection("admins").doc(uid).get();
+    if (!adminSnap.exists) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "管理者のみテストメールを送信できます"
       );
     }
 

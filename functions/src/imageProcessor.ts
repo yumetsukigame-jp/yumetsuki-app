@@ -13,6 +13,28 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const bucket = admin.storage().bucket("point-app-1f854.firebasestorage.app");
 
+type ImageMetadata = {
+  folder?: string;
+  prefix?: string;
+  originalName?: string;
+};
+
+function imageMetadataFrom(value: unknown): ImageMetadata {
+  if (typeof value !== "object" || value === null) {
+    return {};
+  }
+
+  const metadata = value as Record<string, unknown>;
+  return {
+    folder: typeof metadata.folder === "string" ? metadata.folder : undefined,
+    prefix: typeof metadata.prefix === "string" ? metadata.prefix : undefined,
+    originalName:
+      typeof metadata.originalName === "string"
+        ? metadata.originalName
+        : undefined,
+  };
+}
+
 export const processImage = onObjectFinalized(
   { region: "us-east1" },
   async (event) => {
@@ -22,12 +44,13 @@ export const processImage = onObjectFinalized(
 
       if (!filePath || !filePath.startsWith("rawUploads/")) return;
 
-      // ★ metadata を any として扱う（型エラー回避）
-      let metadata: any = {};
-      const idx = filePath.indexOf("?meta=");
-      if (idx !== -1) {
-        const encoded = filePath.substring(idx + 6);
-        metadata = JSON.parse(decodeURIComponent(encoded));
+      let metadata = imageMetadataFrom(object.metadata);
+      if (!metadata.folder && !metadata.prefix && !metadata.originalName) {
+        const idx = filePath.indexOf("?meta=");
+        if (idx !== -1) {
+          const encoded = filePath.substring(idx + 6);
+          metadata = imageMetadataFrom(JSON.parse(decodeURIComponent(encoded)));
+        }
       }
 
       const folder = metadata.folder || "misc";

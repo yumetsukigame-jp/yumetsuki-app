@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import React, { useEffect, useState } from "react";
 import { db, auth } from "@/firebase";
 import {
@@ -26,14 +28,14 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
   const [uid, setUid] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  const [quiz, setQuiz] = useState<any>(null);
+  const [quiz, setQuiz] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [myAnswers, setMyAnswers] = useState<any[]>([]);
-  const [myCurrentRoundAnswers, setMyCurrentRoundAnswers] = useState<any[]>([]);
+  const [myAnswers, setMyAnswers] = useState<DocumentData[]>([]);
+  const [myCurrentRoundAnswers, setMyCurrentRoundAnswers] = useState<DocumentData[]>([]);
   const [newAnswer, setNewAnswer] = useState("");
 
-  const [answers, setAnswers] = useState<any[]>([]);
+  const [answers, setAnswers] = useState<DocumentData[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
 
   const [open, setOpen] = useState(false);
@@ -105,7 +107,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
      新規回答送信（answers/{uid} にユーザー情報を書き込む）
   -------------------------------------------------- */
   const submitAnswer = async () => {
-    if (isSubmitting) return; // ★ 二重送信防止
+       if (isSubmitting || !quiz) return; // ★ 二重送信防止
     setIsSubmitting(true);    // ★ ボタンロック
 
     try {
@@ -172,6 +174,9 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
      回答一覧読み込み
   -------------------------------------------------- */
   const loadAnswers = async () => {
+    const currentQuiz = quiz;
+    if (!currentQuiz) return;
+
     setAnswersLoading(true);
     try {
       const usersSnap = await withRetry(
@@ -180,7 +185,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
         500,
         10000
       );
-      const allAnswers: any[] = [];
+      const allAnswers: DocumentData[] = [];
 
       for (const userDoc of usersSnap.docs) {
         const userId = userDoc.id;
@@ -200,7 +205,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
 
         itemsSnap.forEach((item) => {
           const itemData = item.data();
-          if ((itemData.round ?? 0) <= (quiz.round ?? 0)) {
+          if ((itemData.round ?? 0) <= (currentQuiz.round ?? 0)) {
             allAnswers.push({
               uid: userId,
               answer: itemData.answer,

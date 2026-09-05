@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -11,7 +13,7 @@ import { doc, getDoc } from "firebase/firestore";
 export default function EditNibuichiStatsPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [win, setWin] = useState<number>(0);
@@ -25,6 +27,27 @@ export default function EditNibuichiStatsPage() {
   // -----------------------------
   // 管理者判定
   // -----------------------------
+
+  // -----------------------------
+  // 現在の総合戦績を取得
+  // -----------------------------
+  async function fetchStats() {
+    try {
+      const ref = doc(db, "nibuichi_global_stats", "stats");
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        const data = snap.data();
+        setWin(data.win ?? 0);
+        setDraw(data.draw ?? 0);
+        setLose(data.lose ?? 0);
+        setBakuado(data.bakuado ?? 0);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  }
   useEffect(() => {
     const checkAccess = async () => {
       await auth.authStateReady();
@@ -45,32 +68,12 @@ export default function EditNibuichiStatsPage() {
       }
 
       setUser(currentUser);
-      fetchStats();
+      void Promise.resolve().then(fetchStats);
     };
 
     checkAccess();
   }, []);
 
-  // -----------------------------
-  // 現在の総合戦績を取得
-  // -----------------------------
-  const fetchStats = async () => {
-    try {
-      const ref = doc(db, "nibuichi_global_stats", "stats");
-      const snap = await getDoc(ref);
-
-      if (snap.exists()) {
-        const data = snap.data();
-        setWin(data.win ?? 0);
-        setDraw(data.draw ?? 0);
-        setLose(data.lose ?? 0);
-        setBakuado(data.bakuado ?? 0);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
 
   // -----------------------------
   // 保存処理

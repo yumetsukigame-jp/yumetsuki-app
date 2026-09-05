@@ -1,5 +1,7 @@
 "use client";
 
+import type { DocumentData } from "firebase/firestore";
+
 import { useEffect, useState } from "react";
 import { auth, db } from "../../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -8,7 +10,7 @@ import OricaCard from "../../../components/OricaCard";
 import OricaModal from "../../../components/OricaModal";
 
 export default function OricaPage() {
-  const [images, setImages] = useState<any[]>([]);
+  const [images, setImages] = useState<DocumentData[]>([]);
   const [owned, setOwned] = useState<Record<string, boolean>>({});
   const [uid, setUid] = useState<string | null>(null);
   const [modalImg, setModalImg] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export default function OricaPage() {
   }, [images]);
 
   // 所持切り替え
-  const toggleOwned = async (img: any) => {
+  const toggleOwned = async (img: DocumentData) => {
     if (!uid) return;
 
     const id = img.fileName.replace(/\.(png|jpg|jpeg|webp)$/i, "");
