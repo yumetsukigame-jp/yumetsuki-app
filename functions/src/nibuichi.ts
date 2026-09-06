@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { getYesterdayJST6, getTodayJST6, nowJST } from "./common/date";

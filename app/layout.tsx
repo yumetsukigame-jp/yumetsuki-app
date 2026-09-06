@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import UserFooter from "@/components/UserFooter";
 import UserHeader from "@/components/UserHeader";
@@ -12,6 +12,9 @@ export const metadata: Metadata = {
     icon: "/icon-192.png",
     apple: "/apple-touch-icon.png",
   },
+};
+
+export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
