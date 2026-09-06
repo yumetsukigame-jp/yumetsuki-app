@@ -709,17 +709,49 @@ export const cleanExpiredGacha = functions
   .pubsub.schedule("0 0 * * *")
   .timeZone("Asia/Tokyo")
   .onRun(async () => {
-    const now = nowJST();
+    const now = Timestamp.now();
     const snap = await db
       .collection("gachaCodes")
-      .where("expiresAt", "<", Timestamp.fromDate(now))
+      .where("expiresAt", "<", now)
       .get();
 
-    const batch = db.batch();
-    for (const d of snap.docs) {
-      batch.delete(d.ref);
+    for (const gachaSnap of snap.docs) {
+      const code = gachaSnap.id;
+      const archivedAt = Timestamp.now();
+      const archiveRef = db.collection("gachaCodesArchive").doc(code);
+
+      await archiveRef.set({
+        ...gachaSnap.data(),
+        archivedAt,
+        archiveReason: "expired",
+      });
+
+      const resultsSnap = await db
+        .collection("gachaResults")
+        .doc(code)
+        .collection("results")
+        .get();
+
+      for (let index = 0; index < resultsSnap.docs.length; index += 250) {
+        const batch = db.batch();
+        for (const resultSnap of resultsSnap.docs.slice(index, index + 250)) {
+          const archiveResultRef = db
+            .collection("gachaResultsArchive")
+            .doc(code)
+            .collection("results")
+            .doc(resultSnap.id);
+
+          batch.set(archiveResultRef, {
+            ...resultSnap.data(),
+            archivedAt,
+          });
+          batch.delete(resultSnap.ref);
+        }
+        await batch.commit();
+      }
+
+      await gachaSnap.ref.delete();
     }
-    await batch.commit();
   });
 
 export const resetDailyGacha = functions

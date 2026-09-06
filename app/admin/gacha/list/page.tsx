@@ -36,10 +36,60 @@ type GachaCode = {
   frames?: GachaFrame[];
   point?: { cost?: number; maxPerUser?: number };
   createdAt?: { toDate: () => Date } | Date | null;
+  archivedAt?: { toDate: () => Date } | Date | null;
   [key: string]: unknown;
 };
 
-const formatDate = (value?: GachaCode["expiresAt"]) => {
+type GachaDate = GachaCode["createdAt"];
+
+const toDate = (value?: GachaDate) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    return value.toDate();
+  }
+  return null;
+};
+
+const formatDate = (value?: GachaDate) => {
+  const date = toDate(value);
+  return date ? date.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "なし";
+};
+
+const getMonthKey = (value?: GachaDate) => {
+  const date = toDate(value);
+  if (!date) return "unknown";
+
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  return year && month ? `${year}-${month}` : "unknown";
+};
+
+const formatMonth = (monthKey: string) => {
+  if (monthKey === "unknown") return "作成月不明";
+  const [year, month] = monthKey.split("-");
+  return `${year}年${Number(month)}月`;
+};
+
+const getThumbnailSrc = (thumbnail?: string) => {
+  const value = thumbnail?.trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return `/gacha/${value}`;
+};
+
+const compareCreatedAtDesc = (a: GachaCode, b: GachaCode) => {
+  const aTime = toDate(a.createdAt)?.getTime() ?? 0;
+  const bTime = toDate(b.createdAt)?.getTime() ?? 0;
+  return bTime - aTime;
+};
+
+const formatExpiration = (value?: GachaCode["expiresAt"]) => {
   if (!value) return "なし";
   if (value instanceof Date) return value.toLocaleString();
   if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
@@ -55,6 +105,7 @@ export default function AdminGachaListPage() {
 
   const [view, setView] = useState<"active" | "archive">("active");
   const [archiveLoaded, setArchiveLoaded] = useState(false);
+  const [archiveMonth, setArchiveMonth] = useState("all");
 
   /* -----------------------------------------
      現役ガチャ読み込み
@@ -92,7 +143,9 @@ export default function AdminGachaListPage() {
         500,
         10000
       );
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort(compareCreatedAtDesc);
       setArchiveCodes(list);
       setArchiveLoaded(true);
     } catch (error) {
@@ -165,7 +218,31 @@ export default function AdminGachaListPage() {
     return flags.map((f) => map[f] ?? f).join(" / ");
   };
 
-  const listToShow = view === "active" ? codes : archiveCodes;
+  const archiveMonths = Array.from(
+    new Set(archiveCodes.map((code) => getMonthKey(code.createdAt)))
+  ).sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return b.localeCompare(a);
+  });
+
+  const listToShow =
+    view === "active"
+      ? codes
+      : archiveCodes.filter(
+          (code) =>
+            archiveMonth === "all" ||
+            getMonthKey(code.createdAt) === archiveMonth
+        );
+
+  const groupedCodes =
+    view === "archive"
+      ? listToShow.reduce<Record<string, GachaCode[]>>((groups, code) => {
+          const month = getMonthKey(code.createdAt);
+          groups[month] = [...(groups[month] ?? []), code];
+          return groups;
+        }, {})
+      : { active: listToShow };
 
   return (
     <div style={{ padding: 24 }}>
@@ -205,22 +282,73 @@ export default function AdminGachaListPage() {
         </button>
       </div>
 
+      {view === "archive" && !loading && archiveCodes.length > 0 && (
+        <label
+          style={{
+            display: "block",
+            marginBottom: 20,
+            fontWeight: "bold",
+          }}
+        >
+          作成月：
+          <select
+            value={archiveMonth}
+            onChange={(event) => setArchiveMonth(event.target.value)}
+            style={{
+              marginLeft: 8,
+              padding: "8px 12px",
+              border: "1px solid #ccc",
+              borderRadius: 6,
+              background: "white",
+            }}
+          >
+            <option value="all">すべて</option>
+            {archiveMonths.map((month) => (
+              <option key={month} value={month}>
+                {formatMonth(month)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {loading && <p>読み込み中…</p>}
 
       {!loading && listToShow.length === 0 && (
-        <p>{view === "active" ? "ガチャがありません。" : "アーカイブは空です。"}</p>
+        <p>
+          {view === "active"
+            ? "ガチャがありません。"
+            : archiveMonth === "all"
+              ? "アーカイブは空です。"
+              : "この作成月のアーカイブはありません。"}
+        </p>
       )}
 
       {/* ▼ ガチャ一覧 */}
-      {listToShow.map((c) => (
-        <GachaCard
-          key={c.id}
-          c={c}
-          view={view}
-          renderFlags={renderFlags}
-          deleteCode={deleteCode}
-          restoreCode={restoreCode}
-        />
+      {Object.entries(groupedCodes).map(([month, monthCodes]) => (
+        <section key={month}>
+          {view === "archive" && (
+            <h2
+              style={{
+                margin: "28px 0 12px",
+                paddingBottom: 6,
+                borderBottom: "2px solid #d1d5db",
+              }}
+            >
+              {formatMonth(month)}
+            </h2>
+          )}
+          {monthCodes.map((c) => (
+            <GachaCard
+              key={`${view}-${c.id}`}
+              c={c}
+              view={view}
+              renderFlags={renderFlags}
+              deleteCode={deleteCode}
+              restoreCode={restoreCode}
+            />
+          ))}
+        </section>
       ))}
     </div>
   );
@@ -239,6 +367,8 @@ type GachaCardProps = {
 
 function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardProps) {
   const [showX, setShowX] = useState(false);
+  const [showDetails, setShowDetails] = useState(view === "active");
+  const thumbnailSrc = getThumbnailSrc(c.thumbnail);
 
   return (
     <div
@@ -251,10 +381,11 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
       }}
     >
       {/* サムネイル */}
-      {c.thumbnail && (
+      {thumbnailSrc && (
         <div style={{ marginBottom: 12 }}>
           <img
-            src={`/gacha/${c.thumbnail}`}
+            src={thumbnailSrc}
+            alt={`${c.title ?? "ガチャ"}のサムネイル`}
             style={{
               width: 120,
               height: 120,
@@ -273,8 +404,34 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
         )}
       </h2>
 
+      {view === "archive" && (
+        <button
+          type="button"
+          onClick={() => setShowDetails((current) => !current)}
+          aria-expanded={showDetails}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            background: "#4b5563",
+            color: "white",
+            borderRadius: 6,
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          {showDetails ? "▲ 詳細を閉じる" : "▼ 詳細を表示"}
+        </button>
+      )}
+
+      {showDetails && (
+        <>
       <p style={{ margin: "4px 0" }}>
         コード：<strong>{c.code}</strong>
+      </p>
+
+      <p style={{ margin: "4px 0" }}>
+        作成日時：{formatDate(c.createdAt)}
       </p>
 
       <p style={{ margin: "4px 0" }}>
@@ -337,7 +494,7 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
       </p>
 
       <p style={{ margin: "4px 0" }}>
-        期限：{formatDate(c.expiresAt)}
+        期限：{formatExpiration(c.expiresAt)}
       </p>
 
       <h3 style={{ marginTop: 12 }}>枠情報</h3>
@@ -421,6 +578,8 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
           </button>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
