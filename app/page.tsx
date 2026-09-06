@@ -289,7 +289,6 @@ export default function Home() {
           height: "auto",
           margin: "0 auto 20px",
           display: "block",
-          borderRadius: "12px",
         }}
       />
 
