@@ -9,6 +9,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { withRetry } from "@/app/lib/retry";
 
@@ -89,6 +90,40 @@ const compareCreatedAtDesc = (a: GachaCode, b: GachaCode) => {
   return bTime - aTime;
 };
 
+const processResults = async (
+  sourceCollection: "gachaResults" | "gachaResultsArchive",
+  destinationCollection:
+    | "gachaResults"
+    | "gachaResultsArchive"
+    | null,
+  code: string,
+  archivedAt?: Date
+) => {
+  const sourceRef = collection(db, sourceCollection, code, "results");
+  const sourceSnap = await getDocs(sourceRef);
+
+  for (let index = 0; index < sourceSnap.docs.length; index += 250) {
+    const batch = writeBatch(db);
+    for (const resultSnap of sourceSnap.docs.slice(index, index + 250)) {
+      if (destinationCollection) {
+        const destinationRef = doc(
+          db,
+          destinationCollection,
+          code,
+          "results",
+          resultSnap.id
+        );
+        batch.set(destinationRef, {
+          ...resultSnap.data(),
+          ...(archivedAt ? { archivedAt } : {}),
+        });
+      }
+      batch.delete(resultSnap.ref);
+    }
+    await batch.commit();
+  }
+};
+
 const formatExpiration = (value?: GachaCode["expiresAt"]) => {
   if (!value) return "なし";
   if (value instanceof Date) return value.toLocaleString();
@@ -160,9 +195,46 @@ export default function AdminGachaListPage() {
      削除（現役のみ）
   ----------------------------------------- */
   const deleteCode = async (id: string) => {
-    if (!confirm("本当に削除しますか？")) return;
+    if (!confirm("このガチャと抽選結果を削除しますか？")) return;
+    await processResults("gachaResults", null, id);
     await deleteDoc(doc(db, "gachaCodes", id));
     await loadCodes();
+  };
+
+  const archiveCode = async (id: string) => {
+    if (!confirm("このガチャと抽選結果をアーカイブへ移動しますか？")) return;
+
+    const activeRef = doc(db, "gachaCodes", id);
+    const activeSnap = await getDoc(activeRef);
+    if (!activeSnap.exists()) {
+      alert("データが見つかりません");
+      return;
+    }
+
+    const archivedAt = new Date();
+    await setDoc(doc(db, "gachaCodesArchive", id), {
+      ...activeSnap.data(),
+      archivedAt,
+    });
+    await processResults(
+      "gachaResults",
+      "gachaResultsArchive",
+      id,
+      archivedAt
+    );
+    await deleteDoc(activeRef);
+
+    alert("ガチャと抽選結果をアーカイブへ移動しました");
+    await loadCodes();
+    setArchiveLoaded(false);
+  };
+
+  const deleteArchiveCode = async (id: string) => {
+    if (!confirm("このアーカイブと抽選結果を完全に削除しますか？")) return;
+
+    await processResults("gachaResultsArchive", null, id);
+    await deleteDoc(doc(db, "gachaCodesArchive", id));
+    setArchiveCodes((current) => current.filter((code) => code.id !== id));
   };
 
   /* -----------------------------------------
@@ -181,13 +253,15 @@ export default function AdminGachaListPage() {
 
     const data = snap.data();
 
-    // ① 現役へコピー
     await setDoc(doc(db, "gachaCodes", id), {
       ...data,
       restoredAt: new Date(),
     });
-
-    // ② アーカイブ側を削除
+    await processResults(
+      "gachaResultsArchive",
+      "gachaResults",
+      id
+    );
     await deleteDoc(ref);
 
     alert("現役ガチャへ戻しました");
@@ -345,6 +419,8 @@ export default function AdminGachaListPage() {
               view={view}
               renderFlags={renderFlags}
               deleteCode={deleteCode}
+              archiveCode={archiveCode}
+              deleteArchiveCode={deleteArchiveCode}
               restoreCode={restoreCode}
             />
           ))}
@@ -362,12 +438,22 @@ type GachaCardProps = {
   view: "active" | "archive";
   renderFlags: (flags?: string[]) => string;
   deleteCode: (id: string) => void | Promise<void>;
+  archiveCode: (id: string) => void | Promise<void>;
+  deleteArchiveCode: (id: string) => void | Promise<void>;
   restoreCode: (id: string) => void | Promise<void>;
 };
 
-function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardProps) {
+function GachaCard({
+  c,
+  view,
+  renderFlags,
+  deleteCode,
+  archiveCode,
+  deleteArchiveCode,
+  restoreCode,
+}: GachaCardProps) {
   const [showX, setShowX] = useState(false);
-  const [showDetails, setShowDetails] = useState(view === "active");
+  const [showDetails, setShowDetails] = useState(false);
   const thumbnailSrc = getThumbnailSrc(c.thumbnail);
 
   return (
@@ -404,25 +490,99 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
         )}
       </h2>
 
-      {view === "archive" && (
-        <button
-          type="button"
-          onClick={() => setShowDetails((current) => !current)}
-          aria-expanded={showDetails}
-          style={{
-            width: "100%",
-            padding: "8px 12px",
-            background: "#4b5563",
-            color: "white",
-            borderRadius: 6,
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          {showDetails ? "▲ 詳細を閉じる" : "▼ 詳細を表示"}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setShowDetails((current) => !current)}
+        aria-expanded={showDetails}
+        style={{
+          width: "100%",
+          padding: "8px 12px",
+          background: "#4b5563",
+          color: "white",
+          borderRadius: 6,
+          border: "none",
+          cursor: "pointer",
+          fontWeight: "bold",
+        }}
+      >
+        {showDetails ? "▲ 詳細を閉じる" : "▼ 詳細を表示"}
+      </button>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginTop: 8,
+        }}
+      >
+        {view === "active" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => archiveCode(c.id)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: "#d97706",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              アーカイブへ移動
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteCode(c.id)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: "#dc2626",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              ガチャを削除
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => restoreCode(c.id)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: "#10b981",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              現役に戻す
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteArchiveCode(c.id)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: "#dc2626",
+                color: "white",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              アーカイブから削除
+            </button>
+          </>
+        )}
+      </div>
 
       {showDetails && (
         <>
@@ -529,55 +689,6 @@ function GachaCard({ c, view, renderFlags, deleteCode, restoreCode }: GachaCardP
         </div>
       ))}
 
-      {/* ▼ ボタン */}
-      <div style={{ marginTop: 12 }}>
-        <button
-          onClick={() => navigator.clipboard.writeText(c.code ?? "")}
-          style={{
-            marginRight: 10,
-            padding: "6px 12px",
-            background: "#2563eb",
-            color: "white",
-            borderRadius: 6,
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          コードをコピー
-        </button>
-
-        {view === "active" && (
-          <button
-            onClick={() => deleteCode(c.id)}
-            style={{
-              padding: "6px 12px",
-              background: "#dc2626",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            削除
-          </button>
-        )}
-
-        {view === "archive" && (
-          <button
-            onClick={() => restoreCode(c.id)}
-            style={{
-              padding: "6px 12px",
-              background: "#10b981",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            現役へ戻す
-          </button>
-        )}
-      </div>
         </>
       )}
     </div>
