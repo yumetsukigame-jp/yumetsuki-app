@@ -28,7 +28,7 @@ type UserRecord = {
   subscriber?: boolean;
   xAccountConfirmed?: boolean;
   points?: number;
-  loginCount?: number;
+  totalLoginDays?: number;
   lastLogin?: { toDate?: () => Date } | Date | null;
   createdAt?: { toDate?: () => Date } | Date | null;
 };
@@ -422,7 +422,10 @@ function UserCard({
         <UserDetail label="氏名" value={user.name || "未登録"} />
         <UserDetail label="Xアカウント" value={user.xAccount || "未登録"} />
         <UserDetail label="ポイント" value={`${user.points ?? 0} pt`} />
-        <UserDetail label="ログイン回数" value={`${user.loginCount ?? 0} 回`} />
+        <UserDetail
+          label="累計ログイン日数"
+          value={`${user.totalLoginDays ?? 0} 日`}
+        />
         <UserDetail label="最終ログイン" value={formatDate(user.lastLogin)} />
         <UserDetail label="登録日時" value={formatDate(user.createdAt)} />
         <UserDetail label="UID" value={user.id} fullWidth />

@@ -12,6 +12,20 @@ export function getDateStringJST(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function getCalendarDateJST(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts.map(({ type, value }) => [type, value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export function getYesterdayJST6(): string {
   const now = nowJST();
   if (now.getHours() < 6) now.setDate(now.getDate() - 2);

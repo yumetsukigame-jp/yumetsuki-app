@@ -96,8 +96,9 @@ export default function UserHistory({ uid }: { uid: string }) {
         <p><strong>メール：</strong> {user.email || "不明"}</p>
         <p><strong>合計ポイント：</strong> {totalPoints} pt</p>
 
-        {/* ★ 追加：ログイン情報 */}
-        <p><strong>ログイン回数：</strong> {user.loginCount ?? 0} 回</p>
+        <p>
+          <strong>累計ログイン日数：</strong> {user.totalLoginDays ?? 0} 日
+        </p>
 
         <p>
           <strong>最終ログイン：</strong>{" "}

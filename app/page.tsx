@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 export const dynamic = "force-dynamic";
 
 import { db, auth } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
@@ -52,6 +52,7 @@ type CachedUser = {
   uid: string;
   nickname: string;
   points: number;
+  totalLoginDays?: number;
   xAccount?: string;
   subscriber: boolean;
 };
@@ -78,6 +79,9 @@ export default function Home() {
      Firestore データ
   -------------------------------------------------- */
   const [points, setPoints] = useState<number | undefined>(undefined);
+  const [totalLoginDays, setTotalLoginDays] = useState<number | undefined>(
+    undefined
+  );
   const [nickname, setNickname] = useState<string | undefined>(undefined);
   const [xAccount, setXAccount] = useState<string | undefined>(undefined);
   const [subscriber, setSubscriber] = useState<boolean>(false);
@@ -103,6 +107,9 @@ export default function Home() {
       setAuthReady((currentReady) => currentReady || cached.uid.length > 0);
       setNickname((currentNickname) => currentNickname ?? cached.nickname);
       setPoints((currentPoints) => currentPoints ?? cached.points);
+      setTotalLoginDays(
+        (currentTotal) => currentTotal ?? cached.totalLoginDays
+      );
       setXAccount((currentXAccount) => currentXAccount ?? cached.xAccount);
       setSubscriber((currentSubscriber) => currentSubscriber || cached.subscriber);
     }, 0);
@@ -123,6 +130,22 @@ export default function Home() {
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+
+    return onSnapshot(
+      doc(db, "users", uid),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setTotalLoginDays(snapshot.data().totalLoginDays ?? 0);
+        }
+      },
+      (error) => {
+        console.error("累計ログイン日数の更新監視に失敗しました", error);
+      }
+    );
+  }, [uid]);
 
   /* --------------------------------------------------
       ② Firestore 読み込み
@@ -197,10 +220,12 @@ export default function Home() {
           const u = userSnap.data();
           const nextNickname = u.displayName?.trim() || "";
           const nextPoints = u.points ?? 0;
+          const nextTotalLoginDays = u.totalLoginDays ?? 0;
           const nextXAccount = u.xAccount ?? undefined;
           const nextSubscriber = u.subscriber === true;
           setNickname(nextNickname);
           setPoints(nextPoints);
+          setTotalLoginDays(nextTotalLoginDays);
           setXAccount(nextXAccount);
           setSubscriber(nextSubscriber);
           sessionStorage.setItem(
@@ -209,6 +234,7 @@ export default function Home() {
               uid,
               nickname: nextNickname,
               points: nextPoints,
+              totalLoginDays: nextTotalLoginDays,
               xAccount: nextXAccount,
               subscriber: nextSubscriber,
             } satisfies CachedUser)
@@ -324,6 +350,9 @@ export default function Home() {
   現在のポイント：
   <span style={{ fontWeight: "bold" }}>{points} pt</span>
 </h1>
+<p style={{ margin: "-12px 0 20px", color: "#6b7280", fontSize: "14px" }}>
+  累計ログイン日数：{totalLoginDays ?? 0}日
+</p>
 
 {/* ★★★ 戦績をここに常時表示 ★★★ */}
 <div

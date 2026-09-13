@@ -18,6 +18,7 @@ export { sendPasswordResetLink } from "./passwordReset";
 export { sendTestResendEmail } from "./testEmail";
 export {
   createUserProfile,
+  recordDailyLogin,
   updateUserProfile,
   syncUserEmail,
 } from "./userProfile";

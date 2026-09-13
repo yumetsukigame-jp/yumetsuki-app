@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
-import { auth, db } from "@/firebase";
+import { auth, functions } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, updateDoc, increment } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 
 export default function LoginTracker() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
         try {
-          await updateDoc(doc(db, "users", u.uid), {
-            lastLogin: new Date(),
-            loginCount: increment(1),
-          });
+          await httpsCallable<
+            Record<string, never>,
+            {
+              recorded: boolean;
+              loginDate: string;
+              totalLoginDays: number;
+            }
+          >(functions, "recordDailyLogin")({});
         } catch (error) {
           console.error("ログイン記録の更新に失敗しました", error);
         }
@@ -23,5 +27,5 @@ export default function LoginTracker() {
     return () => unsub();
   }, []);
 
-  return null; // 画面には何も表示しない
+  return null;
 }

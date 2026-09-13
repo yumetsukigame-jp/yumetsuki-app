@@ -3,6 +3,7 @@ import * as functions from "firebase-functions/v1";
 import { Timestamp } from "firebase-admin/firestore";
 import { createHash } from "crypto";
 
+import { getCalendarDateJST } from "./common/date";
 import { normalizeX } from "./common/normalize";
 
 if (!admin.apps.length) {
@@ -157,12 +158,17 @@ export const createUserProfile = functions
     }
 
     await claimXAccount(uid, profile.xAccount, undefined, (transaction) => {
+      const now = Timestamp.now();
+      const loginDate = getCalendarDateJST(now.toDate());
+
       transaction.create(userRef, {
         email: context.auth?.token.email ?? "",
         ...profile,
         points: 0,
-        createdAt: Timestamp.now(),
-        lastLogin: Timestamp.now(),
+        createdAt: now,
+        lastLogin: now,
+        loginDates: [loginDate],
+        totalLoginDays: 1,
         xAccountConfirmed: false,
       });
     });
@@ -236,4 +242,57 @@ export const syncUserEmail = functions
 
     await userRef.update({ email: authUser.email });
     return { updated: true, email: authUser.email };
+  });
+
+export const recordDailyLogin = functions
+  .region("us-east1")
+  .https.onCall(async (_data: unknown, context) => {
+    const uid = requireUid(context);
+    const userRef = db.collection("users").doc(uid);
+    const now = Timestamp.now();
+    const loginDate = getCalendarDateJST(now.toDate());
+
+    const totalLoginDays = await db.runTransaction(async (transaction) => {
+      const user = await transaction.get(userRef);
+      if (!user.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "プロフィールが見つかりません。"
+        );
+      }
+
+      const storedDates = user.get("loginDates");
+      const loginDates = Array.isArray(storedDates)
+        ? Array.from(
+            new Set(
+              storedDates.filter(
+                (date): date is string => typeof date === "string"
+              )
+            )
+          )
+        : [];
+
+      const previousLastLogin = user.get("lastLogin");
+      if (loginDates.length === 0 && previousLastLogin instanceof Timestamp) {
+        loginDates.push(getCalendarDateJST(previousLastLogin.toDate()));
+      }
+
+      if (!loginDates.includes(loginDate)) {
+        loginDates.push(loginDate);
+      }
+
+      transaction.update(userRef, {
+        lastLogin: now,
+        loginDates,
+        totalLoginDays: loginDates.length,
+      });
+
+      return loginDates.length;
+    });
+
+    return {
+      recorded: true,
+      loginDate,
+      totalLoginDays,
+    };
   });
