@@ -424,7 +424,7 @@ export default function Home() {
       </Section>
 
       {/* 📦 ポイント */}
-      <Section title="📦 ポイント関連" color="#2563eb">
+      <Section title="📦 ポイント関連" color="#2563eb" alwaysVisible={2}>
         <MenuButton href="/code" color="#2563eb">
           コード入力でポイント獲得
         </MenuButton>
