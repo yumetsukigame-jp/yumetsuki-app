@@ -401,13 +401,20 @@ export default function Home() {
 </Section>
 
       {/* 🎰 ガチャ */}
-      <Section title="🎰 ガチャ" color="#a855f7">
+<Section title="🎰 ガチャ" color="#a855f7" alwaysVisible={2}>
         <MenuButton href="/gacha/list" color="#a855f7">
           ガチャ一覧を見る
         </MenuButton>
-        <MenuButton href="/gacha" color="#a855f7">
-          ガチャを引く
-        </MenuButton>
+  <MenuButton
+    href="/gacha-guide.html"
+    color="#a855f7"
+    subtle
+  >
+    ガチャの遊び方を見る
+  </MenuButton>
+  <MenuButton href="/gacha" color="#a855f7">
+    ガチャを引く
+  </MenuButton>
         <MenuButton href="/gacha/results" color="#a855f7">
           ガチャ結果を見る
         </MenuButton>
@@ -430,9 +437,12 @@ export default function Home() {
       </Section>
 
       {/* 🧠 クイズ */}
-      <Section title="クイズ" color="#0ea5e9" icon="🧠">
+      <Section title="クイズ" color="#0ea5e9" icon="🧠" alwaysVisible={2}>
         <MenuButton href="/quizzes" color="#0ea5e9">
           クイズ一覧を見る
+        </MenuButton>
+        <MenuButton href="/quiz-guide.html" color="#0ea5e9" subtle>
+          クイズの遊び方を見る
         </MenuButton>
         <MenuButton href="/quizzes/archive" color="#0ea5e9">
           完了済みクイズを見る
