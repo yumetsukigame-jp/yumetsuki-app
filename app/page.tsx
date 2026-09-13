@@ -406,7 +406,7 @@ export default function Home() {
           ガチャ一覧を見る
         </MenuButton>
   <MenuButton
-    href="/gacha-guide.html"
+    href="/gacha/guide"
     color="#a855f7"
     subtle
   >
@@ -441,7 +441,7 @@ export default function Home() {
         <MenuButton href="/quizzes" color="#0ea5e9">
           クイズ一覧を見る
         </MenuButton>
-        <MenuButton href="/quiz-guide.html" color="#0ea5e9" subtle>
+        <MenuButton href="/quizzes/guide" color="#0ea5e9" subtle>
           クイズの遊び方を見る
         </MenuButton>
         <MenuButton href="/quizzes/archive" color="#0ea5e9">
