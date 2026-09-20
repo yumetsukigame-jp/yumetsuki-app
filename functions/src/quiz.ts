@@ -2,6 +2,8 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 
+import { finalizeArchiveWithAnnouncement } from "./common/archiveAnnouncements";
+
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -110,13 +112,14 @@ export const confirmQuizAnswer = functions
          ★ アーカイブへクイズ本体をコピー
       -------------------------------------------------- */
       const archiveRef = db.collection("quizzes_archive").doc(quizId);
+      const archivedAt = Timestamp.now();
       await archiveRef.set({
         ...quiz,
         explanation,
         salt,
         thread,
         archived: true,
-        archivedAt: Timestamp.now(),
+        archivedAt,
       });
 
       /* --------------------------------------------------
@@ -166,7 +169,12 @@ export const confirmQuizAnswer = functions
       /* --------------------------------------------------
          ★ 最後にクイズ本体を削除
       -------------------------------------------------- */
-      await quizRef.delete();
+      await finalizeArchiveWithAnnouncement(db, quizRef, {
+        type: "quiz",
+        sourceId: quizId,
+        title: typeof quiz.title === "string" ? quiz.title : "名称未設定",
+        archivedAt,
+      });
 
       return {
         success: true,

@@ -57,6 +57,44 @@ type CachedUser = {
   subscriber: boolean;
 };
 
+type ArchiveAnnouncement = {
+  id: string;
+  type: "quiz" | "gacha" | "gacha_win";
+  title: string;
+  frame?: string;
+  gachaCode?: string;
+  winnerNickname?: string;
+  winnerXAccount?: string;
+  archivedAt?: { toDate?: () => Date } | Date | null;
+};
+
+const ANNOUNCEMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function toAnnouncementDate(
+  value: ArchiveAnnouncement["archivedAt"]
+): Date | null {
+  return (
+    value instanceof Date
+      ? value
+      : value && typeof value.toDate === "function"
+        ? value.toDate()
+        : null
+  );
+}
+
+function formatAnnouncementDate(
+  value: ArchiveAnnouncement["archivedAt"]
+): string {
+  const date = toAnnouncementDate(value);
+  return date
+    ? date.toLocaleDateString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+        month: "numeric",
+        day: "numeric",
+      })
+    : "";
+}
+
 function getCachedUser(): CachedUser | null {
   if (typeof window === "undefined") return null;
 
@@ -87,6 +125,11 @@ export default function Home() {
   const [subscriber, setSubscriber] = useState<boolean>(false);
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
+  const [archiveAnnouncements, setArchiveAnnouncements] = useState<
+    ArchiveAnnouncement[]
+  >([]);
+  const [showAllArchiveAnnouncements, setShowAllArchiveAnnouncements] =
+    useState(false);
 
   const [totalBattle, setTotalBattle] = useState(0);
   const [totalWin, setTotalWin] = useState(0);
@@ -214,6 +257,59 @@ export default function Home() {
         () => setNibuichiLoaded(true)
       );
 
+      void applySupplemental(
+        withRetry(
+          () => getDoc(doc(db, "homeAnnouncements", "archiveUpdates")),
+          2,
+          300,
+          10000
+        ),
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            setArchiveAnnouncements([]);
+            return;
+          }
+
+          const items = snapshot.data().items;
+          if (!Array.isArray(items)) {
+            setArchiveAnnouncements([]);
+            return;
+          }
+
+          setArchiveAnnouncements(
+            items
+              .filter(
+                (item): item is ArchiveAnnouncement =>
+                  item !== null &&
+                  typeof item === "object" &&
+                  typeof item.id === "string" &&
+                  (item.type === "quiz" ||
+                    item.type === "gacha" ||
+                    item.type === "gacha_win") &&
+                  typeof item.title === "string" &&
+                  (item.type !== "gacha_win" ||
+                    (typeof item.frame === "string" &&
+                      typeof item.gachaCode === "string"))
+              )
+              .filter((item) => {
+                const archivedAt = toAnnouncementDate(item.archivedAt);
+                return (
+                  archivedAt !== null &&
+                  archivedAt.getTime() >=
+                    Date.now() - ANNOUNCEMENT_RETENTION_MS
+                );
+              })
+              .sort(
+                (a, b) =>
+                  (toAnnouncementDate(b.archivedAt)?.getTime() ?? 0) -
+                  (toAnnouncementDate(a.archivedAt)?.getTime() ?? 0)
+              )
+          );
+          setShowAllArchiveAnnouncements(false);
+        },
+        "終了のお知らせ"
+      );
+
       try {
         const userSnap = await userPromise;
         if (userSnap.exists()) {
@@ -295,6 +391,15 @@ export default function Home() {
       hit ? "的中" : "ハズレ"
     }）`;
   }
+
+  const initialArchiveAnnouncements = archiveAnnouncements
+    .filter((announcement) => announcement.type !== "gacha_win")
+    .slice(0, 2);
+  const visibleArchiveAnnouncements = showAllArchiveAnnouncements
+    ? archiveAnnouncements
+    : initialArchiveAnnouncements;
+  const hiddenArchiveAnnouncementCount =
+    archiveAnnouncements.length - initialArchiveAnnouncements.length;
 
   return (
     <div
@@ -381,6 +486,107 @@ export default function Home() {
       : "戦績を取得中…"}
   </div>
 </div>
+
+{archiveAnnouncements.length > 0 && (
+  <div
+    style={{
+      marginBottom: "20px",
+      padding: "12px 14px",
+      background: "#f8fafc",
+      border: "1px solid #e2e8f0",
+      borderRadius: "8px",
+      textAlign: "left",
+    }}
+  >
+    <div
+      style={{
+        marginBottom: "6px",
+        color: "#334155",
+        fontSize: "14px",
+        fontWeight: "bold",
+      }}
+    >
+      お知らせ
+    </div>
+    <div style={{ display: "grid", gap: "6px" }}>
+      {visibleArchiveAnnouncements.map((announcement) => {
+        const isGachaWin = announcement.type === "gacha_win";
+        const isQuiz = announcement.type === "quiz";
+        const archivedDate = formatAnnouncementDate(
+          announcement.archivedAt
+        );
+        const winnerXAccount = announcement.winnerXAccount?.trim();
+        const formattedWinnerXAccount = winnerXAccount
+          ? winnerXAccount.startsWith("@")
+            ? winnerXAccount
+            : `@${winnerXAccount}`
+          : "";
+
+        return (
+          <Link
+            key={announcement.id}
+            href={
+              isGachaWin
+                ? `/gacha/results?code=${announcement.gachaCode}`
+                : isQuiz
+                  ? "/quizzes/archive"
+                  : "/gacha/archive"
+            }
+            style={{
+              color: "#475569",
+              fontSize: "14px",
+              lineHeight: 1.5,
+              textDecoration: "none",
+            }}
+          >
+            {isGachaWin ? (
+              <>
+                🎉 {announcement.winnerNickname || "ユーザー"}
+                {formattedWinnerXAccount &&
+                  `（${formattedWinnerXAccount}）`}
+                さんがガチャ「{announcement.title}」で「
+                {announcement.frame}」に当選しました。
+              </>
+            ) : (
+              <>
+                {isQuiz ? "🧠" : "🎰"} {isQuiz ? "クイズ" : "ガチャ"}「
+                {announcement.title}」が終了しました。
+              </>
+            )}
+            {archivedDate && (
+              <span style={{ marginLeft: "6px", color: "#94a3b8" }}>
+                {archivedDate}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </div>
+    {hiddenArchiveAnnouncementCount > 0 && (
+      <button
+        type="button"
+        onClick={() =>
+          setShowAllArchiveAnnouncements((current) => !current)
+        }
+        style={{
+          display: "block",
+          margin: "10px auto 0",
+          padding: "5px 10px",
+          color: "#475569",
+          background: "white",
+          border: "1px solid #cbd5e1",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontSize: "13px",
+        }}
+      >
+        {showAllArchiveAnnouncements
+          ? "詳細を閉じる"
+          : `詳細を表示（残り${hiddenArchiveAnnouncementCount}件）`}
+      </button>
+    )}
+  </div>
+)}
 
 {/* 🎯 今日のニブイチ */}
 <Section title="🎯 今日のニブイチ" color="#eab308" alwaysVisible={2}>

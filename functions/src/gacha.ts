@@ -3,6 +3,11 @@ import * as functions from "firebase-functions/v1";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 import { nowJST, getYesterdayJST6 } from "./common/date";
+import {
+  finalizeArchiveWithAnnouncement,
+  getHomeAnnouncementRef,
+  recordGachaWinAnnouncementInTransaction,
+} from "./common/archiveAnnouncements";
 import { normalizeX } from "./common/normalize";
 
 if (!admin.apps.length) {
@@ -576,6 +581,21 @@ export const useGachaCode = functions
           );
         }
 
+        const resultRef = db
+          .collection("gachaResults")
+          .doc(code)
+          .collection("results")
+          .doc();
+        const losingFrame = freshFrames[freshFrames.length - 1];
+        const isWinningFrame = selectedFrame.label !== losingFrame?.label;
+        const announcementRef = isWinningFrame
+          ? getHomeAnnouncementRef(db)
+          : null;
+        const announcementSnapshot = announcementRef
+          ? await tx.get(announcementRef)
+          : null;
+        const resultCreatedAt = Timestamp.now();
+
         tx.update(userRef, {
           points: freshPoints - cost + reward,
           ...(shouldConfirmXAccount ? { xAccountConfirmed: true } : {}),
@@ -595,12 +615,6 @@ export const useGachaCode = functions
           tx.update(gachaRef, { frames: updatedFrames });
         }
 
-        const resultRef = db
-          .collection("gachaResults")
-          .doc(code)
-          .collection("results")
-          .doc();
-
         tx.set(resultRef, {
           id: resultRef.id,
           uid,
@@ -608,8 +622,38 @@ export const useGachaCode = functions
           title: freshGacha.title,
           frame: selectedFrame.label,
           reward,
-          createdAt: Timestamp.now(),
+          createdAt: resultCreatedAt,
         });
+
+        if (announcementRef && announcementSnapshot) {
+          recordGachaWinAnnouncementInTransaction(
+            tx,
+            announcementRef,
+            announcementSnapshot,
+            {
+              resultId: resultRef.id,
+              gachaCode: code,
+              title:
+                typeof freshGacha.title === "string"
+                  ? freshGacha.title
+                  : "名称未設定",
+              frame: selectedFrame.label,
+              winnerNickname:
+                typeof freshUser.displayName === "string" &&
+                freshUser.displayName.trim()
+                  ? freshUser.displayName.trim()
+                  : typeof freshUser.name === "string" &&
+                      freshUser.name.trim()
+                    ? freshUser.name.trim()
+                    : "ユーザー",
+              winnerXAccount:
+                typeof freshUser.xAccount === "string"
+                  ? freshUser.xAccount.trim()
+                  : "",
+              announcedAt: resultCreatedAt,
+            }
+          );
+        }
 
         return {
           frame: selectedFrame.label,
@@ -726,9 +770,10 @@ export const cleanExpiredGacha = functions
       const code = gachaSnap.id;
       const archivedAt = Timestamp.now();
       const archiveRef = db.collection("gachaCodesArchive").doc(code);
+      const gachaData = gachaSnap.data();
 
       await archiveRef.set({
-        ...gachaSnap.data(),
+        ...gachaData,
         archivedAt,
         archiveReason: "expired",
       });
@@ -757,7 +802,15 @@ export const cleanExpiredGacha = functions
         await batch.commit();
       }
 
-      await gachaSnap.ref.delete();
+      await finalizeArchiveWithAnnouncement(db, gachaSnap.ref, {
+        type: "gacha",
+        sourceId: code,
+        title:
+          typeof gachaData.title === "string"
+            ? gachaData.title
+            : "名称未設定",
+        archivedAt,
+      });
     }
   });
 

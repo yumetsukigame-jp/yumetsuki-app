@@ -12,6 +12,10 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { withRetry } from "@/app/lib/retry";
+import {
+  finalizeArchiveWithAnnouncement,
+  finalizeRestoreAndRemoveAnnouncement,
+} from "@/app/lib/archiveAnnouncements";
 
 type GachaFrame = {
   label?: string;
@@ -223,7 +227,16 @@ export default function AdminGachaListPage() {
       id,
       archivedAt
     );
-    await deleteDoc(activeRef);
+    const activeData = activeSnap.data();
+    await finalizeArchiveWithAnnouncement(activeRef, {
+        type: "gacha",
+        sourceId: id,
+        title:
+          typeof activeData.title === "string"
+            ? activeData.title
+            : "名称未設定",
+        archivedAt,
+      });
 
     alert("ガチャと抽選結果をアーカイブへ移動しました");
     await loadCodes();
@@ -263,7 +276,7 @@ export default function AdminGachaListPage() {
       "gachaResults",
       id
     );
-    await deleteDoc(ref);
+    await finalizeRestoreAndRemoveAnnouncement(ref, "gacha", id);
 
     alert("現役ガチャへ戻しました");
 

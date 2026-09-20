@@ -16,6 +16,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
+import { finalizeArchiveWithAnnouncement } from "@/app/lib/archiveAnnouncements";
 
 type GachaFrame = {
   label?: string;
@@ -117,13 +118,12 @@ export default function GachaManagePage() {
     }
 
     const data = snap.data();
+    const archivedAt = new Date();
 
     await setDoc(doc(db, "gachaCodesArchive", id), {
       ...data,
-      archivedAt: new Date(),
+      archivedAt,
     });
-
-    await deleteDoc(ref);
 
     const srcRef = collection(db, "gachaResults", id, "results");
     const srcSnap = await getDocs(srcRef);
@@ -151,6 +151,14 @@ export default function GachaManagePage() {
     });
 
     await batch.commit();
+
+    await finalizeArchiveWithAnnouncement(ref, {
+      type: "gacha",
+      sourceId: id,
+      title:
+        typeof data.title === "string" ? data.title : "名称未設定",
+      archivedAt,
+    });
 
     alert("ガチャと結果をアーカイブへ移動しました");
     await loadCodes();
