@@ -5,9 +5,16 @@ type OricaCardProps = {
   owned: boolean;
   onToggle: () => void;
   onClick: () => void;
+  disabled?: boolean;
 };
 
-export default function OricaCard({ img, owned, onToggle, onClick }: OricaCardProps) {
+export default function OricaCard({
+  img,
+  owned,
+  onToggle,
+  onClick,
+  disabled = false,
+}: OricaCardProps) {
   return (
     <div
       style={{
@@ -22,6 +29,7 @@ export default function OricaCard({ img, owned, onToggle, onClick }: OricaCardPr
       {/* カード画像（未所持は薄くする） */}
       <img
         src={img}
+        alt="オリカ"
         onClick={onClick}
         style={{
           width: "100%",
@@ -33,20 +41,22 @@ export default function OricaCard({ img, owned, onToggle, onClick }: OricaCardPr
 
       {/* ボタン（未所持はグレー、保有は紫） */}
       <button
+        type="button"
         onClick={onToggle}
+        disabled={disabled}
         style={{
           marginTop: "10px",
           padding: "8px",
           width: "100%",
           borderRadius: "6px",
           border: "none",
-          background: owned ? "#4f46e5" : "#999", // ← ボタンは薄くしない
+          background: disabled ? "#c4b5fd" : owned ? "#4f46e5" : "#999",
           color: "white",
           fontWeight: "bold",
-          cursor: "pointer",
+          cursor: disabled ? "wait" : "pointer",
         }}
       >
-        {owned ? "保有" : "未所持"}
+        {disabled ? "更新中…" : owned ? "保有" : "未所持"}
       </button>
     </div>
   );

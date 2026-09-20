@@ -25,6 +25,7 @@ export default function OricaModal({ img, onClose }: OricaModalProps) {
     >
       <img
         src={img}
+        alt="オリカ拡大表示"
         style={{
           width: "80%",
           maxWidth: "400px",

@@ -32,6 +32,7 @@ type GachaCodeData = {
   id: string;
   code?: string;
   title?: string;
+  description?: string;
   point?: { cost?: number; maxPerUser?: number };
   totalCount?: number;
   mode?: "count" | "probability";
@@ -183,6 +184,13 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
+  const updateDescription = async (id: string, description: string) => {
+    await updateDoc(doc(db, "gachaCodes", id), {
+      description: description.trim(),
+    });
+    await loadCodes();
+  };
+
   const updateExpire = async (id: string, newDate: string) => {
     const expiresAt = new Date(newDate);
     await updateDoc(doc(db, "gachaCodes", id), { expiresAt });
@@ -268,6 +276,7 @@ export default function GachaManagePage() {
             getUserInfo={getUserInfo}
             getResultsByCode={getResultsByCode}
             updateTitle={updateTitle}
+            updateDescription={updateDescription}
             updateExpire={updateExpire}
             updatePublicFlags={updatePublicFlags}
             updateGacha={updateGacha}
@@ -286,6 +295,7 @@ type GachaItemProps = {
   getUserInfo: (uid: string) => Promise<UserInfo>;
   getResultsByCode: (code: string) => Promise<GachaResult[]>;
   updateTitle: (id: string, newTitle: string) => Promise<void>;
+  updateDescription: (id: string, description: string) => Promise<void>;
   updateExpire: (id: string, newDate: string) => Promise<void>;
   updatePublicFlags: (id: string, newFlags: string[]) => Promise<void>;
   updateGacha: (codeData: GachaCodeData) => Promise<void>;
@@ -298,6 +308,7 @@ function GachaItem({
   getUserInfo,
   getResultsByCode,
   updateTitle,
+  updateDescription,
   updateExpire,
   updatePublicFlags,
   updateGacha,
@@ -600,6 +611,25 @@ function GachaItem({
                 borderRadius: 6,
                 marginBottom: 12,
                 display: "block",
+              }}
+            />
+
+            <label>説明文編集：</label>
+            <textarea
+              defaultValue={codeData.description ?? ""}
+              onBlur={(e) =>
+                void updateDescription(codeData.id, e.target.value)
+              }
+              placeholder="説明文は未設定です"
+              style={{
+                width: "100%",
+                minHeight: 100,
+                padding: 8,
+                border: "1px solid #ccc",
+                borderRadius: 6,
+                marginBottom: 12,
+                display: "block",
+                resize: "vertical",
               }}
             />
 

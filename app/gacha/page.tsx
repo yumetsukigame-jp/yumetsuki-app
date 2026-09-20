@@ -560,6 +560,21 @@ const handleShipping = async () => {
             {gacha.title}
           </h2>
 
+          {typeof gacha.description === "string" &&
+            gacha.description.trim() && (
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  color: "#4b5563",
+                  lineHeight: 1.6,
+                  textAlign: "left",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {gacha.description}
+              </p>
+            )}
+
           <p style={{ textAlign: "center", marginBottom: 10 }}>
             {renderFlags(gacha.publicFlags)}
           </p>

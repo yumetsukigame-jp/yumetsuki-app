@@ -28,6 +28,7 @@ type GachaCode = {
   id: string;
   code?: string;
   title?: string;
+  description?: string;
   thumbnail?: string;
   publicFlags?: string[];
   xAccountList?: string[];
@@ -489,6 +490,12 @@ function GachaCard({
           <span style={{ marginLeft: 8, color: "#6b7280" }}>（アーカイブ）</span>
         )}
       </h2>
+
+      {c.description?.trim() && (
+        <p style={{ margin: "0 0 12px", color: "#4b5563", whiteSpace: "pre-wrap" }}>
+          {c.description}
+        </p>
+      )}
 
       <button
         type="button"

@@ -373,6 +373,20 @@ if (isXAccountMatch) {
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 10 }}>{gacha.title}</h1>
 
+      {typeof gacha.description === "string" &&
+        gacha.description.trim() && (
+          <p
+            style={{
+              margin: "0 0 16px",
+              color: "#4b5563",
+              lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {gacha.description}
+          </p>
+        )}
+
       <p>コード：{gacha.code}</p>
       <p>方式：{gacha.mode === "count" ? "枠数方式" : "確率方式"}</p>
       <p>

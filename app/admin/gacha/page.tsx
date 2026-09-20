@@ -30,6 +30,7 @@ type FrameInput = {
 
 export default function GachaCreatePage() {
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [mode, setMode] = useState<Mode>("count");
   const [resetType, setResetType] = useState<ResetType>("none");
 
@@ -182,6 +183,7 @@ export default function GachaCreatePage() {
 
       const res: DocumentData = await fn({
         title,
+        description,
         mode: mode === "prob" ? "probability" : "count",
         resetType,
         publicFlags,
@@ -245,6 +247,18 @@ export default function GachaCreatePage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           style={inputStyle}
+        />
+
+        <textarea
+          placeholder="ガチャの説明文（任意）"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          style={{
+            ...inputStyle,
+            minHeight: 120,
+            resize: "vertical",
+            whiteSpace: "pre-wrap",
+          }}
         />
 
         {/* 公開設定 */}

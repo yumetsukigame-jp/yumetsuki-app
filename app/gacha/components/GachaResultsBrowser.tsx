@@ -39,6 +39,7 @@ function toDateLike(value: unknown): DateLike {
 type GachaCode = {
   id: string;
   title: string;
+  description: string;
   publicFlags: string[];
   thumbnail: string;
   frames: GachaFrame[];
@@ -319,6 +320,19 @@ export default function GachaResultsBrowser({
                 <span style={{ fontSize: 24 }}>{isOpen ? "▲" : "▼"}</span>
               </button>
 
+              {gacha.description && (
+                <p
+                  style={{
+                    margin: "12px 0 0",
+                    color: "#4b5563",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {gacha.description}
+                </p>
+              )}
+
               {gacha.thumbnail && (
                 <div style={{ marginTop: 12, textAlign: "center" }}>
                   <img
@@ -458,6 +472,8 @@ function toGachaCode(document: QueryDocumentSnapshot<DocumentData>): GachaCode {
   return {
     id: document.id,
     title: typeof data.title === "string" ? data.title : "名称未設定",
+    description:
+      typeof data.description === "string" ? data.description : "",
     publicFlags: Array.isArray(data.publicFlags) ? data.publicFlags : [],
     thumbnail: typeof data.thumbnail === "string" ? data.thumbnail : "",
     frames: Array.isArray(data.frames)

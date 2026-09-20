@@ -35,6 +35,7 @@ type GachaFrame = {
 type GachaRecord = {
   code: string;
   title?: string;
+  description?: string;
   createdAt?: FirestoreDateLike;
   expiresAt?: FirestoreDateLike;
   publicFlags?: string[];
@@ -551,6 +552,19 @@ export default function PublicGachaListPage() {
               >
                 {g.title}
               </h2>
+
+              {g.description?.trim() && (
+                <p
+                  style={{
+                    margin: "8px 0",
+                    color: "#4b5563",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {g.description}
+                </p>
+              )}
 
               <p style={{ margin: "6px 0" }}>{renderFlags(g.publicFlags)}</p>
               {isUnavailable && (

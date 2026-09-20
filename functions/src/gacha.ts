@@ -28,6 +28,7 @@ type GachaPoint = {
 type GachaData = {
   code: string;
   title: string;
+  description: string;
   mode: string;
   resetType: string;
   publicFlags: string[];
@@ -54,6 +55,7 @@ type GachaFrame = {
 type GachaDocument = {
   code: string;
   title: string;
+  description?: string;
   mode: string;
   resetType: string;
   publicFlags: string[];
@@ -149,6 +151,7 @@ export const createGachaCode = functions
 
       const {
         title,
+        description,
         mode,
         resetType,
         publicFlags,
@@ -200,6 +203,8 @@ export const createGachaCode = functions
       const gachaData: GachaData = {
         code,
         title,
+        description:
+          typeof description === "string" ? description.trim() : "",
         mode,
         resetType,
         publicFlags,
@@ -250,6 +255,8 @@ export const getPublicGachaList = functions
       return {
         code: d.id,
         title: data.title ?? "",
+        description:
+          typeof data.description === "string" ? data.description : "",
         thumbnail: data.thumbnail ?? "",
         mode: data.mode,
         point: data.point,

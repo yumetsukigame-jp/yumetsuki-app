@@ -378,6 +378,8 @@ function UserCard({
   onEditXAccount: (uid: string, currentX?: string) => Promise<void>;
   onToggleSubscriber: () => Promise<void>;
 }) {
+  const [showDetails, setShowDetails] = useState(false);
+
   return (
     <div
       style={{
@@ -388,72 +390,112 @@ function UserCard({
         background: "#fff",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
-        <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "12px",
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
           <strong style={{ fontSize: "1.05rem" }}>{user.displayName || user.name || "名称未登録"}</strong>
+          <div style={{ color: "#555", fontSize: "0.9rem", marginTop: "3px", overflowWrap: "anywhere" }}>
+            {user.xAccount || "Xアカウント未登録"}
+          </div>
           <div style={{ color: "#555", fontSize: "0.9rem", marginTop: "3px", overflowWrap: "anywhere" }}>
             {user.email || "メールアドレス未登録"}
           </div>
         </div>
-        <span
+        <button
+          type="button"
+          onClick={() => setShowDetails((current) => !current)}
+          aria-expanded={showDetails}
           style={{
             flexShrink: 0,
-            padding: "4px 8px",
-            borderRadius: "999px",
-            background: user.subscriber ? "#dcfce7" : "#f3f4f6",
-            color: user.subscriber ? "#166534" : "#4b5563",
-            fontSize: "0.8rem",
-            fontWeight: 700,
+            padding: "6px 10px",
+            borderRadius: "6px",
+            border: "1px solid #2563eb",
+            background: "white",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontWeight: "bold",
           }}
         >
-          {user.subscriber ? "サブスク中" : "通常"}
-        </span>
-      </div>
-
-      <dl
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: "8px 16px",
-          margin: "16px 0 0",
-          fontSize: "0.9rem",
-        }}
-      >
-        <UserDetail label="氏名" value={user.name || "未登録"} />
-        <UserDetail label="Xアカウント" value={user.xAccount || "未登録"} />
-        <UserDetail label="ポイント" value={`${user.points ?? 0} pt`} />
-        <UserDetail
-          label="累計ログイン日数"
-          value={`${user.totalLoginDays ?? 0} 日`}
-        />
-        <UserDetail label="最終ログイン" value={formatDate(user.lastLogin)} />
-        <UserDetail label="登録日時" value={formatDate(user.createdAt)} />
-        <UserDetail label="UID" value={user.id} fullWidth />
-      </dl>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
-        <button onClick={onToggleSubscriber} style={buttonStyle(user.subscriber ? "#dc2626" : "#16a34a")}>
-          {user.subscriber ? "サブスク解除" : "サブスク付与"}
-        </button>
-        {!user.xAccountConfirmed ? (
-          <button onClick={() => void onConfirmXAccount(user.id)} style={buttonStyle("#16a34a")}>
-            Xアカウントを確定
-          </button>
-        ) : (
-          <button onClick={() => void onEditXAccount(user.id, user.xAccount)} style={buttonStyle("#2563eb")}>
-            Xアカウントを編集
-          </button>
-        )}
-        <button onClick={() => void onEditPoints(user.id, user.points ?? 0)} style={buttonStyle("#4f46e5")}>
-          ポイント編集
-        </button>
-        <Link href={`/admin/users/${user.id}`} style={{ ...buttonStyle("#2563eb"), textDecoration: "none" }}>
-          履歴を見る
-        </Link>
-        <button onClick={() => void onDelete(user.id)} style={buttonStyle("#dc2626")}>
-          削除
+          {showDetails ? "詳細を閉じる" : "詳細を表示"}
         </button>
       </div>
+
+      {showDetails && (
+        <>
+          <div style={{ marginTop: 14 }}>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "4px 8px",
+                borderRadius: "999px",
+                background: user.subscriber ? "#dcfce7" : "#f3f4f6",
+                color: user.subscriber ? "#166534" : "#4b5563",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              {user.subscriber ? "サブスク中" : "通常"}
+            </span>
+          </div>
+
+          <dl
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "8px 16px",
+              margin: "12px 0 0",
+              fontSize: "0.9rem",
+            }}
+          >
+            <UserDetail label="氏名" value={user.name || "未登録"} />
+            <UserDetail label="Xアカウント" value={user.xAccount || "未登録"} />
+            <UserDetail label="ポイント" value={`${user.points ?? 0} pt`} />
+            <UserDetail
+              label="累計ログイン日数"
+              value={`${user.totalLoginDays ?? 0} 日`}
+            />
+            <UserDetail label="最終ログイン" value={formatDate(user.lastLogin)} />
+            <UserDetail label="登録日時" value={formatDate(user.createdAt)} />
+            <UserDetail label="UID" value={user.id} fullWidth />
+          </dl>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+            <button onClick={onToggleSubscriber} style={buttonStyle(user.subscriber ? "#dc2626" : "#16a34a")}>
+              {user.subscriber ? "サブスク解除" : "サブスク付与"}
+            </button>
+            {!user.xAccountConfirmed ? (
+              <button onClick={() => void onConfirmXAccount(user.id)} style={buttonStyle("#16a34a")}>
+                Xアカウントを確定
+              </button>
+            ) : (
+              <button onClick={() => void onEditXAccount(user.id, user.xAccount)} style={buttonStyle("#2563eb")}>
+                Xアカウントを編集
+              </button>
+            )}
+            <button onClick={() => void onEditPoints(user.id, user.points ?? 0)} style={buttonStyle("#4f46e5")}>
+              ポイント編集
+            </button>
+            <Link href={`/admin/users/${user.id}`} style={{ ...buttonStyle("#2563eb"), textDecoration: "none" }}>
+              履歴を見る
+            </Link>
+            <Link
+              href={`/admin/users/${user.id}/orica`}
+              style={{ ...buttonStyle("#7c3aed"), textDecoration: "none" }}
+            >
+              所有オリカを確認
+            </Link>
+            <button onClick={() => void onDelete(user.id)} style={buttonStyle("#dc2626")}>
+              削除
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
