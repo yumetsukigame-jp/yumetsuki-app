@@ -16,10 +16,24 @@ export default function QuizArchivePage() {
   const fetchQuizzes = async () => {
     try {
       const snap = await withRetry(() => getDocs(collection(db, "quizzes_archive")));
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const list: DocumentData[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            finalizationStatus:
+              typeof data.finalizationStatus === "string"
+                ? data.finalizationStatus
+                : undefined,
+          };
+        })
+        .filter(
+          (quiz) =>
+            quiz.finalizationStatus !== "preparing" &&
+            quiz.finalizationStatus !== "prepared" &&
+            quiz.finalizationStatus !== "deleting"
+        );
 
       setQuizzes(list);
     } catch (error) {
@@ -65,15 +79,34 @@ export default function QuizArchivePage() {
               padding: 16,
             }}
           >
-            <div style={{ display: "flex", gap: 16 }}>
+            <h2
+              style={{
+                width: "100%",
+                fontSize: 20,
+                margin: "0 0 16px",
+                paddingBottom: 12,
+                borderBottom: "1px solid #e5e7eb",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {q.title || "タイトル未設定"}
+            </h2>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
               <img
                 src={q.thumbnail}
                 alt={q.title}
                 style={{ width: 80, height: 80, objectFit: "cover" }}
               />
 
-              <div style={{ flex: 1 }}>
-                <h2 style={{ fontSize: 20 }}>{q.title}</h2>
+              <div style={{ flex: 1, minWidth: 160 }}>
                 <p style={{ color: "#555" }}>山分けポイント：{q.rewardPoint}</p>
               </div>
 
@@ -86,7 +119,7 @@ export default function QuizArchivePage() {
                   borderRadius: 6,
                   textDecoration: "none",
                   display: "inline-block",
-                  height: 40,
+                  minHeight: 40,
                 }}
               >
                 詳細ページへ

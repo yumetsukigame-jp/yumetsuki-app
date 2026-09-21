@@ -629,19 +629,6 @@ export default function Home() {
         </MenuButton>
       </Section>
 
-      {/* 📦 ポイント */}
-      <Section title="📦 ポイント関連" color="#2563eb" alwaysVisible={2}>
-        <MenuButton href="/code" color="#2563eb">
-          コード入力でポイント獲得
-        </MenuButton>
-        <MenuButton href="/reward" color="#2563eb">
-          発送物を選ぶ
-        </MenuButton>
-        <MenuButton href="/history" color="#2563eb">
-          発送履歴を見る
-        </MenuButton>
-      </Section>
-
       {/* 🧠 クイズ */}
       <Section title="クイズ" color="#0ea5e9" icon="🧠" alwaysVisible={2}>
         <MenuButton href="/quizzes" color="#0ea5e9">
@@ -655,6 +642,19 @@ export default function Home() {
         </MenuButton>
         <MenuButton href="/quizzes/ranking" color="#0ea5e9">
           クイズランキングを見る
+        </MenuButton>
+      </Section>
+
+      {/* 📦 ポイント */}
+      <Section title="📦 ポイント関連" color="#2563eb" alwaysVisible={2}>
+        <MenuButton href="/code" color="#2563eb">
+          コード入力でポイント獲得
+        </MenuButton>
+        <MenuButton href="/reward" color="#2563eb">
+          発送物を選ぶ
+        </MenuButton>
+        <MenuButton href="/history" color="#2563eb">
+          発送履歴を見る
         </MenuButton>
       </Section>
 

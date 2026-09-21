@@ -361,6 +361,19 @@ export default function AdminQuizListPage() {
                     flexWrap: "wrap",
                   }}
                 >
+                  <h2
+                    style={{
+                      width: "100%",
+                      fontSize: 20,
+                      margin: 0,
+                      paddingBottom: 12,
+                      borderBottom: "1px solid #e5e7eb",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {q.title || "タイトル未設定"}
+                  </h2>
+
                   <img
                     src={q.thumbnail}
                     alt={q.title}
@@ -368,7 +381,6 @@ export default function AdminQuizListPage() {
                   />
 
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <h2 style={{ fontSize: 20 }}>{q.title}</h2>
                     <p>ポイント：{q.rewardPoint}</p>
                     <p>正解：{q.answer}</p>
                     <p>アーカイブ日時：{q.archivedAt?.toDate?.().toLocaleString?.()}</p>
