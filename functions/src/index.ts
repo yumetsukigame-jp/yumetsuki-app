@@ -12,6 +12,8 @@ export {
 
 export {
   confirmQuizAnswer,
+  deleteActiveQuiz,
+  deleteQuizArchive,
 } from "./quiz";
 
 export { sendPasswordResetLink } from "./passwordReset";

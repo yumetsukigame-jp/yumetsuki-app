@@ -7,11 +7,9 @@ import { db, auth } from "@/firebase";
 import {
   doc,
   getDoc,
-  addDoc,
-  setDoc,
   collection,
   getDocs,
-  updateDoc,
+  runTransaction,
 } from "firebase/firestore";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
@@ -107,51 +105,68 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
      新規回答送信（answers/{uid} にユーザー情報を書き込む）
   -------------------------------------------------- */
   const submitAnswer = async () => {
-       if (isSubmitting || !quiz) return; // ★ 二重送信防止
-    setIsSubmitting(true);    // ★ ボタンロック
+    if (isSubmitting || !quiz || !uid) return;
+    setIsSubmitting(true);
 
     try {
-      if (!newAnswer.trim()) {
+      const answer = newAnswer.trim();
+      if (!answer) {
         alert("回答を入力してください");
-        setIsSubmitting(false);
         return;
       }
 
-      // ★ ユーザーデータを取得
-      const userRef = doc(db, "users", uid!);
+      const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
       const userData = userSnap.exists()
         ? userSnap.data()
         : { displayName: "名無し", xAccount: "未登録" };
+      const quizRef = doc(db, "quizzes", quizId);
+      const answerUserRef = doc(db, "quizzes", quizId, "answers", uid);
+      const answerItemRef = doc(collection(answerUserRef, "items"));
+      const createdAt = new Date();
+      let submittedRound = quiz.round ?? 0;
+      let updatedAnswerCount = Number(quiz.newAnswerCount ?? 0) + 1;
 
-      // ★ answers/{uid} を必ず作成（空ドキュメントを防ぐ）
-      await setDoc(
-        doc(db, "quizzes", quizId, "answers", uid!),
-        {
-          xAccount: userData.xAccount ?? "未登録",
-          displayName: userData.displayName ?? "名無し",
-        },
-        { merge: true }
-      );
-
-      // ★ items に回答を追加
-      await addDoc(
-        collection(db, "quizzes", quizId, "answers", uid!, "items"),
-        {
-          answer: newAnswer,
-          createdAt: new Date(),
-          round: quiz.round ?? 0,
+      await runTransaction(db, async (transaction) => {
+        const currentQuizSnapshot = await transaction.get(quizRef);
+        if (!currentQuizSnapshot.exists()) {
+          throw new Error("このクイズは終了しています");
         }
-      );
 
-      await updateDoc(doc(db, "quizzes", quizId), {
-        newAnswerCount: quiz.newAnswerCount + 1,
+        const currentQuiz = currentQuizSnapshot.data();
+        if (
+          currentQuiz.answersClosedAt ||
+          currentQuiz.finalizationStatus === "processing" ||
+          currentQuiz.finalizationStatus === "deleting"
+        ) {
+          throw new Error("このクイズの回答受付は終了しています");
+        }
+
+        submittedRound = currentQuiz.round ?? 0;
+        updatedAnswerCount =
+          Number(currentQuiz.newAnswerCount ?? 0) + 1;
+        transaction.set(
+          answerUserRef,
+          {
+            xAccount: userData.xAccount ?? "未登録",
+            displayName: userData.displayName ?? "名無し",
+          },
+          { merge: true }
+        );
+        transaction.set(answerItemRef, {
+          answer,
+          createdAt,
+          round: submittedRound,
+        });
+        transaction.update(quizRef, {
+          newAnswerCount: updatedAnswerCount,
+        });
       });
 
       const newItem = {
-        answer: newAnswer,
-        createdAt: new Date(),
-        round: quiz.round ?? 0,
+        answer,
+        createdAt,
+        round: submittedRound,
       };
 
       setMyAnswers([...myAnswers, newItem]);
@@ -159,14 +174,21 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
 
       setQuiz({
         ...quiz,
-        newAnswerCount: quiz.newAnswerCount + 1,
+        newAnswerCount: updatedAnswerCount,
       });
 
       setNewAnswer("");
 
       alert("回答しました！");
+    } catch (error: unknown) {
+      console.error("回答の送信に失敗しました", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "回答の送信に失敗しました"
+      );
     } finally {
-      setIsSubmitting(false); // ★ 必ず解除
+      setIsSubmitting(false);
     }
   };
 

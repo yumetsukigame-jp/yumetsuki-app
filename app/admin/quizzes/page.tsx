@@ -8,8 +8,7 @@ import {
   collection,
   getDocs,
   doc,
-  updateDoc,
-  deleteDoc,
+  runTransaction,
 } from "firebase/firestore";
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
@@ -17,6 +16,9 @@ import { httpsCallable } from "firebase/functions";
 export default function AdminQuizListPage() {
   const [quizzes, setQuizzes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingQuizId, setProcessingQuizId] = useState<string | null>(
+    null
+  );
 
   // ★ アーカイブ一覧
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -51,10 +53,23 @@ export default function AdminQuizListPage() {
     setArchiveLoading(true);
 
     const snap = await getDocs(collection(db, "quizzes_archive"));
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const list: DocumentData[] = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          finalizationStatus:
+            typeof data.finalizationStatus === "string"
+              ? data.finalizationStatus
+              : undefined,
+        };
+      })
+      .filter(
+        (quiz) =>
+          quiz.finalizationStatus !== "preparing" &&
+          quiz.finalizationStatus !== "prepared"
+      );
 
     setArchiveQuizzes(list);
     setArchiveLoading(false);
@@ -80,17 +95,24 @@ export default function AdminQuizListPage() {
     )
       return;
 
+    setProcessingQuizId(id);
     try {
-      const fn = httpsCallable(functions, "confirmQuizAnswer");
-      const res = await fn({ quizId: id });
+    const fn = httpsCallable(functions, "confirmQuizAnswer");
+    const res = await fn({ quizId: id });
 
       console.log("confirmQuizAnswer result:", res.data);
 
       alert("解答を確定しました！");
       fetchQuizzes();
-    } catch (e) {
-      console.error(e);
-      alert("解答確定に失敗しました");
+    } catch (error: unknown) {
+      console.error(error);
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "原因不明のエラーです";
+      alert(`解答確定に失敗しました：${message}`);
+    } finally {
+      setProcessingQuizId(null);
     }
   };
 
@@ -101,13 +123,34 @@ export default function AdminQuizListPage() {
     if (!confirm(`ラウンドを進めますか？\n現在: ${currentRound} → 次: ${currentRound + 1}`))
       return;
 
-    await updateDoc(doc(db, "quizzes", id), {
-      round: currentRound + 1,
-      newAnswerCount: 0,
-    });
+    try {
+      const quizRef = doc(db, "quizzes", id);
+      await runTransaction(db, async (transaction) => {
+        const quizSnapshot = await transaction.get(quizRef);
+        if (!quizSnapshot.exists()) {
+          throw new Error("クイズが存在しません");
+        }
+        if (
+          quizSnapshot.get("answersClosedAt") ||
+          quizSnapshot.get("finalizationStatus")
+        ) {
+          throw new Error("解答確定開始後はラウンドを変更できません");
+        }
+        transaction.update(quizRef, {
+          round: currentRound + 1,
+          newAnswerCount: 0,
+        });
+      });
 
-    alert("新しいラウンドを開始しました！");
-    fetchQuizzes();
+      alert("新しいラウンドを開始しました！");
+      fetchQuizzes();
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "ラウンドの更新に失敗しました"
+      );
+    }
   };
 
   /* --------------------------------------------------
@@ -116,15 +159,17 @@ export default function AdminQuizListPage() {
   const deleteQuiz = async (id: string) => {
     if (!confirm("このクイズを完全に削除しますか？\n回答データも消えます。")) return;
 
-    const answersSnap = await getDocs(collection(db, "quizzes", id, "answers"));
-    for (const a of answersSnap.docs) {
-      await deleteDoc(a.ref);
+    try {
+      const fn = httpsCallable(functions, "deleteActiveQuiz");
+      await fn({ quizId: id });
+
+      alert("削除しました");
+      fetchQuizzes();
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error ? error.message : "削除に失敗しました"
+      );
     }
-
-    await deleteDoc(doc(db, "quizzes", id));
-
-    alert("削除しました");
-    fetchQuizzes();
   };
 
   /* --------------------------------------------------
@@ -133,20 +178,19 @@ export default function AdminQuizListPage() {
   const deleteArchiveQuiz = async (id: string) => {
     if (!confirm("アーカイブから完全に削除しますか？")) return;
 
-    const answersSnap = await getDocs(
-      collection(db, "quizzes_archive", id, "answers")
-    );
+    try {
+      const fn = httpsCallable(functions, "deleteQuizArchive");
+      await fn({ quizId: id });
 
-    for (const a of answersSnap.docs) {
-      await deleteDoc(a.ref);
+      alert("アーカイブを削除しました");
+      fetchArchive();
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "アーカイブの削除に失敗しました"
+      );
     }
-
-    await deleteDoc(doc(db, "quizzes_archive", id));
-
-    alert("アーカイブを削除しました");
-
-    // 再読み込み
-    fetchArchive();
   };
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
@@ -204,12 +248,16 @@ export default function AdminQuizListPage() {
 
             <Link
               href={`/admin/quizzes/edit/${q.id}`}
+              aria-disabled={processingQuizId !== null}
               style={{
                 padding: "8px 12px",
                 background: "#10b981",
                 color: "white",
                 borderRadius: 6,
                 textDecoration: "none",
+                pointerEvents:
+                  processingQuizId === null ? "auto" : "none",
+                opacity: processingQuizId === null ? 1 : 0.6,
               }}
             >
               編集
@@ -217,27 +265,38 @@ export default function AdminQuizListPage() {
 
             <button
               onClick={() => confirmQuiz(q.id)}
+              disabled={processingQuizId !== null}
               style={{
                 padding: "8px 12px",
-                background: "#2563eb",
+                background:
+                  processingQuizId === q.id ? "#64748b" : "#2563eb",
                 color: "white",
                 borderRadius: 6,
                 border: "none",
-                cursor: "pointer",
+                cursor:
+                  processingQuizId === null ? "pointer" : "not-allowed",
+                opacity:
+                  processingQuizId !== null &&
+                  processingQuizId !== q.id
+                    ? 0.6
+                    : 1,
               }}
             >
-              解答確定
+              {processingQuizId === q.id ? "解答確定中…" : "解答確定"}
             </button>
 
             <button
               onClick={() => nextRound(q.id, q.round)}
+              disabled={processingQuizId !== null}
               style={{
                 padding: "8px 12px",
                 background: "#7c3aed",
                 color: "white",
                 borderRadius: 6,
                 border: "none",
-                cursor: "pointer",
+                cursor:
+                  processingQuizId === null ? "pointer" : "not-allowed",
+                opacity: processingQuizId === null ? 1 : 0.6,
               }}
             >
               ラウンドを進める
@@ -245,13 +304,16 @@ export default function AdminQuizListPage() {
 
             <button
               onClick={() => deleteQuiz(q.id)}
+              disabled={processingQuizId !== null}
               style={{
                 padding: "8px 12px",
                 background: "#ef4444",
                 color: "white",
                 borderRadius: 6,
                 border: "none",
-                cursor: "pointer",
+                cursor:
+                  processingQuizId === null ? "pointer" : "not-allowed",
+                opacity: processingQuizId === null ? 1 : 0.6,
               }}
             >
               削除

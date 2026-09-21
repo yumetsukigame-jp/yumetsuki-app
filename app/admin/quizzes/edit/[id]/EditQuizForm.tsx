@@ -7,9 +7,9 @@ import { db } from "@/firebase";
 import {
   doc,
   getDoc,
-  updateDoc,
   collection,
   getDocs,
+  runTransaction,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
@@ -61,6 +61,23 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   const [newAnswerCount, setNewAnswerCount] = useState(0);
 
   const [round, setRound] = useState(0); // ★ round=0 を初期値にする
+
+  const updateQuiz = async (updates: DocumentData) => {
+    const quizRef = doc(db, "quizzes", quizId);
+    await runTransaction(db, async (transaction) => {
+      const quizSnapshot = await transaction.get(quizRef);
+      if (!quizSnapshot.exists()) {
+        throw new Error("クイズが存在しません");
+      }
+      if (
+        quizSnapshot.get("answersClosedAt") ||
+        quizSnapshot.get("finalizationStatus")
+      ) {
+        throw new Error("解答確定開始後のクイズは変更できません");
+      }
+      transaction.update(quizRef, updates);
+    });
+  };
 
   /* --------------------------------------------------
      クイズ読み込み
@@ -123,22 +140,28 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       newThread = await sha256(`${answer}-${newSalt}`);
     }
 
-    await updateDoc(doc(db, "quizzes", quizId), {
-      title,
-      thumbnail,
-      question,
-      answer,
-      explanation,
-      rewardPoint: Number(rewardPoint),
-      maxAnswers: Number(maxAnswers),
-      salt: newSalt,
-      thread: newThread,
-      newAnswerCount,
-      round, // ★ round を保存
-    });
+    try {
+      await updateQuiz({
+        title,
+        thumbnail,
+        question,
+        answer,
+        explanation,
+        rewardPoint: Number(rewardPoint),
+        maxAnswers: Number(maxAnswers),
+        salt: newSalt,
+        thread: newThread,
+        newAnswerCount,
+        round,
+      });
 
-    alert("更新しました！");
-    router.push("/admin/quizzes");
+      alert("更新しました！");
+      router.push("/admin/quizzes");
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error ? error.message : "更新に失敗しました"
+      );
+    }
   };
 
   /* --------------------------------------------------
@@ -150,15 +173,23 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
     const nextRound = (round ?? 0) + 1;
 
-    await updateDoc(doc(db, "quizzes", quizId), {
-      newAnswerCount: 0,
-      round: nextRound,
-    });
+    try {
+      await updateQuiz({
+        newAnswerCount: 0,
+        round: nextRound,
+      });
 
-    setNewAnswerCount(0);
-    setRound(nextRound);
+      setNewAnswerCount(0);
+      setRound(nextRound);
 
-    alert("新しいラウンドを開始しました（過去回答は保持されます）");
+      alert("新しいラウンドを開始しました（過去回答は保持されます）");
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "ラウンドの更新に失敗しました"
+      );
+    }
   };
 
   /* --------------------------------------------------
@@ -167,12 +198,18 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   const archiveQuiz = async () => {
     if (!confirm("このクイズをアーカイブしますか？")) return;
 
-    await updateDoc(doc(db, "quizzes", quizId), {
-      archived: true,
-    });
+    try {
+      await updateQuiz({ archived: true });
 
-    alert("アーカイブしました");
-    router.push("/admin/quizzes");
+      alert("アーカイブしました");
+      router.push("/admin/quizzes");
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "アーカイブに失敗しました"
+      );
+    }
   };
 
   if (loading) return <p style={{ padding: 20 }}>読み込み中…</p>;
