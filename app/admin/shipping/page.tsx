@@ -89,7 +89,12 @@ export default function ShippingAdminPage() {
     ): Promise<PendingItem | null> => {
       const sourceDocumentId = d.id;
       const rewardData = d.data();
-      const uid = typeof rewardData.uid === "string" ? rewardData.uid : null;
+      const uid =
+        typeof rewardData.uid === "string"
+          ? rewardData.uid
+          : source === "legacy"
+            ? sourceDocumentId
+            : null;
 
       if (!uid) {
         console.warn("発送データに uid がありません:", sourceDocumentId);
