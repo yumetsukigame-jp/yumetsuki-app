@@ -40,16 +40,18 @@ export default function CodeDetail({ code }: { code: string }) {
 
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
+      if (typeof data.userId !== "string") continue;
 
       const userRef = doc(db, "users", data.userId);
       const userSnap = await getDoc(userRef);
-
-      const email = userSnap.exists() ? userSnap.data().email : "不明";
+      const userData = userSnap.exists() ? userSnap.data() : null;
 
       list.push({
         id: docSnap.id,
         ...data,
-        email,
+        email: userData?.email ?? "不明",
+        displayName: userData?.displayName ?? "名称未登録",
+        xAccount: userData?.xAccount ?? "Xアカウント未登録",
       });
     }
 
@@ -83,9 +85,20 @@ export default function CodeDetail({ code }: { code: string }) {
           <strong>タイプ：</strong>{" "}
           {codeInfo.type === "global"
             ? "全員で1回だけ使える"
+            : codeInfo.type === "limited"
+            ? `各ユーザー1回・先着${codeInfo.maxUses ?? 0}人まで`
             : codeInfo.type === "perUser"
             ? "全員が1回ずつ使える"
             : "不明"}
+        </p>
+        <p>
+          <strong>使用人数：</strong>{" "}
+          {codeInfo.type === "limited"
+            ? codeInfo.usedCount ?? usageList.length
+            : usageList.length}
+          {codeInfo.type === "limited"
+            ? ` / ${codeInfo.maxUses ?? 0}`
+            : ""} 人
         </p>
         <p>
           <strong>作成日時：</strong>{" "}
@@ -109,7 +122,9 @@ export default function CodeDetail({ code }: { code: string }) {
             borderRadius: "8px",
           }}
         >
-          <p><strong>ユーザー：</strong> {item.email}</p>
+          <p><strong>ニックネーム：</strong> {item.displayName}</p>
+          <p><strong>Xアカウント：</strong> {item.xAccount}</p>
+          <p><strong>メール：</strong> {item.email}</p>
           <p><strong>UID：</strong> {item.userId}</p>
           <p><strong>付与ポイント：</strong> {item.added} pt</p>
           <p>

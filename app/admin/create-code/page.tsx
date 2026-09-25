@@ -2,35 +2,63 @@
 
 import { useState } from "react";
 import { db } from "@/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, runTransaction, serverTimestamp } from "firebase/firestore";
+
+type CodeType = "global" | "perUser" | "limited";
 
 export default function CreateCodePage() {
   const [code, setCode] = useState("");
   const [points, setPoints] = useState(10);
-  const [type, setType] = useState("global"); // ★ 追加
+  const [type, setType] = useState<CodeType>("global");
+  const [maxUses, setMaxUses] = useState(10);
   const [message, setMessage] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const handleCreate = async () => {
-    if (!code) {
+    const normalizedCode = code.trim();
+    if (!normalizedCode) {
       setMessage("コードを入力してください");
       return;
     }
+    if (!Number.isFinite(points) || points <= 0) {
+      setMessage("付与ポイントは1以上で入力してください");
+      return;
+    }
+    if (type === "limited" && (!Number.isInteger(maxUses) || maxUses <= 0)) {
+      setMessage("使用可能人数は1人以上で入力してください");
+      return;
+    }
 
+    setCreating(true);
     try {
-      const codeRef = doc(db, "validCodes", code);
+      const codeRef = doc(db, "validCodes", normalizedCode);
 
-      await setDoc(codeRef, {
-        points: Number(points),
-        type: type,
-        createdAt: new Date(),
+      await runTransaction(db, async (transaction) => {
+        const existingCode = await transaction.get(codeRef);
+        if (existingCode.exists()) {
+          throw new Error("CODE_ALREADY_EXISTS");
+        }
+
+        transaction.set(codeRef, {
+          points: Number(points),
+          type,
+          maxUses: type === "limited" ? maxUses : null,
+          usedCount: 0,
+          createdAt: serverTimestamp(),
+        });
       });
 
       setMessage("コードを発行しました！");
       setCode("");
-
     } catch (error) {
-      console.error(error);
-      setMessage("エラーが発生しました");
+      if (error instanceof Error && error.message === "CODE_ALREADY_EXISTS") {
+        setMessage("同じコードがすでに存在します");
+      } else {
+        console.error(error);
+        setMessage("エラーが発生しました");
+      }
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -59,7 +87,7 @@ export default function CreateCodePage() {
       <label>タイプ</label>
       <select
         value={type}
-        onChange={(e) => setType(e.target.value)}
+        onChange={(e) => setType(e.target.value as CodeType)}
         style={{
           width: "100%",
           padding: "10px",
@@ -69,20 +97,36 @@ export default function CreateCodePage() {
       >
         <option value="global">全員で1回だけ使える</option>
         <option value="perUser">全員が1回ずつ使える</option>
+        <option value="limited">各ユーザー1回・指定人数まで使える</option>
       </select>
 
+      {type === "limited" && (
+        <>
+          <label>使用可能人数</label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={maxUses}
+            onChange={(e) => setMaxUses(Number(e.target.value))}
+            style={{ width: "100%", padding: "10px", marginBottom: "20px" }}
+          />
+        </>
+      )}
+
       <button
-        onClick={handleCreate}
+        onClick={() => void handleCreate()}
+        disabled={creating}
         style={{
           width: "100%",
           padding: "12px",
-          background: "#4f46e5",
+          background: creating ? "#999" : "#4f46e5",
           color: "white",
           borderRadius: "8px",
           fontSize: "16px",
         }}
       >
-        発行する
+        {creating ? "発行中…" : "発行する"}
       </button>
 
       {message && <p style={{ marginTop: "10px" }}>{message}</p>}

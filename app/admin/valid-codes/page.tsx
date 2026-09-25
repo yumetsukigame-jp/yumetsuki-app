@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import {
   collection,
+  getDoc,
   getDocs,
   deleteDoc,
   doc,
@@ -14,7 +15,9 @@ import {
 type ValidCode = {
   id: string;
   points?: number;
-  type?: "global" | "perUser";
+  type?: "global" | "perUser" | "limited";
+  maxUses?: number | null;
+  usedCount?: number;
   createdAt?: { toDate: () => Date } | Date | null;
   [key: string]: unknown;
 };
@@ -80,12 +83,13 @@ export default function ValidCodesPage() {
       // uid → email に変換
       const emails: string[] = [];
       for (const uid of usedUsers) {
-        const userRef = doc(db, "users", uid);
-        const userSnap = await getDocs(collection(db, "users"));
-        const userDoc = userSnap.docs.find((d) => d.id === uid);
+        const userDoc = await getDoc(doc(db, "users", uid));
 
-        if (userDoc) {
-          emails.push(userDoc.data().email || uid);
+        if (userDoc.exists()) {
+          const user = userDoc.data();
+          emails.push(
+            `${user.displayName || "名称未登録"}（${user.xAccount || user.email || uid}）`
+          );
         } else {
           emails.push(uid);
         }
@@ -182,13 +186,20 @@ export default function ValidCodesPage() {
             <strong>タイプ：</strong>{" "}
             {item.type === "global"
               ? "全員で1回だけ使える"
+              : item.type === "limited"
+              ? `各ユーザー1回・先着${item.maxUses ?? 0}人まで`
               : "全員が1回ずつ使える"}
           </p>
 
           {/* 使用人数 */}
           <p>
             <strong>使用人数：</strong>{" "}
-            {usage[item.id] !== undefined ? usage[item.id] : "読み込み中…"} 人
+            {item.type === "limited"
+              ? item.usedCount ?? 0
+              : usage[item.id] !== undefined
+                ? usage[item.id]
+                : "読み込み中…"}
+            {item.type === "limited" ? ` / ${item.maxUses ?? 0}` : ""} 人
           </p>
 
           {/* 使用ユーザー一覧 */}

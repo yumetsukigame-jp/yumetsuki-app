@@ -74,10 +74,18 @@ export default function CodesPage() {
                 <strong>タイプ：</strong>{" "}
                 {item.type === "global"
                   ? "全員で1回だけ使える"
+                  : item.type === "limited"
+                  ? `各ユーザー1回・先着${item.maxUses ?? 0}人まで`
                   : item.type === "perUser"
                   ? "全員が1回ずつ使える"
                   : "不明"}
               </p>
+              {item.type === "limited" && (
+                <p>
+                  <strong>使用人数：</strong> {item.usedCount ?? 0} /{" "}
+                  {item.maxUses ?? 0} 人
+                </p>
+              )}
               <p>
                 <strong>作成日時：</strong>{" "}
                 {item.createdAt?.toDate

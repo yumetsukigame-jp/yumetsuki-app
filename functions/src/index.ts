@@ -18,6 +18,7 @@ export {
 
 export { sendPasswordResetLink } from "./passwordReset";
 export { sendTestResendEmail } from "./testEmail";
+export { getPointCodePreview, redeemPointCode } from "./pointCode";
 export {
   createUserProfile,
   recordDailyLogin,
