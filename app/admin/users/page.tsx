@@ -16,6 +16,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import Link from "next/link";
+import PointAuditPanel from "./PointAuditPanel";
 
 const PAGE_SIZE = 50;
 
@@ -464,6 +465,11 @@ function UserCard({
             <UserDetail label="登録日時" value={formatDate(user.createdAt)} />
             <UserDetail label="UID" value={user.id} fullWidth />
           </dl>
+
+          <PointAuditPanel
+            uid={user.id}
+            currentPoints={user.points ?? 0}
+          />
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
             <button onClick={onToggleSubscriber} style={buttonStyle(user.subscriber ? "#dc2626" : "#16a34a")}>
