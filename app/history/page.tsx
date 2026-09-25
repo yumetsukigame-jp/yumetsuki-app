@@ -6,7 +6,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   getDocs
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
@@ -21,10 +20,15 @@ type FirestoreDateLike =
 
 type HistoryItem = {
   id: string;
+  source: "pending" | "done" | "history" | "legacy";
+  requestId?: string;
+  rewardId?: string;
+  uid?: string;
   image?: string | null;
   name?: string;
   cost?: number;
   requestedAt?: FirestoreDateLike;
+  timestamp?: FirestoreDateLike;
   status?: "pending" | "done";
   shipped?: boolean;
   shippedAt?: FirestoreDateLike;
@@ -38,6 +42,19 @@ const toDisplayDate = (value?: FirestoreDateLike) => {
     return value.toDate().toLocaleString();
   }
   return "不明";
+};
+
+const toMillis = (value?: FirestoreDateLike) => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    return value.toDate().getTime();
+  }
+  if (typeof value === "object") {
+    const seconds = value.seconds ?? value._seconds;
+    return typeof seconds === "number" ? seconds * 1000 : 0;
+  }
+  return 0;
 };
 
 export default function HistoryPage() {
@@ -59,19 +76,84 @@ export default function HistoryPage() {
       }
 
       try {
-        const q = query(
-          collection(db, "shippingHistory"),
-          where("uid", "==", user.uid),
-          orderBy("shippedAt", "desc")
+        const loadCollection = async (
+          collectionName: string,
+          source: HistoryItem["source"]
+        ) => {
+          const snapshot = await withRetry(() =>
+            getDocs(
+              query(
+                collection(db, collectionName),
+                where("uid", "==", user.uid)
+              )
+            )
+          );
+
+          return snapshot.docs.map((document) => {
+            const data = document.data() as Record<string, unknown>;
+            const isDone =
+              source === "done" ||
+              source === "history" ||
+              data.status === "done" ||
+              data.shipped === true;
+
+            return {
+              id: document.id,
+              ...data,
+              source,
+              name:
+                typeof data.name === "string"
+                  ? data.name
+                  : typeof data.rewardName === "string"
+                    ? data.rewardName
+                    : "名称不明",
+              status: isDone ? "done" : "pending",
+              shipped: isDone,
+            } as HistoryItem;
+          });
+        };
+
+        const [pendingItems, doneItems, historyItems, legacyItems] =
+          await Promise.all([
+            loadCollection("shippingPending", "pending"),
+            loadCollection("shippingDone", "done"),
+            loadCollection("shippingHistory", "history"),
+            loadCollection("selectedRewards", "legacy"),
+          ]);
+
+        const getRecordKey = (item: HistoryItem) => {
+          if (item.requestId) return `request:${item.requestId}`;
+
+          const eventTime =
+            item.status === "done"
+              ? item.shippedAt
+              : item.requestedAt ?? item.timestamp;
+
+          return [
+            item.uid ?? user.uid,
+            item.rewardId ?? item.name ?? "unknown",
+            toMillis(eventTime),
+          ].join(":");
+        };
+
+        const records = new Map<string, HistoryItem>();
+        for (const item of [
+          ...pendingItems,
+          ...doneItems,
+          ...historyItems,
+          ...legacyItems,
+        ]) {
+          const key = getRecordKey(item);
+          if (!records.has(key)) records.set(key, item);
+        }
+
+        setHistory(
+          Array.from(records.values()).sort((a, b) => {
+            const aTime = toMillis(a.shippedAt ?? a.requestedAt ?? a.timestamp);
+            const bTime = toMillis(b.shippedAt ?? b.requestedAt ?? b.timestamp);
+            return bTime - aTime;
+          })
         );
-
-        const snap = await withRetry(() => getDocs(q));
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Record<string, unknown>),
-        } as HistoryItem));
-
-        setHistory(list);
       } catch (error) {
         console.error("発送履歴の読み込みに失敗しました", error);
         setHistory([]);
@@ -122,7 +204,7 @@ export default function HistoryPage() {
 
               <p>
                 依頼日時：{" "}
-                {toDisplayDate(item.requestedAt)}
+                {toDisplayDate(item.requestedAt ?? item.timestamp)}
               </p>
 
               <p>

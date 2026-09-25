@@ -7,7 +7,6 @@ import {
   getDocs,
   doc,
   updateDoc,
-  addDoc,
   getDoc,
   deleteDoc,
   Timestamp,
@@ -30,6 +29,7 @@ type PendingItem = {
   id: string;
   uid: string;
   source: "pending" | "done" | "legacy" | "history";
+  requestId?: string;
   rewardId?: string;
   name?: string;
   cost?: number;
@@ -87,12 +87,12 @@ export default function ShippingAdminPage() {
       d: (typeof pendingSnap.docs)[number],
       source: PendingItem["source"]
     ): Promise<PendingItem | null> => {
-      const rewardId = d.id;
+      const sourceDocumentId = d.id;
       const rewardData = d.data();
       const uid = typeof rewardData.uid === "string" ? rewardData.uid : null;
 
       if (!uid) {
-        console.warn("shippingPending に uid がありません:", rewardId);
+        console.warn("発送データに uid がありません:", sourceDocumentId);
         return null;
       }
 
@@ -105,7 +105,7 @@ export default function ShippingAdminPage() {
       const userData = userSnap.exists() ? (userSnap.data() as UserData) : null;
 
       return {
-        id: rewardId,
+        id: sourceDocumentId,
         uid,
         ...rewardData,
         name: rewardData.name ?? rewardData.rewardName ?? "名称不明",
@@ -134,7 +134,35 @@ export default function ShippingAdminPage() {
       loadItems(historySnap.docs, "history"),
     ]);
 
-    const requestKey = (item: PendingItem) => `${item.uid}:${item.rewardId ?? item.id}`;
+    const toComparableTime = (
+      value?:
+        | PendingItem["requestedAt"]
+        | PendingItem["timestamp"]
+        | PendingItem["shippedAt"]
+    ) => {
+      if (!value) return 0;
+      if (value instanceof Date) return value.getTime();
+      if (typeof value === "object" && "toDate" in value) {
+        return value.toDate().getTime();
+      }
+      return new Date(value).getTime();
+    };
+
+    const requestKey = (item: PendingItem) => {
+      if (item.requestId) return `request:${item.requestId}`;
+
+      const eventTime =
+        item.status === "done" || item.shipped || item.source === "history"
+          ? item.shippedAt
+          : item.requestedAt ?? item.timestamp;
+
+      return [
+        item.uid,
+        item.rewardId ?? item.name ?? "unknown",
+        toComparableTime(eventTime),
+      ].join(":");
+    };
+
     const currentItems = [...pendingItems, ...doneItems];
     const currentRequestKeys = new Set(currentItems.map(requestKey));
 
@@ -145,21 +173,18 @@ export default function ShippingAdminPage() {
       }
     }
 
-    const data = [
-      ...currentItems,
-      ...historyItems.filter((item) => !currentRequestKeys.has(requestKey(item))),
-    ];
+    const data = [...currentItems];
+    for (const item of historyItems) {
+      const key = requestKey(item);
+      if (!currentRequestKeys.has(key)) {
+        data.push(item);
+        currentRequestKeys.add(key);
+      }
+    }
 
     data.sort((a, b) => {
-      const toComparableTime = (value?: PendingItem["requestedAt"] | PendingItem["timestamp"]) => {
-        if (!value) return 0;
-        if (value instanceof Date) return value.getTime();
-        if (typeof value === "object" && "toDate" in value) return value.toDate().getTime();
-        return new Date(value).getTime();
-      };
-
-      const tA = toComparableTime(a.requestedAt ?? a.timestamp ?? a.shippedAt);
-      const tB = toComparableTime(b.requestedAt ?? b.timestamp ?? b.shippedAt);
+      const tA = toComparableTime(a.shippedAt ?? a.requestedAt ?? a.timestamp);
+      const tB = toComparableTime(b.shippedAt ?? b.requestedAt ?? b.timestamp);
       return tB - tA;
     });
 
@@ -185,15 +210,18 @@ export default function ShippingAdminPage() {
      発送済みフラグ切り替え ＋ 履歴保存
   -------------------------------------------------- */
   const toggleShipped = async (rewardId: string, shipped: boolean, item: PendingItem) => {
-    const pendingRef = doc(db, "shippingPending", item.uid);
-    const doneRef = doc(db, "shippingDone", item.uid);
-    const legacyRef = doc(db, "selectedRewards", item.uid);
+    const requestId = item.requestId ?? item.id;
+    const pendingRef = doc(db, "shippingPending", requestId);
+    const doneRef = doc(db, "shippingDone", requestId);
+    const legacyRef = doc(db, "selectedRewards", item.id);
 
     if (!shipped) {
       const shippedAt = Timestamp.now();
 
       await setDoc(doneRef, {
         ...item,
+        id: requestId,
+        requestId,
         uid: item.uid,
         rewardId: item.rewardId ?? rewardId,
         status: "done",
@@ -201,14 +229,16 @@ export default function ShippingAdminPage() {
         shippedAt,
       });
 
-      await deleteDoc(pendingRef);
+      await deleteDoc(doc(db, "shippingPending", item.id));
       await updateDoc(legacyRef, {
+        requestId,
         status: "done",
         shipped: true,
         shippedAt,
       }).catch(() => {
         setDoc(legacyRef, {
           ...item,
+          requestId,
           uid: item.uid,
           rewardId: item.rewardId ?? rewardId,
           status: "done",
@@ -217,12 +247,22 @@ export default function ShippingAdminPage() {
         });
       });
 
-      await addDoc(collection(db, "shippingHistory"), {
+      const historyRef = item.requestId
+        ? doc(db, "shippingHistory", requestId)
+        : doc(collection(db, "shippingHistory"));
+
+      await setDoc(historyRef, {
+        requestId,
         rewardId: item.rewardId ?? rewardId,
         uid: item.uid,
         rewardName: item.name,
+        name: item.name,
         cost: item.cost,
         image: item.image,
+        requestedAt: item.requestedAt ?? null,
+        timestamp: item.timestamp ?? null,
+        status: "done",
+        shipped: true,
         shippedAt,
         userName: item.userName,
         userEmail: item.userEmail,
@@ -232,26 +272,34 @@ export default function ShippingAdminPage() {
     } else {
       await setDoc(pendingRef, {
         ...item,
+        id: requestId,
+        requestId,
         status: "pending",
         shipped: false,
         shippedAt: null,
       });
-      await deleteDoc(doneRef);
+      await deleteDoc(doc(db, "shippingDone", item.id));
       await updateDoc(legacyRef, {
+        requestId,
         status: "pending",
         shipped: false,
         shippedAt: null,
       }).catch(() => {
         setDoc(legacyRef, {
           ...item,
+          requestId,
           status: "pending",
           shipped: false,
           shippedAt: null,
         });
       });
+
+      if (item.requestId) {
+        await deleteDoc(doc(db, "shippingHistory", requestId));
+      }
     }
 
-    fetchData();
+    void fetchData();
   };
 
   /* --------------------------------------------------
@@ -441,21 +489,23 @@ export default function ShippingAdminPage() {
                   <p><strong>ポイント：</strong> {item.cost} pt</p>
                   <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
-                  <button
-                    onClick={() => toggleShipped(item.id, itemIsDone, item)}
-                    style={{
-                      marginTop: "12px",
-                      padding: "10px 16px",
-                      background: itemIsDone ? "#aaa" : "#10b981",
-                      color: "white",
-                      borderRadius: "8px",
-                      border: "none",
-                      cursor: "pointer",
-                      minWidth: "140px",
-                    }}
-                  >
-                    {itemIsDone ? "未発送に戻す" : "発送済みにする"}
-                  </button>
+                  {item.source !== "history" && (
+                    <button
+                      onClick={() => toggleShipped(item.id, itemIsDone, item)}
+                      style={{
+                        marginTop: "12px",
+                        padding: "10px 16px",
+                        background: itemIsDone ? "#aaa" : "#10b981",
+                        color: "white",
+                        borderRadius: "8px",
+                        border: "none",
+                        cursor: "pointer",
+                        minWidth: "140px",
+                      }}
+                    >
+                      {itemIsDone ? "未発送に戻す" : "発送済みにする"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

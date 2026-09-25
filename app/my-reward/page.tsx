@@ -3,16 +3,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { db, auth } from "../../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 
 type RewardRecord = {
+  id: string;
+  requestId?: string;
   name?: string;
   cost?: number;
   image?: string | null;
+  requestedAt?: { toDate: () => Date } | Date | null;
   timestamp?: { toDate: () => Date } | Date | null;
   shipped?: boolean;
   shippedAt?: { toDate: () => Date } | Date | null;
@@ -31,6 +39,18 @@ export default function MyRewardPage() {
     return new Date(value).toLocaleString();
   };
 
+  const toMillis = (
+    value:
+      | RewardRecord["requestedAt"]
+      | RewardRecord["timestamp"]
+      | RewardRecord["shippedAt"]
+  ) => {
+    if (!value) return 0;
+    if (value instanceof Date) return value.getTime();
+    if ("toDate" in value) return value.toDate().getTime();
+    return new Date(value).getTime();
+  };
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -40,30 +60,62 @@ export default function MyRewardPage() {
 
       const uid = user.uid;
 
-      // 現在の発送状態を priority order で確認
-      const pendingRef = doc(db, "shippingPending", uid);
-      const doneRef = doc(db, "shippingDone", uid);
-      const legacyRef = doc(db, "selectedRewards", uid);
-
       try {
-        const [pendingSnap, doneSnap, legacySnap] = await Promise.all([
-          withRetry(() => getDoc(pendingRef)),
-          withRetry(() => getDoc(doneRef)),
-          withRetry(() => getDoc(legacyRef)),
+        const loadRecords = async (
+          collectionName: string,
+          status: "pending" | "done" | null
+        ) => {
+          const snapshot = await withRetry(() =>
+            getDocs(
+              query(
+                collection(db, collectionName),
+                where("uid", "==", uid)
+              )
+            )
+          );
+
+          return snapshot.docs.map((document) => {
+            const data = document.data();
+            const resolvedStatus =
+              status ?? data.status ?? (data.shipped ? "done" : "pending");
+
+            return {
+              id: document.id,
+              ...data,
+              status: resolvedStatus,
+              shipped: resolvedStatus === "done",
+            } as RewardRecord;
+          });
+        };
+
+        const [pendingRecords, doneRecords, legacyRecords] = await Promise.all([
+          loadRecords("shippingPending", "pending"),
+          loadRecords("shippingDone", "done"),
+          loadRecords("selectedRewards", null),
         ]);
 
-      if (pendingSnap.exists()) {
-        setReward({ ...pendingSnap.data(), status: "pending" });
-      } else if (doneSnap.exists()) {
-        setReward({ ...doneSnap.data(), status: "done" });
-      } else if (legacySnap.exists()) {
-        const legacyData = legacySnap.data();
-        const status = legacyData.status ?? (legacyData.shipped ? "done" : "pending");
-        setReward({ ...legacyData, status });
-      } else {
-        setReward(null);
-      }
+        const records = new Map<string, RewardRecord>();
+        for (const record of [
+          ...pendingRecords,
+          ...doneRecords,
+          ...legacyRecords,
+        ]) {
+          const key = record.requestId ?? record.id;
+          if (!records.has(key)) records.set(key, record);
+        }
 
+        const latest =
+          Array.from(records.values()).sort((a, b) => {
+            const aTime = toMillis(
+              a.shippedAt ?? a.requestedAt ?? a.timestamp
+            );
+            const bTime = toMillis(
+              b.shippedAt ?? b.requestedAt ?? b.timestamp
+            );
+            return bTime - aTime;
+          })[0] ?? null;
+
+        setReward(latest);
       } catch (error) {
         console.error("発送物情報の読み込みに失敗しました", error);
         setReward(null);

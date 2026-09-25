@@ -7,9 +7,8 @@ import {
   getDocs,
   doc,
   getDoc,
-  updateDoc,
-  setDoc,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -92,19 +91,14 @@ export default function RewardPage() {
     const newPoints = points - reward.cost;
 
     /* --------------------------------------------------
-       ① ユーザーポイントを減らす
+       ① 発送依頼ごとに一意なIDで保存
     -------------------------------------------------- */
-    await updateDoc(doc(db, "users", uid), {
-      points: newPoints,
-    });
-
-    /* --------------------------------------------------
-       ② shippingPending に保存（現在の未発送状態）
-    -------------------------------------------------- */
-    const pendingRef = doc(db, "shippingPending", uid);
-    const legacyRef = doc(db, "selectedRewards", uid);
+    const pendingRef = doc(collection(db, "shippingPending"));
+    const requestId = pendingRef.id;
+    const legacyRef = doc(db, "selectedRewards", requestId);
 
     const pendingData = {
+      requestId,
       uid,
       rewardId: reward.id,
       name: reward.name,
@@ -116,22 +110,19 @@ export default function RewardPage() {
       timestamp: new Date(),
     };
 
-    await setDoc(pendingRef, pendingData);
-    await setDoc(legacyRef, pendingData);
-
-    /* --------------------------------------------------
-       ③ 在庫を減らす
-    -------------------------------------------------- */
-    await updateDoc(doc(db, "rewards", reward.id), {
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", uid), {
+      points: newPoints,
+    });
+    batch.update(doc(db, "rewards", reward.id), {
       stock: reward.stock - 1,
     });
+    batch.set(pendingRef, pendingData);
+    batch.set(legacyRef, pendingData);
+    await batch.commit();
 
     /* --------------------------------------------------
-       ④ 履歴は発送済み時にのみ追加する
-    -------------------------------------------------- */
-
-    /* --------------------------------------------------
-       ⑤ ポイントを画面に反映
+       ② ポイントを画面に反映
     -------------------------------------------------- */
     setPoints(newPoints);
 

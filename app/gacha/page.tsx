@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import {
+  collection,
   doc,
   getDoc,
   increment,
@@ -362,7 +363,10 @@ const handleShipping = async () => {
     const userSnap = await getDoc(doc(db, "users", uid));
     const userData = userSnap.data() ?? {};
 
+    const pendingRef = doc(collection(db, "shippingPending"));
+    const requestId = pendingRef.id;
     const rewardData = {
+      requestId,
       uid,
       rewardId: `gacha_${code}_${Date.now()}`,
       name: `${frameName}（ガチャ）`,
@@ -381,8 +385,8 @@ const handleShipping = async () => {
 
     const batch = writeBatch(db);
     // shippingPending is the source of truth for unshipped requests.
-    batch.set(doc(db, "shippingPending", uid), rewardData);
-    batch.set(doc(db, "selectedRewards", uid), rewardData);
+    batch.set(pendingRef, rewardData);
+    batch.set(doc(db, "selectedRewards", requestId), rewardData);
     batch.update(doc(db, "users", uid), {
       points: increment(-rewardPoints),
     });
