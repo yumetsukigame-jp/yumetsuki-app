@@ -59,10 +59,11 @@ type CachedUser = {
 
 type ArchiveAnnouncement = {
   id: string;
-  type: "quiz" | "gacha" | "gacha_win";
+  type: "quiz" | "gacha" | "quiz_new" | "gacha_new" | "gacha_win";
   title: string;
   frame?: string;
   gachaCode?: string;
+  isTopFrame?: boolean;
   winnerNickname?: string;
   winnerXAccount?: string;
   archivedAt?: { toDate?: () => Date } | Date | null;
@@ -285,6 +286,8 @@ export default function Home() {
                   typeof item.id === "string" &&
                   (item.type === "quiz" ||
                     item.type === "gacha" ||
+                    item.type === "quiz_new" ||
+                    item.type === "gacha_new" ||
                     item.type === "gacha_win") &&
                   typeof item.title === "string" &&
                   (item.type !== "gacha_win" ||
@@ -392,9 +395,22 @@ export default function Home() {
     }）`;
   }
 
-  const initialArchiveAnnouncements = archiveAnnouncements
-    .filter((announcement) => announcement.type !== "gacha_win")
-    .slice(0, 2);
+  const initialAnnouncementIds = new Set([
+    ...archiveAnnouncements
+      .filter((announcement) => announcement.type !== "gacha_win")
+      .slice(0, 2)
+      .map((announcement) => announcement.id),
+    ...archiveAnnouncements
+      .filter(
+        (announcement) =>
+          announcement.type === "gacha_win" &&
+          announcement.isTopFrame === true
+      )
+      .map((announcement) => announcement.id),
+  ]);
+  const initialArchiveAnnouncements = archiveAnnouncements.filter(
+    (announcement) => initialAnnouncementIds.has(announcement.id)
+  );
   const visibleArchiveAnnouncements = showAllArchiveAnnouncements
     ? archiveAnnouncements
     : initialArchiveAnnouncements;
@@ -511,7 +527,11 @@ export default function Home() {
     <div style={{ display: "grid", gap: "6px" }}>
       {visibleArchiveAnnouncements.map((announcement) => {
         const isGachaWin = announcement.type === "gacha_win";
-        const isQuiz = announcement.type === "quiz";
+        const isQuiz =
+          announcement.type === "quiz" || announcement.type === "quiz_new";
+        const isNew =
+          announcement.type === "quiz_new" ||
+          announcement.type === "gacha_new";
         const archivedDate = formatAnnouncementDate(
           announcement.archivedAt
         );
@@ -528,6 +548,10 @@ export default function Home() {
             href={
               isGachaWin
                 ? `/gacha/results?code=${announcement.gachaCode}`
+                : isNew
+                  ? isQuiz
+                    ? "/quizzes"
+                    : "/gacha/list"
                 : isQuiz
                   ? "/quizzes/archive"
                   : "/gacha/archive"
@@ -550,7 +574,8 @@ export default function Home() {
             ) : (
               <>
                 {isQuiz ? "🧠" : "🎰"} {isQuiz ? "クイズ" : "ガチャ"}「
-                {announcement.title}」が終了しました。
+                {announcement.title}」が
+                {isNew ? "追加されました。" : "終了しました。"}
               </>
             )}
             {archivedDate && (

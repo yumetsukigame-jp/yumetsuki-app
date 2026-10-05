@@ -12,7 +12,11 @@ const ANNOUNCEMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const announcementRef = doc(db, "homeAnnouncements", "archiveUpdates");
 
 export type ArchiveAnnouncementType = "quiz" | "gacha";
-type AnnouncementType = ArchiveAnnouncementType | "gacha_win";
+type AnnouncementType =
+  | ArchiveAnnouncementType
+  | "quiz_new"
+  | "gacha_new"
+  | "gacha_win";
 
 type ArchiveAnnouncementInput = {
   type: ArchiveAnnouncementType;
@@ -29,6 +33,7 @@ type StoredAnnouncement = {
   archivedAt: Timestamp;
   frame?: string;
   gachaCode?: string;
+  isTopFrame?: boolean;
   winnerNickname?: string;
   winnerXAccount?: string;
 };
@@ -41,6 +46,8 @@ function isStoredAnnouncement(value: unknown): value is StoredAnnouncement {
     typeof item.id === "string" &&
     (item.type === "quiz" ||
       item.type === "gacha" ||
+      item.type === "quiz_new" ||
+      item.type === "gacha_new" ||
       item.type === "gacha_win") &&
     typeof item.sourceId === "string" &&
     typeof item.title === "string" &&

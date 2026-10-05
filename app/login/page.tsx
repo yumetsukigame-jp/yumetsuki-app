@@ -279,6 +279,9 @@ export default function LoginPage() {
         <p style={{ marginTop: 8, fontWeight: "bold" }}>
           ゆめつき本舗HPはこちら
         </p>
+        <p style={{ margin: "4px 0 0", color: "#555", fontSize: "14px" }}>
+          トレカ販売、有償企画の参加購入はこちら。
+        </p>
       </div>
     </div>
   );

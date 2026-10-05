@@ -6,7 +6,11 @@ const ANNOUNCEMENT_COLLECTION = "homeAnnouncements";
 const ANNOUNCEMENT_DOCUMENT = "archiveUpdates";
 
 type ArchiveAnnouncementType = "quiz" | "gacha";
-type AnnouncementType = ArchiveAnnouncementType | "gacha_win";
+type NewContentAnnouncementType = "quiz_new" | "gacha_new";
+type AnnouncementType =
+  | ArchiveAnnouncementType
+  | NewContentAnnouncementType
+  | "gacha_win";
 
 type ArchiveAnnouncementInput = {
   type: ArchiveAnnouncementType;
@@ -23,6 +27,7 @@ type StoredAnnouncement = {
   archivedAt: Timestamp;
   frame?: string;
   gachaCode?: string;
+  isTopFrame?: boolean;
   winnerNickname?: string;
   winnerXAccount?: string;
 };
@@ -35,6 +40,8 @@ function isStoredAnnouncement(value: unknown): value is StoredAnnouncement {
     typeof item.id === "string" &&
     (item.type === "quiz" ||
       item.type === "gacha" ||
+      item.type === "quiz_new" ||
+      item.type === "gacha_new" ||
       item.type === "gacha_win") &&
     typeof item.sourceId === "string" &&
     typeof item.title === "string" &&
@@ -62,6 +69,7 @@ export function recordGachaWinAnnouncementInTransaction(
     gachaCode: string;
     title: string;
     frame: string;
+    isTopFrame: boolean;
     announcedAt: Timestamp;
     winnerNickname: string;
     winnerXAccount: string;
@@ -85,6 +93,7 @@ export function recordGachaWinAnnouncementInTransaction(
     title: input.title.trim() || "名称未設定",
     frame: input.frame,
     gachaCode: input.gachaCode,
+    isTopFrame: input.isTopFrame,
     winnerNickname: input.winnerNickname,
     winnerXAccount: input.winnerXAccount,
     archivedAt: input.announcedAt,
@@ -101,6 +110,52 @@ export function recordGachaWinAnnouncementInTransaction(
     },
     { merge: true }
   );
+}
+
+export async function recordNewContentAnnouncement(
+  db: FirebaseFirestore.Firestore,
+  input: {
+    type: NewContentAnnouncementType;
+    sourceId: string;
+    title: string;
+    announcedAt: Timestamp;
+  }
+): Promise<void> {
+  const announcementRef = getHomeAnnouncementRef(db);
+  const id = `${input.type}_${input.sourceId}`;
+
+  await db.runTransaction(async (transaction) => {
+    const announcementSnapshot = await transaction.get(announcementRef);
+    const storedItems = announcementSnapshot.get("items");
+    const currentItems = Array.isArray(storedItems)
+      ? storedItems
+          .filter(isStoredAnnouncement)
+          .filter(
+            (current) =>
+              current.archivedAt.toMillis() >=
+              input.announcedAt.toMillis() - ANNOUNCEMENT_RETENTION_MS
+          )
+      : [];
+    const item: StoredAnnouncement = {
+      id,
+      type: input.type,
+      sourceId: input.sourceId,
+      title: input.title.trim() || "名称未設定",
+      archivedAt: input.announcedAt,
+    };
+
+    transaction.set(
+      announcementRef,
+      {
+        items: [
+          item,
+          ...currentItems.filter((current) => current.id !== id),
+        ].slice(0, ANNOUNCEMENT_LIMIT),
+        updatedAt: input.announcedAt,
+      },
+      { merge: true }
+    );
+  });
 }
 
 export async function finalizeArchiveWithAnnouncement(

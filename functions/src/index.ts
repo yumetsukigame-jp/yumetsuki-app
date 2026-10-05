@@ -19,6 +19,7 @@ export {
 export { sendPasswordResetLink } from "./passwordReset";
 export { sendTestResendEmail } from "./testEmail";
 export { getPointCodePreview, redeemPointCode } from "./pointCode";
+export { announceNewGacha, announceNewQuiz } from "./homeAnnouncements";
 export {
   createUserProfile,
   recordDailyLogin,

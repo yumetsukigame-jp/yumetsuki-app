@@ -638,6 +638,7 @@ export const useGachaCode = functions
                   ? freshGacha.title
                   : "名称未設定",
               frame: selectedFrame.label,
+              isTopFrame: selectedFrame.label === freshFrames[0]?.label,
               winnerNickname:
                 typeof freshUser.displayName === "string" &&
                 freshUser.displayName.trim()
