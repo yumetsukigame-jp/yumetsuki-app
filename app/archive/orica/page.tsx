@@ -72,6 +72,7 @@ export default function OricaPage() {
     orica: images.filter((img) => img.prefix === "orica_"),
     sp: images.filter((img) => img.prefix === "sp_"),
     honpo: images.filter((img) => img.prefix === "honpo_"),
+    nibuichi: images.filter((img) => img.prefix === "nibuichi_"),
   };
 
   return (
@@ -84,6 +85,7 @@ export default function OricaPage() {
             {groupName === "orica" && "通常企画"}
             {groupName === "sp" && "特別企画"}
             {groupName === "honpo" && "ゆめつき本舗"}
+            {groupName === "nibuichi" && "ニブイチ企画"}
           </h2>
 
           <div

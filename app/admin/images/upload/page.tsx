@@ -60,6 +60,7 @@ export default function ImageUploadPage() {
       { value: "orica_", label: "orica_（orica）" },
       { value: "sp_", label: "sp_（orica）" },
       { value: "honpo_", label: "honpo_（orica）" },
+      { value: "nibuichi_", label: "nibuichi_（orica）" },
       { value: "custom", label: "カスタム入力" },
     ],
     default: [

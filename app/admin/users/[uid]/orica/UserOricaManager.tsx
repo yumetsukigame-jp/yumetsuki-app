@@ -30,6 +30,7 @@ const groupLabels: Record<string, string> = {
   orica: "通常企画",
   sp: "特別企画",
   honpo: "ゆめつき本舗",
+  nibuichi: "ニブイチ企画",
 };
 
 function getOricaId(fileName: string): string {
@@ -108,6 +109,7 @@ export default function UserOricaManager({ uid }: { uid: string }) {
       orica: images.filter((image) => image.prefix === "orica_"),
       sp: images.filter((image) => image.prefix === "sp_"),
       honpo: images.filter((image) => image.prefix === "honpo_"),
+      nibuichi: images.filter((image) => image.prefix === "nibuichi_"),
     }),
     [images]
   );
