@@ -36,10 +36,10 @@ function validateProfileData(data: ProfileData): ProfileData {
   const displayName = data.displayName.trim();
   const xAccount = data.xAccount.trim();
 
-  if (!name || !displayName || !xAccount) {
+  if (!displayName || !xAccount) {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "すべての項目を入力してください。"
+      "ニックネームとXアカウントを入力してください。"
     );
   }
 
@@ -101,6 +101,10 @@ async function claimXAccount(
 
   await db.runTransaction(async (transaction) => {
     const claim = await transaction.get(claimRef);
+    const previousClaim = previousClaimRef
+      ? await transaction.get(previousClaimRef)
+      : undefined;
+
     if (claim.exists && claim.get("uid") !== uid) {
       throw new functions.https.HttpsError(
         "already-exists",
@@ -116,8 +120,7 @@ async function claimXAccount(
     });
 
     if (previousClaimRef) {
-      const previousClaim = await transaction.get(previousClaimRef);
-      if (previousClaim.get("uid") === uid) {
+      if (previousClaim?.get("uid") === uid) {
         transaction.delete(previousClaimRef);
       }
     }

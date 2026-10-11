@@ -72,7 +72,7 @@ export default function ProfilePage() {
       return;
     }
 
-    if (!xAccount.startsWith("@")) {
+    if (!xAccount.trim().startsWith("@")) {
       alert("Xアカウントは @ から入力してください");
       return;
     }
@@ -89,14 +89,8 @@ export default function ProfilePage() {
       });
       alert("保存しました！");
     } catch (error) {
-      const message =
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "functions/already-exists"
-          ? "このXアカウントはすでに登録されています"
-          : "保存に失敗しました。もう一度お試しください。";
-      alert(message);
+      console.error("プロフィールの保存に失敗しました", error);
+      alert(getProfileUpdateErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -406,6 +400,28 @@ function accountButtonStyle(disabled: boolean) {
     fontWeight: "bold",
     cursor: disabled ? "not-allowed" : "pointer",
   };
+}
+
+function getProfileUpdateErrorMessage(error: unknown): string {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? error.code
+      : "";
+
+  switch (code) {
+    case "functions/already-exists":
+      return "このXアカウントはすでに登録されています。";
+    case "functions/permission-denied":
+      return "確定済みのXアカウントは変更できません。";
+    case "functions/invalid-argument":
+      return "入力内容を確認してください。";
+    case "functions/unauthenticated":
+      return "ログイン状態を確認できませんでした。再度ログインしてください。";
+    case "functions/not-found":
+      return "プロフィールが見つかりません。管理者へお問い合わせください。";
+    default:
+      return "保存に失敗しました。もう一度お試しください。";
+  }
 }
 
 function getAccountUpdateErrorMessage(error: unknown): string {
