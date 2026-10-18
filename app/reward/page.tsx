@@ -83,6 +83,12 @@ export default function RewardPage() {
       return;
     }
 
+    if (
+      !confirm(`${reward.name}を発送します。確定してよろしいですか？`)
+    ) {
+      return;
+    }
+
     const user = auth.currentUser;
     if (!user) return;
 

@@ -2,7 +2,7 @@
 
 import type { DocumentData } from "firebase/firestore";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
@@ -65,6 +65,83 @@ export default function GachaInner() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isShipping, setIsShipping] = useState(false);
+  const [shippingDecisionResolved, setShippingDecisionResolved] =
+    useState(false);
+  const shippingGuardActiveRef = useRef(false);
+
+  const shippingFrame = result && gacha
+    ? gacha.frames.find(
+        (frame: DocumentData) => frame.label === result.frame
+      )
+    : null;
+  const shouldWarnBeforeLeaving =
+    Boolean(result && shippingFrame?.shippingEnabled) &&
+    !shippingDecisionResolved;
+  const shippingWarningMessage =
+    "この画面を遷移すると賞品はポイントとして確定し、今回の景品の発送は出来なくなります。移動してよろしいですか？";
+
+  const confirmAbandonShipping = () => {
+    if (!shippingGuardActiveRef.current) return true;
+    if (!confirm(shippingWarningMessage)) return false;
+
+    shippingGuardActiveRef.current = false;
+    setShippingDecisionResolved(true);
+    return true;
+  };
+
+  useEffect(() => {
+    shippingGuardActiveRef.current = shouldWarnBeforeLeaving;
+    if (!shouldWarnBeforeLeaving) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = shippingWarningMessage;
+    };
+
+    const handleNavigationClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const navigationElement = target.closest(
+        "a[href], header, footer button"
+      );
+      if (!navigationElement || confirmAbandonShipping()) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.history.pushState(
+      { ...window.history.state, gachaShippingGuard: true },
+      "",
+      window.location.href
+    );
+
+    const handlePopState = () => {
+      if (!shippingGuardActiveRef.current) return;
+
+      if (confirmAbandonShipping()) {
+        window.setTimeout(() => window.history.back(), 0);
+        return;
+      }
+
+      window.history.pushState(
+        { ...window.history.state, gachaShippingGuard: true },
+        "",
+        window.location.href
+      );
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("click", handleNavigationClick, true);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("click", handleNavigationClick, true);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [shouldWarnBeforeLeaving]);
 
   /* --------------------------------------------------
      Auth 状態
@@ -300,7 +377,10 @@ const checkCode = async () => {
   -------------------------------------------------- */
   const play = async () => {
     if (isPlaying || !gacha) return;
+    if (!confirmAbandonShipping()) return;
+
     setIsPlaying(true);
+    setShippingDecisionResolved(false);
 
     setError("");
     setResult(null);
@@ -366,6 +446,13 @@ const handleShipping = async () => {
 
   const frameName = result.frame;
   const rewardPoints = result.reward;
+  const shippingItemName = `${frameName}（ガチャ）`;
+
+  if (
+    !confirm(`${shippingItemName}を発送します。確定してよろしいですか？`)
+  ) {
+    return;
+  }
 
   setIsShipping(true);
   try {
@@ -378,7 +465,7 @@ const handleShipping = async () => {
       requestId,
       uid,
       rewardId: `gacha_${code}_${Date.now()}`,
-      name: `${frameName}（ガチャ）`,
+      name: shippingItemName,
       cost: rewardPoints,
       image:
         getGachaThumbnailSrc(gacha.thumbnail) || "/rewards/gacha.webp",
@@ -402,6 +489,8 @@ const handleShipping = async () => {
     });
     await batch.commit();
 
+    shippingGuardActiveRef.current = false;
+    setShippingDecisionResolved(true);
     alert("発送依頼を受け付けました！");
     router.push("/reward/complete");
   } catch (error) {
@@ -683,7 +772,10 @@ const handleShipping = async () => {
               })()}
 
               <button
-                onClick={() => router.push(`/gacha/results?code=${code}`)}
+                onClick={() => {
+                  if (!confirmAbandonShipping()) return;
+                  router.push(`/gacha/results?code=${code}`);
+                }}
                 style={{
                   marginTop: 20,
                   padding: "12px 20px",

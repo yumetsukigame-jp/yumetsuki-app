@@ -60,6 +60,7 @@ const toMillis = (value?: FirestoreDateLike) => {
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showShipped, setShowShipped] = useState(false);
 
   const getStatusLabel = (item: HistoryItem) => {
     if (item.status) {
@@ -167,68 +168,108 @@ export default function HistoryPage() {
 
   if (loading) return <LoadingState />;
 
+  const pendingHistory = history.filter(
+    (item) => item.status !== "done" && !item.shipped
+  );
+  const shippedHistory = history.filter(
+    (item) => item.status === "done" || item.shipped
+  );
+
+  const renderHistoryItems = (items: HistoryItem[]) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {items.map((item) => (
+        <div
+          key={`${item.source}-${item.id}`}
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: "8px",
+            padding: "16px",
+            display: "flex",
+            gap: "16px",
+            alignItems: "center",
+          }}
+        >
+          {item.image && (
+            <img
+              src={item.image}
+              alt={item.name}
+              style={{
+                width: "80px",
+                height: "80px",
+                objectFit: "contain",
+              }}
+            />
+          )}
+
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: "18px" }}>{item.name}</h2>
+            <p>消費ポイント：{item.cost} pt</p>
+
+            <p>
+              依頼日時：{" "}
+              {toDisplayDate(item.requestedAt ?? item.timestamp)}
+            </p>
+
+            <p>
+              状態：{" "}
+              <strong
+                style={{
+                  color:
+                    item.status === "done" || item.shipped
+                      ? "green"
+                      : "orange",
+                }}
+              >
+                {getStatusLabel(item)}
+              </strong>
+            </p>
+
+            {item.shippedAt && (
+              <p>発送日時： {toDisplayDate(item.shippedAt)}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
       <h1 style={{ fontSize: "24px", marginBottom: "20px" }}>発送履歴</h1>
 
-      {history.length === 0 && <p>まだ発送履歴がありません。</p>}
+      {pendingHistory.length === 0 ? (
+        <p>未発送の履歴はありません。</p>
+      ) : (
+        renderHistoryItems(pendingHistory)
+      )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {history.map((item) => (
-          <div
-            key={item.id}
+      {shippedHistory.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            type="button"
+            onClick={() => setShowShipped((current) => !current)}
             style={{
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "16px",
-              display: "flex",
-              gap: "16px",
-              alignItems: "center",
+              width: "100%",
+              padding: "10px 16px",
+              background: "#4b5563",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
             }}
           >
-            {item.image && (
-              <img
-                src={item.image}
-                alt={item.name}
-                style={{
-                  width: "80px",
-                  height: "80px",
-                  objectFit: "contain",
-                }}
-              />
-            )}
+            {showShipped
+              ? "発送済みの履歴を閉じる"
+              : `発送済みの履歴を表示（${shippedHistory.length}件）`}
+          </button>
 
-            <div style={{ flex: 1 }}>
-              <h2 style={{ fontSize: "18px" }}>{item.name}</h2>
-              <p>消費ポイント：{item.cost} pt</p>
-
-              <p>
-                依頼日時：{" "}
-                {toDisplayDate(item.requestedAt ?? item.timestamp)}
-              </p>
-
-              <p>
-                状態：{" "}
-                <strong
-                  style={{
-                    color:
-                      item.status === "done" || item.shipped ? "green" : "orange",
-                  }}
-                >
-                  {getStatusLabel(item)}
-                </strong>
-              </p>
-
-              {item.shippedAt && (
-                <p>
-                  発送日時：{" "}
-                  {toDisplayDate(item.shippedAt)}
-                </p>
-              )}
+          {showShipped && (
+            <div style={{ marginTop: 20 }}>
+              {renderHistoryItems(shippedHistory)}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
