@@ -7,6 +7,11 @@ import { httpsCallable } from "firebase/functions";
 import { functions, db, storage } from "@/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
+import {
+  isEventGachaFolder,
+  isGachaFolder,
+  isRegularGachaFolder,
+} from "@/app/lib/imageFolders";
 
 type Mode = "count" | "prob";
 type ResetType = "none" | "daily";
@@ -26,6 +31,11 @@ type FrameInput = {
   rewardMin: number | "";
   rewardMax: number | "";
   shippingEnabled: boolean;
+};
+
+type GachaImage = {
+  url: string;
+  folder: string;
 };
 
 export default function GachaCreatePage() {
@@ -48,7 +58,7 @@ export default function GachaCreatePage() {
   const [xAccountText, setXAccountText] = useState("");
 
   const [thumbnail, setThumbnail] = useState<string>("");
-  const [gachaImages, setGachaImages] = useState<string[]>([]);
+  const [gachaImages, setGachaImages] = useState<GachaImage[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
@@ -59,21 +69,26 @@ export default function GachaCreatePage() {
       const snap = await getDocs(collection(db, "imageMeta"));
       const list = snap.docs
         .map((d) => d.data())
-        .filter((d) => d.folder === "gacha");
+        .filter((d) => isGachaFolder(d.folder));
 
-      const urls = await Promise.all(
+      const images = await Promise.all(
         list.map(async (d) => {
           try {
             const storageRef = ref(storage, d.path);
-            return await getDownloadURL(storageRef); // ★ 正しい URL を取得
+            return {
+              url: await getDownloadURL(storageRef),
+              folder: d.folder,
+            };
           } catch (e) {
             console.error("URL取得失敗:", d.path, e);
-            return d.url; // fallback（壊れていても一応返す）
+            return typeof d.url === "string"
+              ? { url: d.url, folder: d.folder }
+              : null;
           }
         })
       );
 
-      setGachaImages(urls);
+      setGachaImages(images.filter((image): image is GachaImage => image !== null));
     };
 
     load();
@@ -379,26 +394,53 @@ export default function GachaCreatePage() {
         <div style={boxStyle}>
           <div style={labelStyle}>サムネイル画像</div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {gachaImages.map((url) => (
-              <img
-                key={url}
-                src={url}
-                onClick={() => setThumbnail(url)}
-                style={{
-                  width: 80,
-                  height: 80,
-                  objectFit: "cover",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  border:
-                    thumbnail === url
-                      ? "3px solid #2563eb"
-                      : "1px solid #ccc",
-                }}
-              />
-            ))}
-          </div>
+          {[
+            {
+              label: "レギュラー",
+              images: gachaImages.filter((image) =>
+                isRegularGachaFolder(image.folder)
+              ),
+            },
+            {
+              label: "イベント",
+              images: gachaImages.filter((image) =>
+                isEventGachaFolder(image.folder)
+              ),
+            },
+          ].map((group) => (
+            <div key={group.label} style={{ marginTop: 12 }}>
+              <div style={{ marginBottom: 8, fontWeight: "bold" }}>
+                {group.label}
+              </div>
+              {group.images.length === 0 ? (
+                <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+                  画像はありません
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {group.images.map((image) => (
+                    <img
+                      key={image.url}
+                      src={image.url}
+                      alt=""
+                      onClick={() => setThumbnail(image.url)}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        border:
+                          thumbnail === image.url
+                            ? "3px solid #2563eb"
+                            : "1px solid #ccc",
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
 
           {thumbnail && (
             <p style={{ marginTop: 8 }}>

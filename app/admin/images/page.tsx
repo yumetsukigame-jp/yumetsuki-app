@@ -12,23 +12,16 @@ import {
 } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
 import Link from "next/link";
+import {
+  GACHA_REGULAR_FOLDER,
+  IMAGE_FOLDER_OPTIONS,
+  isRegularGachaFolder,
+} from "@/app/lib/imageFolders";
 
 export default function ImageListPage() {
   const [images, setImages] = useState<DocumentData[]>([]);
-  const [folder, setFolder] = useState("gacha");
+  const [folder, setFolder] = useState(GACHA_REGULAR_FOLDER);
   const [loading, setLoading] = useState(true);
-
-  const folders = [
-    "gacha",
-    "banners",
-    "icons",
-    "questicon",
-    "character-select",
-    "rewards",
-    "memories",
-    "orica",    
-    "misc",
-  ];
 
   const load = async () => {
     setLoading(true);
@@ -72,9 +65,9 @@ export default function ImageListPage() {
           onChange={(e) => setFolder(e.target.value)}
           style={{ padding: 8, marginLeft: 10 }}
         >
-          {folders.map((f) => (
-            <option key={f} value={f}>
-              {f}
+          {IMAGE_FOLDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>
@@ -104,7 +97,11 @@ export default function ImageListPage() {
           }}
         >
           {images
-            .filter((img) => img.folder === folder)
+            .filter((img) =>
+              folder === GACHA_REGULAR_FOLDER
+                ? isRegularGachaFolder(img.folder)
+                : img.folder === folder
+            )
             .map((img) => (
               <div
                 key={img.id}
@@ -165,7 +162,7 @@ export default function ImageListPage() {
                     textDecoration: "none",
                   }}
                 >
-                  差し替え
+                  差し替え・フォルダ移動
                 </Link>
 
                 {/* 削除 */}

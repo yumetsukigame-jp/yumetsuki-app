@@ -6,6 +6,10 @@ import { ref, uploadBytesResumable } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
 import { v4 as uuidv4 } from "uuid";
 import { collection, getDocs } from "firebase/firestore";
+import {
+  GACHA_REGULAR_FOLDER,
+  IMAGE_FOLDER_OPTIONS,
+} from "@/app/lib/imageFolders";
 
 export default function ImageUploadPage() {
   const [uid, setUid] = useState<string | null>(null);
@@ -20,29 +24,13 @@ export default function ImageUploadPage() {
   }, []);
 
   const [file, setFile] = useState<File | null>(null);
-  const [folder, setFolder] = useState("gacha");
+  const [folder, setFolder] = useState(GACHA_REGULAR_FOLDER);
   const [prefix, setPrefix] = useState("none");
   const [customPrefix, setCustomPrefix] = useState("");
   const [customFileName, setCustomFileName] = useState("");
 
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
-
-  /* ------------------------------
-     フォルダ選択肢
-  ------------------------------ */
-  const folders = [
-    "gacha",
-    "banners",
-    "icons",
-    "questicon",
-    "character-select",
-    "rewards",
-    "memories",
-    "orica",
-    "quiz",
-    "misc",
-  ];
 
   /* ------------------------------
      フォルダ別 prefix 設定
@@ -161,8 +149,10 @@ export default function ImageUploadPage() {
           onChange={(e) => setFolder(e.target.value)}
           style={{ padding: 8, marginLeft: 10 }}
         >
-          {folders.map((f) => (
-            <option key={f}>{f}</option>
+          {IMAGE_FOLDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
           ))}
         </select>
       </div>

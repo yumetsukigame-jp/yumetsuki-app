@@ -4,7 +4,8 @@ import type { DocumentData } from "firebase/firestore";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { db, storage } from "@/firebase";
+import { db, functions, storage } from "@/firebase";
+import { httpsCallable } from "firebase/functions";
 import {
   doc,
   getDoc,
@@ -12,6 +13,10 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
+import {
+  IMAGE_FOLDER_OPTIONS,
+  normalizeImageFolder,
+} from "@/app/lib/imageFolders";
 
 export default function ImageDetailPage() {
   const { id } = useParams();
@@ -23,18 +28,7 @@ export default function ImageDetailPage() {
   const [prefix, setPrefix] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const folders = [
-    "gacha",
-    "banners",
-    "icons",
-    "questicon",
-    "character-select",
-    "rewards",
-    "memories",
-    "quiz",
-    "misc",
-  ];
+  const [moving, setMoving] = useState(false);
 
   // 画像メタ情報を取得
   const load = async () => {
@@ -47,7 +41,7 @@ export default function ImageDetailPage() {
 
     const d = snap.data();
     setData(d);
-    setFolder(d.folder);
+    setFolder(normalizeImageFolder(d.folder));
     setPrefix(d.prefix || "");
     setLoading(false);
   };
@@ -55,6 +49,40 @@ export default function ImageDetailPage() {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, []);
+
+  const handleMove = async () => {
+    if (!data || data.folder === folder) return;
+    if (!confirm("この画像を選択したフォルダへ移動しますか？")) return;
+
+    setMoving(true);
+    try {
+      const moveImage = httpsCallable<
+        { imageId: string; targetFolder: string },
+        { path: string; url: string }
+      >(functions, "moveImage");
+      const result = await moveImage({
+        imageId: id as string,
+        targetFolder: folder,
+      });
+
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              folder,
+              path: result.data.path,
+              url: result.data.url,
+            }
+          : current
+      );
+      alert("フォルダを移動しました");
+    } catch (error) {
+      console.error("move image error:", error);
+      alert("フォルダの移動に失敗しました");
+    } finally {
+      setMoving(false);
+    }
+  };
 
   // 差し替え処理
   const handleReplace = async () => {
@@ -116,7 +144,7 @@ export default function ImageDetailPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-      <h1>🖼 画像差し替え</h1>
+      <h1>🖼 画像編集</h1>
 
       {/* 現在の画像 */}
       <div style={{ marginBottom: 20 }}>
@@ -149,10 +177,29 @@ export default function ImageDetailPage() {
           onChange={(e) => setFolder(e.target.value)}
           style={{ padding: 8, marginLeft: 10 }}
         >
-          {folders.map((f) => (
-            <option key={f}>{f}</option>
+          {IMAGE_FOLDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={handleMove}
+          disabled={moving || data.folder === folder}
+          style={{
+            marginLeft: 10,
+            padding: "8px 12px",
+            background: data.folder === folder ? "#9ca3af" : "#059669",
+            color: "white",
+            borderRadius: 6,
+            border: "none",
+            cursor:
+              moving || data.folder === folder ? "not-allowed" : "pointer",
+          }}
+        >
+          {moving ? "移動中…" : "フォルダ変更を保存"}
+        </button>
       </div>
 
       <div style={{ marginBottom: 20 }}>

@@ -1,4 +1,5 @@
 import { onObjectFinalized } from "firebase-functions/v2/storage";
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import sharp from "sharp";
 import { v4 as uuidv4 } from "uuid";
@@ -12,6 +13,19 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const bucket = admin.storage().bucket("point-app-1f854.firebasestorage.app");
+const allowedImageFolders = new Set([
+  "gacha/regular",
+  "gacha/event",
+  "banners",
+  "icons",
+  "questicon",
+  "character-select",
+  "rewards",
+  "memories",
+  "orica",
+  "quiz",
+  "misc",
+]);
 
 type ImageMetadata = {
   folder?: string;
@@ -103,3 +117,112 @@ export const processImage = onObjectFinalized(
     }
   }
 );
+
+export const moveImage = functions
+  .region("us-east1")
+  .https.onCall(async (data: unknown, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "ログインが必要です"
+      );
+    }
+
+    const adminSnap = await db.collection("admins").doc(uid).get();
+    if (!adminSnap.exists) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "管理者のみ実行できます"
+      );
+    }
+
+    if (typeof data !== "object" || data === null) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "移動情報が不正です"
+      );
+    }
+
+    const input = data as Record<string, unknown>;
+    const imageId =
+      typeof input.imageId === "string" ? input.imageId.trim() : "";
+    const targetFolder =
+      typeof input.targetFolder === "string" ? input.targetFolder.trim() : "";
+
+    if (!imageId || !allowedImageFolders.has(targetFolder)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "画像または移動先フォルダが不正です"
+      );
+    }
+
+    const imageRef = db.collection("imageMeta").doc(imageId);
+    const imageSnap = await imageRef.get();
+    if (!imageSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "画像が見つかりません");
+    }
+
+    const image = imageSnap.data();
+    const sourcePath =
+      typeof image?.path === "string" ? image.path : "";
+    const fileName =
+      typeof image?.fileName === "string" ? image.fileName : "";
+
+    if (!sourcePath.startsWith("images/") || !fileName) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "画像の保存情報が不正です"
+      );
+    }
+
+    const destinationPath = `images/${targetFolder}/${fileName}`;
+    if (sourcePath === destinationPath) {
+      return {
+        path: sourcePath,
+        url: image?.url,
+      };
+    }
+
+    const destinationFile = bucket.file(destinationPath);
+    const [destinationExists] = await destinationFile.exists();
+    if (destinationExists) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "移動先に同名の画像があります"
+      );
+    }
+
+    const sourceFile = bucket.file(sourcePath);
+    const [sourceExists] = await sourceFile.exists();
+    if (!sourceExists) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "Storageに画像が見つかりません"
+      );
+    }
+
+    const url =
+      "https://firebasestorage.googleapis.com/v0/b/" +
+      "point-app-1f854.firebasestorage.app/o/" +
+      encodeURIComponent(destinationPath) +
+      "?alt=media";
+
+    await sourceFile.move(destinationPath);
+
+    try {
+      await imageRef.update({
+        folder: targetFolder,
+        path: destinationPath,
+        url,
+      });
+    } catch (error) {
+      await destinationFile.move(sourcePath);
+      throw error;
+    }
+
+    return {
+      path: destinationPath,
+      url,
+    };
+  });
