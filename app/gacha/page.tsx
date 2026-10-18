@@ -36,6 +36,15 @@ function getYesterdayJST6() {
   return now.toISOString().slice(0, 10);
 }
 
+function getGachaThumbnailSrc(thumbnail: unknown) {
+  if (typeof thumbnail !== "string") return "";
+
+  const value = thumbnail.trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return `/gacha/${value}`;
+}
+
 export default function GachaInner() {
   const router = useRouter();
 
@@ -350,7 +359,7 @@ const handleShipping = async () => {
     return;
   }
 
-  if (!result) {
+  if (!result || !gacha) {
     alert("結果がありません");
     return;
   }
@@ -371,7 +380,8 @@ const handleShipping = async () => {
       rewardId: `gacha_${code}_${Date.now()}`,
       name: `${frameName}（ガチャ）`,
       cost: rewardPoints,
-      image: "/rewards/gacha.webp",
+      image:
+        getGachaThumbnailSrc(gacha.thumbnail) || "/rewards/gacha.webp",
       timestamp: new Date(),
       requestedAt: serverTimestamp(),
       status: "pending",
