@@ -15,6 +15,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import LoadingState from "@/app/components/LoadingState";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 export default function NibuichiHistoryPage() {
   const [user, setUser] = useState<DocumentData | null>(null);
@@ -247,7 +248,7 @@ export default function NibuichiHistoryPage() {
             <div key={item.id} className="border p-3 rounded-lg bg-gray-50">
               <div className="font-bold">
                 {item.createdAt?.toDate
-                  ? item.createdAt.toDate().toLocaleString()
+                  ? formatJstDateTime(item.createdAt.toDate())
                   : ""}
               </div>
               <div>獲得ポイント：{item.added} pt</div>

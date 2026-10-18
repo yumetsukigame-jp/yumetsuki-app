@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   collection,
   getDoc,
@@ -217,7 +218,7 @@ export default function ValidCodesPage() {
           <p>
             <strong>作成日時：</strong>{" "}
             {item.createdAt && typeof item.createdAt === "object" && "toDate" in item.createdAt
-              ? item.createdAt.toDate().toLocaleString()
+              ? formatJstDateTime(item.createdAt.toDate())
               : "不明"}
           </p>
 

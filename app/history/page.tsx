@@ -11,6 +11,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -37,9 +38,9 @@ type HistoryItem = {
 
 const toDisplayDate = (value?: FirestoreDateLike) => {
   if (!value) return "不明";
-  if (value instanceof Date) return value.toLocaleString();
+  if (value instanceof Date) return formatJstDateTime(value);
   if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
-    return value.toDate().toLocaleString();
+    return formatJstDateTime(value.toDate());
   }
   return "不明";
 };

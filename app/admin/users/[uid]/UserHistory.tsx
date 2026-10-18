@@ -4,6 +4,7 @@ import type { DocumentData } from "firebase/firestore";
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   collection,
   getDocs,
@@ -103,7 +104,7 @@ export default function UserHistory({ uid }: { uid: string }) {
         <p>
           <strong>最終ログイン：</strong>{" "}
           {user.lastLogin?.toDate
-            ? user.lastLogin.toDate().toLocaleString()
+            ? formatJstDateTime(user.lastLogin.toDate())
             : "不明"}
         </p>
       </div>
@@ -132,7 +133,7 @@ export default function UserHistory({ uid }: { uid: string }) {
           <p>
             <strong>日時：</strong>{" "}
             {item.createdAt?.toDate
-              ? item.createdAt.toDate().toLocaleString()
+              ? formatJstDateTime(item.createdAt.toDate())
               : "不明"}
           </p>
         </div>

@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 const getTimestampMillis = (value: unknown): number | null => {
   if (!value) return null;
@@ -429,7 +430,7 @@ export default function AdminQuizListPage() {
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <p>ポイント：{q.rewardPoint}</p>
                     <p>正解：{q.answer}</p>
-                    <p>アーカイブ日時：{q.archivedAt?.toDate?.().toLocaleString?.()}</p>
+                    <p>アーカイブ日時：{q.archivedAt?.toDate ? formatJstDateTime(q.archivedAt.toDate()) : ""}</p>
                   </div>
 
                   <button

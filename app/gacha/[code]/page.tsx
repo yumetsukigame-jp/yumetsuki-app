@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 /* --------------------------------------------------
    JST 6時切り替え（完全修正版）
@@ -399,7 +400,7 @@ if (isXAccountMatch) {
       <p>
         締切：
         {gacha.expiresAt
-          ? gacha.expiresAt.toDate().toLocaleString()
+          ? formatJstDateTime(gacha.expiresAt.toDate())
           : "なし"}
       </p>
 

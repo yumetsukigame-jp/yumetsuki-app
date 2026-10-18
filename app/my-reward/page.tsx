@@ -13,6 +13,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 type RewardRecord = {
   id: string;
@@ -34,9 +35,9 @@ export default function MyRewardPage() {
 
   const formatTimestamp = (value: RewardRecord["timestamp"] | RewardRecord["shippedAt"]) => {
     if (!value) return "不明";
-    if (value instanceof Date) return value.toLocaleString();
-    if ("toDate" in value) return value.toDate().toLocaleString();
-    return new Date(value).toLocaleString();
+    if (value instanceof Date) return formatJstDateTime(value);
+    if ("toDate" in value) return formatJstDateTime(value.toDate());
+    return formatJstDateTime(new Date(value));
   };
 
   const toMillis = (

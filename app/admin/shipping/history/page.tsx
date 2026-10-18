@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   collection,
   getDocs,
@@ -127,9 +128,9 @@ export default function ShippingHistoryPage() {
 
   const formatDate = (value: HistoryItem["shippedAt"]) => {
     if (!value) return "日時不明";
-    if (typeof value === "string") return new Date(value).toLocaleString();
-    if (value instanceof Date) return value.toLocaleString();
-    if (value.toDate) return value.toDate().toLocaleString();
+    if (typeof value === "string") return formatJstDateTime(new Date(value));
+    if (value instanceof Date) return formatJstDateTime(value);
+    if (value.toDate) return formatJstDateTime(value.toDate());
     return "日時不明";
   };
 

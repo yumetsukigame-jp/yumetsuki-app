@@ -17,6 +17,7 @@ import {
 import { getCountFromServer } from "firebase/firestore";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -823,7 +824,7 @@ export default function PublicGachaListPage() {
                     締切：
                     {(() => {
                       const expiresDate = toDateSafe(g.expiresAt);
-                      return expiresDate ? expiresDate.toLocaleString() : "なし";
+                      return expiresDate ? formatJstDateTime(expiresDate) : "なし";
                     })()}
                   </p>
 

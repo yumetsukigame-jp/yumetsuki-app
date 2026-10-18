@@ -7,6 +7,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions, db, storage } from "@/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
+import { parseJstDateTime } from "@/app/lib/dateTime";
 import {
   GACHA_EVENT_FOLDER,
   GACHA_REGULAR_FOLDER,
@@ -291,7 +292,7 @@ export default function GachaCreatePage() {
           shippingEnabled: f.shippingEnabled,
         })),
 
-        expiresAt,
+        expiresAt: expiresAt ? parseJstDateTime(expiresAt).toISOString() : "",
 
         xAccountList,
       });
@@ -565,7 +566,7 @@ export default function GachaCreatePage() {
 
         {/* 期限 */}
         <div>
-          <div style={labelStyle}>締切日時</div>
+          <div style={labelStyle}>締切日時（日本時間・JST）</div>
           <input
             type="datetime-local"
             value={expiresAt}

@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import PointAuditPanel from "./PointAuditPanel";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 const PAGE_SIZE = 50;
 
@@ -524,8 +525,8 @@ function UserDetail({
 }
 
 function formatDate(value: UserRecord["createdAt"]) {
-  if (value instanceof Date) return value.toLocaleString();
-  if (value && typeof value.toDate === "function") return value.toDate().toLocaleString();
+  if (value instanceof Date) return formatJstDateTime(value);
+  if (value && typeof value.toDate === "function") return formatJstDateTime(value.toDate());
   return "不明";
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   collection,
   getDocs,
@@ -77,9 +78,9 @@ export default function ShippingHistoryPage() {
   // Timestamp / Date 両対応
   const formatDate = (value: AdminHistoryItem["requestedAt"] | AdminHistoryItem["shippedAt"]) => {
     if (!value) return "不明";
-    if (typeof value === "string") return new Date(value).toLocaleString();
-    if (value instanceof Date) return value.toLocaleString();
-    if ("toDate" in value) return value.toDate().toLocaleString();
+    if (typeof value === "string") return formatJstDateTime(new Date(value));
+    if (value instanceof Date) return formatJstDateTime(value);
+    if ("toDate" in value) return formatJstDateTime(value.toDate());
     return "不明";
   };
 

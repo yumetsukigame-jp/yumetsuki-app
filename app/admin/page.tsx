@@ -13,6 +13,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { onAuthStateChanged } from "firebase/auth";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import Link from "next/link";
 
 export default function AdminTopPage() {
@@ -50,10 +51,10 @@ export default function AdminTopPage() {
             : null;
 
         if (!gacha && data.type === "dailyReset" && ts) {
-          gacha = ts.toLocaleString();
+          gacha = formatJstDateTime(ts);
         }
         if (!nibuichi && data.type === "nibuichiDailyReset" && ts) {
-          nibuichi = ts.toLocaleString();
+          nibuichi = formatJstDateTime(ts);
         }
       });
 

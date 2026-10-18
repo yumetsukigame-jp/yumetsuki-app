@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { finalizeArchiveWithAnnouncement } from "@/app/lib/archiveAnnouncements";
+import { formatJstDateTime, parseJstDateTime } from "@/app/lib/dateTime";
 
 type GachaFrame = {
   label?: string;
@@ -208,7 +209,11 @@ export default function GachaManagePage() {
   };
 
   const updateExpire = async (id: string, newDate: string) => {
-    const expiresAt = new Date(newDate);
+    const expiresAt = parseJstDateTime(newDate);
+    if (Number.isNaN(expiresAt.getTime())) {
+      alert("有効な締切日時を入力してください");
+      return;
+    }
     await updateDoc(doc(db, "gachaCodes", id), { expiresAt });
     await loadCodes();
   };
@@ -665,10 +670,10 @@ function GachaItem({
 
         {open && (
           <div style={{ marginTop: 16 }}>
-            <p>作成日：{codeData.createdAt && "toDate" in codeData.createdAt ? codeData.createdAt.toDate().toLocaleString() : "なし"}</p>
-            <p>締切日：{codeData.expiresAt && "toDate" in codeData.expiresAt ? codeData.expiresAt.toDate().toLocaleString() : "なし"}</p>
+            <p>作成日：{codeData.createdAt ? formatJstDateTime(codeData.createdAt instanceof Date ? codeData.createdAt : codeData.createdAt.toDate()) : "なし"}</p>
+            <p>締切日：{codeData.expiresAt ? formatJstDateTime(codeData.expiresAt instanceof Date ? codeData.expiresAt : codeData.expiresAt.toDate()) : "なし"}</p>
 
-            <label>期限を変更：</label>
+            <label>期限を変更（日本時間・JST）：</label>
             <input
               type="datetime-local"
               onChange={(e) => updateExpire(codeData.id, e.target.value)}

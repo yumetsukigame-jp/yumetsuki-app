@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 type UserData = {
   name?: string;
@@ -359,9 +360,9 @@ export default function ShippingAdminPage() {
 
   const formatDate = (value: PendingItem["requestedAt"] | PendingItem["timestamp"] | PendingItem["shippedAt"] | null | undefined) => {
     if (!value) return "日時不明";
-    if (value instanceof Date) return value.toLocaleString();
-    if (typeof value === "object" && "toDate" in value) return value.toDate().toLocaleString();
-    return new Date(value).toLocaleString();
+    if (value instanceof Date) return formatJstDateTime(value);
+    if (typeof value === "object" && "toDate" in value) return formatJstDateTime(value.toDate());
+    return formatJstDateTime(new Date(value));
   };
 
   return (

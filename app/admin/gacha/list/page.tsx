@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { withRetry } from "@/app/lib/retry";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   finalizeArchiveWithAnnouncement,
   finalizeRestoreAndRemoveAnnouncement,
@@ -59,7 +60,7 @@ const toDate = (value?: GachaDate) => {
 
 const formatDate = (value?: GachaDate) => {
   const date = toDate(value);
-  return date ? date.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "なし";
+  return date ? formatJstDateTime(date) : "なし";
 };
 
 const getMonthKey = (value?: GachaDate) => {
@@ -127,15 +128,6 @@ const processResults = async (
     }
     await batch.commit();
   }
-};
-
-const formatExpiration = (value?: GachaCode["expiresAt"]) => {
-  if (!value) return "なし";
-  if (value instanceof Date) return value.toLocaleString();
-  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
-    return value.toDate().toLocaleString();
-  }
-  return "なし";
 };
 
 export default function AdminGachaListPage() {
@@ -679,7 +671,7 @@ function GachaCard({
       </p>
 
       <p style={{ margin: "4px 0" }}>
-        期限：{formatExpiration(c.expiresAt)}
+        期限：{formatDate(c.expiresAt)}
       </p>
 
       <h3 style={{ marginTop: 12 }}>枠情報</h3>

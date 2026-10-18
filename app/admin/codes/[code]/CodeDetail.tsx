@@ -4,6 +4,7 @@ import type { DocumentData } from "firebase/firestore";
 
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import {
   collection,
   getDocs,
@@ -103,7 +104,7 @@ export default function CodeDetail({ code }: { code: string }) {
         <p>
           <strong>作成日時：</strong>{" "}
           {codeInfo.createdAt?.toDate
-            ? codeInfo.createdAt.toDate().toLocaleString()
+            ? formatJstDateTime(codeInfo.createdAt.toDate())
             : "不明"}
         </p>
       </div>
@@ -130,7 +131,7 @@ export default function CodeDetail({ code }: { code: string }) {
           <p>
             <strong>使用日時：</strong>{" "}
             {item.createdAt?.toDate
-              ? item.createdAt.toDate().toLocaleString()
+              ? formatJstDateTime(item.createdAt.toDate())
               : "不明"}
           </p>
         </div>
