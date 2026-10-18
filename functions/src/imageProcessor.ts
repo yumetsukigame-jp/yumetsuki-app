@@ -168,6 +168,8 @@ export const moveImage = functions
       typeof image?.path === "string" ? image.path : "";
     const fileName =
       typeof image?.fileName === "string" ? image.fileName : "";
+    const sourceUrl =
+      typeof image?.url === "string" ? image.url : "";
 
     if (!sourcePath.startsWith("images/") || !fileName) {
       throw new functions.https.HttpsError(
@@ -208,21 +210,60 @@ export const moveImage = functions
       encodeURIComponent(destinationPath) +
       "?alt=media";
 
-    await sourceFile.move(destinationPath);
+    const [activeGachaSnap, archivedGachaSnap] = sourceUrl
+      ? await Promise.all([
+          db.collection("gachaCodes").where("thumbnail", "==", sourceUrl).get(),
+          db
+            .collection("gachaCodesArchive")
+            .where("thumbnail", "==", sourceUrl)
+            .get(),
+        ])
+      : [
+          { docs: [] as admin.firestore.QueryDocumentSnapshot[] },
+          { docs: [] as admin.firestore.QueryDocumentSnapshot[] },
+        ];
 
+    const linkedGachaDocs = [
+      ...activeGachaSnap.docs,
+      ...archivedGachaSnap.docs,
+    ];
+    if (linkedGachaDocs.length > 499) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "この画像を参照するガチャが多すぎるため移動できません"
+      );
+    }
+
+    await sourceFile.copy(destinationFile);
     try {
-      await imageRef.update({
+      const batch = db.batch();
+      batch.update(imageRef, {
         folder: targetFolder,
         path: destinationPath,
         url,
       });
+      for (const gachaDoc of linkedGachaDocs) {
+        batch.update(gachaDoc.ref, { thumbnail: url });
+      }
+      await batch.commit();
     } catch (error) {
-      await destinationFile.move(sourcePath);
+      try {
+        await destinationFile.delete();
+      } catch (cleanupError) {
+        console.error("移動先画像のクリーンアップに失敗しました", cleanupError);
+      }
       throw error;
+    }
+
+    try {
+      await sourceFile.delete();
+    } catch (error) {
+      console.error("移動元画像の削除に失敗しました", error);
     }
 
     return {
       path: destinationPath,
       url,
+      updatedGachaCount: linkedGachaDocs.length,
     };
   });
