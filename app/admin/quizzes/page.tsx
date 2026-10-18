@@ -13,12 +13,43 @@ import {
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
 
-const getQuizSortTime = (quiz: DocumentData) => {
-  const value = quiz.createdAt ?? quiz.archivedAt;
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.toDate === "function") return value.toDate().getTime();
+const getTimestampMillis = (value: unknown): number | null => {
+  if (!value) return null;
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof value.toMillis === "function"
+  ) {
+    return value.toMillis();
+  }
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().getTime();
+  }
+
   if (value instanceof Date) return value.getTime();
-  return 0;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+};
+
+const getQuizSortTime = (quiz: DocumentData) => {
+  return (
+    getTimestampMillis(quiz.createdAt) ??
+    getTimestampMillis(quiz.archivedAt) ??
+    0
+  );
 };
 
 export default function AdminQuizListPage() {
