@@ -168,6 +168,14 @@ export default function GachaManagePage() {
      ★ 再発行＝内容変更
   ----------------------------------------- */
   const updateGacha = async (codeData: GachaCodeData) => {
+    if (
+      codeData.resetType === "x_account" &&
+      !codeData.publicFlags?.includes("x_account_match")
+    ) {
+      alert("Xアカウント使用型では「Xアカウント一致」が必須です");
+      return;
+    }
+
     if (!confirm("このガチャの内容を更新しますか？")) return;
 
     await updateDoc(doc(db, "gachaCodes", codeData.id), {
@@ -209,6 +217,32 @@ export default function GachaManagePage() {
     await updateDoc(doc(db, "gachaCodes", id), {
       publicFlags: newFlags,
       public: null,
+    });
+    await loadCodes();
+  };
+
+  const updateResetType = async (
+    id: string,
+    resetType: string,
+    currentFlags: string[],
+    xAccountList: string[]
+  ) => {
+    if (
+      resetType === "x_account" &&
+      !xAccountList.some((account) => account.includes("@"))
+    ) {
+      alert("Xアカウント使用型では対象アカウントを1件以上登録してください");
+      return;
+    }
+
+    const publicFlags =
+      resetType === "x_account"
+        ? Array.from(new Set([...currentFlags, "x_account_match"]))
+        : currentFlags;
+
+    await updateDoc(doc(db, "gachaCodes", id), {
+      resetType,
+      publicFlags,
     });
     await loadCodes();
   };
@@ -287,6 +321,7 @@ export default function GachaManagePage() {
             updateDescription={updateDescription}
             updateExpire={updateExpire}
             updatePublicFlags={updatePublicFlags}
+            updateResetType={updateResetType}
             updateGacha={updateGacha}
             deleteCode={deleteCode}
             archiveCode={archiveCode}
@@ -306,6 +341,12 @@ type GachaItemProps = {
   updateDescription: (id: string, description: string) => Promise<void>;
   updateExpire: (id: string, newDate: string) => Promise<void>;
   updatePublicFlags: (id: string, newFlags: string[]) => Promise<void>;
+  updateResetType: (
+    id: string,
+    resetType: string,
+    currentFlags: string[],
+    xAccountList: string[]
+  ) => Promise<void>;
   updateGacha: (codeData: GachaCodeData) => Promise<void>;
   deleteCode: (id: string) => Promise<void>;
   archiveCode: (id: string) => Promise<void>;
@@ -319,6 +360,7 @@ function GachaItem({
   updateDescription,
   updateExpire,
   updatePublicFlags,
+  updateResetType,
   updateGacha,
   deleteCode,
   archiveCode,
@@ -430,8 +472,35 @@ function GachaItem({
 
         <p>コード：{codeData.code}</p>
         <p>方式：{codeData.mode === "count" ? "枠数方式" : "確率方式"}</p>
+        <label>
+          リセット：
+          <select
+            value={codeData.resetType ?? "none"}
+            onChange={(event) =>
+              void updateResetType(
+                codeData.id,
+                event.target.value,
+                codeData.publicFlags ?? [],
+                codeData.xAccountList ?? []
+              )
+            }
+            style={{
+              marginLeft: 8,
+              padding: "6px 8px",
+              border: "1px solid #ccc",
+              borderRadius: 6,
+            }}
+          >
+            <option value="none">なし</option>
+            <option value="daily">デイリー（毎日6時）</option>
+            <option value="x_account">Xアカウント使用型</option>
+          </select>
+        </label>
         <p>
-          1回 {codeData.point?.cost ?? 0} pt（上限 {codeData.point?.maxPerUser ?? 0} 回）
+          1回 {codeData.point?.cost ?? 0} pt
+          {codeData.resetType === "x_account"
+            ? "（Xアカウントの登録行を1回ごとに消費）"
+            : `（上限 ${codeData.point?.maxPerUser ?? 0} 回）`}
         </p>
 
         <p>残数：{remaining}</p>
@@ -564,6 +633,10 @@ function GachaItem({
               <input
                 type="checkbox"
                 checked={codeData.publicFlags?.includes(flag)}
+                disabled={
+                  flag === "x_account_match" &&
+                  codeData.resetType === "x_account"
+                }
                 onChange={(e) => {
                   const flags = new Set(codeData.publicFlags ?? []);
                   e.target.checked ? flags.add(flag) : flags.delete(flag);

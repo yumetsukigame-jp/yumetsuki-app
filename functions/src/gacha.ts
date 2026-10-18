@@ -108,18 +108,27 @@ async function resetGachaHistoryCounts(
   return matchingHistories.length;
 }
 
-function matchesXAccount(gacha: GachaDocument, xAccount: unknown): boolean {
+function findMatchingXAccountIndex(
+  gacha: GachaDocument,
+  xAccount: unknown
+): number {
   const userX = normalizeX(
     typeof xAccount === "string" ? xAccount : undefined
   );
   if (!userX) {
-    return false;
+    return -1;
   }
 
-  return (gacha.xAccountList ?? [])
-    .filter((account): account is string => typeof account === "string" && account.includes("@"))
-    .map((account) => normalizeX(account))
-    .some((account) => account.includes(userX));
+  return (gacha.xAccountList ?? []).findIndex(
+    (account) =>
+      typeof account === "string" &&
+      account.includes("@") &&
+      normalizeX(account).includes(userX)
+  );
+}
+
+function matchesXAccount(gacha: GachaDocument, xAccount: unknown): boolean {
+  return findMatchingXAccountIndex(gacha, xAccount) >= 0;
 }
 
 async function requireAdmin(
@@ -182,6 +191,14 @@ export const createGachaCode = functions
         );
       }
 
+      const validResetTypes = ["none", "daily", "x_account"];
+      if (!validResetTypes.includes(resetType)) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "リセット方式が不正です"
+        );
+      }
+
       const validFlags = [
         "public",
         "limited",
@@ -198,6 +215,33 @@ export const createGachaCode = functions
             `publicFlags に不正な値があります: ${flag}`
           );
         }
+      }
+
+      const normalizedXAccountList = Array.isArray(xAccountList)
+        ? xAccountList
+            .filter((account): account is string => typeof account === "string")
+            .map((account) => account.trim())
+            .filter(Boolean)
+        : [];
+
+      if (
+        resetType === "x_account" &&
+        !publicFlags.includes("x_account_match")
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Xアカウント使用型では「Xアカウント一致」が必須です"
+        );
+      }
+
+      if (
+        resetType === "x_account" &&
+        !normalizedXAccountList.some((account) => account.includes("@"))
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Xアカウント使用型では対象アカウントを1件以上登録してください"
+        );
       }
 
       const code =
@@ -231,7 +275,7 @@ export const createGachaCode = functions
         createdAt: Timestamp.now(),
         expiresAt: expiresAt ? Timestamp.fromDate(new Date(expiresAt)) : null,
         owner: uid,
-        xAccountList: Array.isArray(xAccountList) ? xAccountList : [],
+        xAccountList: normalizedXAccountList,
       };
 
       await gachaRef.set(gachaData);
@@ -355,6 +399,16 @@ export const useGachaCode = functions
 
       const gacha = gachaSnap.data() as GachaDocument;
       const flags: string[] = gacha.publicFlags ?? [];
+
+      if (
+        gacha.resetType === "x_account" &&
+        !flags.includes("x_account_match")
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Xアカウント使用型の公開設定が不正です"
+        );
+      }
 
       const now = nowJST();
       if (gacha.expiresAt && gacha.expiresAt.toDate() < now) {
@@ -543,13 +597,37 @@ export const useGachaCode = functions
         const shouldConfirmXAccount =
           freshGacha.publicFlags.includes("x_account_match") &&
           freshUser.xAccountConfirmed !== true;
+        const matchingXAccountIndex = findMatchingXAccountIndex(
+          freshGacha,
+          freshUser.xAccount
+        );
         if (
           shouldConfirmXAccount &&
-          !matchesXAccount(freshGacha, freshUser.xAccount)
+          matchingXAccountIndex < 0
         ) {
           throw new functions.https.HttpsError(
             "permission-denied",
             "Xアカウントの確認が必要です。もう一度お試しください"
+          );
+        }
+
+        if (
+          freshGacha.resetType === "x_account" &&
+          !freshGacha.publicFlags.includes("x_account_match")
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Xアカウント使用型の公開設定が不正です"
+          );
+        }
+
+        if (
+          freshGacha.resetType === "x_account" &&
+          matchingXAccountIndex < 0
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "このXアカウントの利用枠は残っていません"
           );
         }
 
@@ -605,13 +683,25 @@ export const useGachaCode = functions
           count: freshHistory.count + 1,
         });
 
+        let updatedFrames: GachaFrame[] | null = null;
+
         if (freshGacha.mode === "count") {
           const chosenLabel = selectedFrame.label;
-          const updatedFrames = freshFrames.map((f: GachaFrame) =>
+          updatedFrames = freshFrames.map((f: GachaFrame) =>
             f.label === chosenLabel
               ? { ...f, usedCount: (f.usedCount ?? 0) + 1 }
               : f
           );
+        }
+
+        if (freshGacha.resetType === "x_account") {
+          tx.update(gachaRef, {
+            ...(updatedFrames ? { frames: updatedFrames } : {}),
+            xAccountList: (freshGacha.xAccountList ?? []).filter(
+              (_account, index) => index !== matchingXAccountIndex
+            ),
+          });
+        } else if (updatedFrames) {
           tx.update(gachaRef, { frames: updatedFrames });
         }
 

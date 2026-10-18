@@ -5,16 +5,18 @@ import type { DocumentData } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, storage } from "@/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
 import {
+  GACHA_EVENT_FOLDER,
+  GACHA_REGULAR_FOLDER,
+  LEGACY_GACHA_FOLDER,
   isEventGachaFolder,
-  isGachaFolder,
   isRegularGachaFolder,
 } from "@/app/lib/imageFolders";
 
 type Mode = "count" | "prob";
-type ResetType = "none" | "daily";
+type ResetType = "none" | "daily" | "x_account";
 
 type PublicFlag =
   | "public"
@@ -59,47 +61,91 @@ export default function GachaCreatePage() {
 
   const [thumbnail, setThumbnail] = useState<string>("");
   const [gachaImages, setGachaImages] = useState<GachaImage[]>([]);
+  const [eventImagesLoaded, setEventImagesLoaded] = useState(false);
+  const [eventImagesLoading, setEventImagesLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
 
-  // ★ Firestore の imageMeta から path を取得し、Storage から正しい URL を取得する
+  const loadGachaImages = async (folders: string[]) => {
+    const imageQuery =
+      folders.length === 1
+        ? query(
+            collection(db, "imageMeta"),
+            where("folder", "==", folders[0])
+          )
+        : query(
+            collection(db, "imageMeta"),
+            where("folder", "in", folders)
+          );
+    const snap = await getDocs(imageQuery);
+
+    const images = await Promise.all(
+      snap.docs.map(async (document) => {
+        const data = document.data();
+        try {
+          return {
+            url: await getDownloadURL(ref(storage, data.path)),
+            folder: data.folder,
+          };
+        } catch (error) {
+          console.error("URL取得失敗:", data.path, error);
+          return typeof data.url === "string"
+            ? { url: data.url, folder: data.folder }
+            : null;
+        }
+      })
+    );
+
+    return images.filter((image): image is GachaImage => image !== null);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const snap = await getDocs(collection(db, "imageMeta"));
-      const list = snap.docs
-        .map((d) => d.data())
-        .filter((d) => isGachaFolder(d.folder));
-
-      const images = await Promise.all(
-        list.map(async (d) => {
-          try {
-            const storageRef = ref(storage, d.path);
-            return {
-              url: await getDownloadURL(storageRef),
-              folder: d.folder,
-            };
-          } catch (e) {
-            console.error("URL取得失敗:", d.path, e);
-            return typeof d.url === "string"
-              ? { url: d.url, folder: d.folder }
-              : null;
-          }
-        })
-      );
-
-      setGachaImages(images.filter((image): image is GachaImage => image !== null));
+    const loadRegularImages = async () => {
+      const images = await loadGachaImages([
+        LEGACY_GACHA_FOLDER,
+        GACHA_REGULAR_FOLDER,
+      ]);
+      setGachaImages(images);
     };
 
-    load();
+    void loadRegularImages();
   }, []);
 
+  const loadEventImages = async () => {
+    if (eventImagesLoaded || eventImagesLoading) return;
+
+    setEventImagesLoading(true);
+    try {
+      const images = await loadGachaImages([GACHA_EVENT_FOLDER]);
+      setGachaImages((current) => [...current, ...images]);
+      setEventImagesLoaded(true);
+    } finally {
+      setEventImagesLoading(false);
+    }
+  };
+
   const toggleFlag = (flag: PublicFlag) => {
+    if (flag === "x_account_match" && resetType === "x_account") {
+      return;
+    }
+
     setPublicFlags((prev) =>
       prev.includes(flag)
         ? prev.filter((f) => f !== flag)
         : [...prev, flag]
     );
+  };
+
+  const changeResetType = (nextResetType: ResetType) => {
+    setResetType(nextResetType);
+    if (nextResetType === "x_account") {
+      setPublicFlags((current) =>
+        current.includes("x_account_match")
+          ? current
+          : [...current, "x_account_match"]
+      );
+    }
   };
 
   const addFrame = () => {
@@ -155,6 +201,27 @@ export default function GachaCreatePage() {
 
     if (maxPerUser === "" || maxPerUser <= 0) {
       alert("上限回数を入力してください");
+      return;
+    }
+
+    const xAccountList = xAccountText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (
+      resetType === "x_account" &&
+      !publicFlags.includes("x_account_match")
+    ) {
+      alert("Xアカウント使用型では「Xアカウント一致」が必須です");
+      return;
+    }
+
+    if (
+      resetType === "x_account" &&
+      !xAccountList.some((account) => account.includes("@"))
+    ) {
+      alert("Xアカウント使用型では対象アカウントを1件以上入力してください");
       return;
     }
 
@@ -226,10 +293,7 @@ export default function GachaCreatePage() {
 
         expiresAt,
 
-        xAccountList: xAccountText
-          .split("\n")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
+        xAccountList,
       });
 
       setCreatedCode(res.data.code);
@@ -320,6 +384,7 @@ export default function GachaCreatePage() {
             <input
               type="checkbox"
               checked={publicFlags.includes("x_account_match")}
+              disabled={resetType === "x_account"}
               onChange={() => toggleFlag("x_account_match")}
             />{" "}
             Xアカウント一致
@@ -376,7 +441,7 @@ export default function GachaCreatePage() {
             <input
               type="radio"
               checked={resetType === "none"}
-              onChange={() => setResetType("none")}
+              onChange={() => changeResetType("none")}
             />{" "}
             リセットなし
           </label>
@@ -384,63 +449,74 @@ export default function GachaCreatePage() {
             <input
               type="radio"
               checked={resetType === "daily"}
-              onChange={() => setResetType("daily")}
+              onChange={() => changeResetType("daily")}
             />{" "}
             デイリー（毎日6時）
           </label>
+          <label style={{ marginLeft: 16 }}>
+            <input
+              type="radio"
+              checked={resetType === "x_account"}
+              onChange={() => changeResetType("x_account")}
+            />{" "}
+            Xアカウント使用型
+          </label>
+          {resetType === "x_account" && (
+            <p style={{ margin: "10px 0 0", color: "#92400e" }}>
+              一致したXアカウントの行を抽選後に1行削除します。登録行数が利用可能回数になります。
+            </p>
+          )}
         </div>
 
         {/* サムネイル画像 */}
         <div style={boxStyle}>
           <div style={labelStyle}>サムネイル画像</div>
 
-          {[
-            {
-              label: "レギュラー",
-              images: gachaImages.filter((image) =>
-                isRegularGachaFolder(image.folder)
-              ),
-            },
-            {
-              label: "イベント",
-              images: gachaImages.filter((image) =>
-                isEventGachaFolder(image.folder)
-              ),
-            },
-          ].map((group) => (
-            <div key={group.label} style={{ marginTop: 12 }}>
-              <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-                {group.label}
-              </div>
-              {group.images.length === 0 ? (
-                <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
-                  画像はありません
-                </p>
-              ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {group.images.map((image) => (
-                    <img
-                      key={image.url}
-                      src={image.url}
-                      alt=""
-                      onClick={() => setThumbnail(image.url)}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        objectFit: "cover",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                        border:
-                          thumbnail === image.url
-                            ? "3px solid #2563eb"
-                            : "1px solid #ccc",
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>
+              レギュラー
             </div>
-          ))}
+            <ImageChoices
+              images={gachaImages.filter((image) =>
+                isRegularGachaFolder(image.folder)
+              )}
+              thumbnail={thumbnail}
+              onSelect={setThumbnail}
+            />
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>
+              イベント
+            </div>
+            {!eventImagesLoaded ? (
+              <button
+                type="button"
+                onClick={() => void loadEventImages()}
+                disabled={eventImagesLoading}
+                style={{
+                  padding: "8px 14px",
+                  border: "none",
+                  borderRadius: 6,
+                  background: "#7c3aed",
+                  color: "white",
+                  cursor: eventImagesLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                {eventImagesLoading
+                  ? "イベント画像を読み込み中…"
+                  : "イベント画像を読み込む"}
+              </button>
+            ) : (
+              <ImageChoices
+                images={gachaImages.filter((image) =>
+                  isEventGachaFolder(image.folder)
+                )}
+                thumbnail={thumbnail}
+                onSelect={setThumbnail}
+              />
+            )}
+          </div>
 
           {thumbnail && (
             <p style={{ marginTop: 8 }}>
@@ -608,6 +684,50 @@ export default function GachaCreatePage() {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+type ImageChoicesProps = {
+  images: GachaImage[];
+  thumbnail: string;
+  onSelect: (url: string) => void;
+};
+
+function ImageChoices({
+  images,
+  thumbnail,
+  onSelect,
+}: ImageChoicesProps) {
+  if (images.length === 0) {
+    return (
+      <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+        画像はありません
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {images.map((image) => (
+        <img
+          key={image.url}
+          src={image.url}
+          alt=""
+          onClick={() => onSelect(image.url)}
+          style={{
+            width: 80,
+            height: 80,
+            objectFit: "cover",
+            borderRadius: 8,
+            cursor: "pointer",
+            border:
+              thumbnail === image.url
+                ? "3px solid #2563eb"
+                : "1px solid #ccc",
+          }}
+        />
+      ))}
     </div>
   );
 }

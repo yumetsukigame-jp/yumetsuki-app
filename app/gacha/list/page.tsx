@@ -339,7 +339,10 @@ export default function PublicGachaListPage() {
           if (points < (gacha.point?.cost ?? 0)) {
             return [gacha.code, { canPlay: false, reason: "ポイントが不足しています" }];
           }
-          if ((history?.count ?? 0) >= (gacha.point?.maxPerUser ?? 0)) {
+          if (
+            gacha.resetType !== "x_account" &&
+            (history?.count ?? 0) >= (gacha.point?.maxPerUser ?? 0)
+          ) {
             return [gacha.code, { canPlay: false, reason: "回数上限に達しています" }];
           }
           if (
@@ -686,11 +689,16 @@ export default function PublicGachaListPage() {
                 リセット：
                 {g.resetType === "daily"
                   ? "デイリー（毎日6時）"
-                  : "なし"}
+                  : g.resetType === "x_account"
+                    ? "Xアカウント使用型"
+                    : "なし"}
               </p>
 
               <p style={{ margin: "6px 0" }}>
-                1回 {g.point?.cost ?? 0} pt（上限 {g.point?.maxPerUser ?? 0} 回）
+                1回 {g.point?.cost ?? 0} pt
+                {g.resetType === "x_account"
+                  ? "（Xアカウントの登録行を1回ごとに消費）"
+                  : `（上限 ${g.point?.maxPerUser ?? 0} 回）`}
               </p>
 
               {/* ▼ 詳細 */}

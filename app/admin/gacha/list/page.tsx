@@ -670,7 +670,12 @@ function GachaCard({
       </p>
 
       <p style={{ margin: "4px 0" }}>
-        リセット：{c.resetType === "daily" ? "デイリー（毎日6時）" : "なし"}
+        リセット：
+        {c.resetType === "daily"
+          ? "デイリー（毎日6時）"
+          : c.resetType === "x_account"
+            ? "Xアカウント使用型"
+            : "なし"}
       </p>
 
       <p style={{ margin: "4px 0" }}>

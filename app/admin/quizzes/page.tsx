@@ -13,6 +13,14 @@ import {
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
 
+const getQuizSortTime = (quiz: DocumentData) => {
+  const value = quiz.createdAt ?? quiz.archivedAt;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.toDate === "function") return value.toDate().getTime();
+  if (value instanceof Date) return value.getTime();
+  return 0;
+};
+
 export default function AdminQuizListPage() {
   const [quizzes, setQuizzes] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +77,14 @@ export default function AdminQuizListPage() {
         (quiz) =>
           quiz.finalizationStatus !== "preparing" &&
           quiz.finalizationStatus !== "prepared"
-      );
+      )
+      .sort((a, b) => {
+        const timeDifference = getQuizSortTime(b) - getQuizSortTime(a);
+        if (timeDifference !== 0) return timeDifference;
+        return String(b.id).localeCompare(String(a.id), "ja", {
+          numeric: true,
+        });
+      });
 
     setArchiveQuizzes(list);
     setArchiveLoading(false);

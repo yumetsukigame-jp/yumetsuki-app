@@ -390,7 +390,10 @@ if (isXAccountMatch) {
       <p>コード：{gacha.code}</p>
       <p>方式：{gacha.mode === "count" ? "枠数方式" : "確率方式"}</p>
       <p>
-        1回 {gacha.point.cost} pt（上限 {gacha.point.maxPerUser} 回）
+        1回 {gacha.point.cost} pt
+        {gacha.resetType === "x_account"
+          ? "（Xアカウントの登録行を1回ごとに消費）"
+          : `（上限 ${gacha.point.maxPerUser} 回）`}
       </p>
       <p>残数：{remaining}</p>
       <p>
