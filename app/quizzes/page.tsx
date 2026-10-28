@@ -5,6 +5,7 @@ import { db } from "@/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import Link from "next/link";
 import LoadingState from "@/app/components/LoadingState";
+import { compareQuizDeadlines, formatQuizDeadline } from "@/app/lib/quizDeadline";
 
 type QuizSummary = {
   id: string;
@@ -14,6 +15,7 @@ type QuizSummary = {
   maxAnswers?: number;
   archived?: boolean;
   thread?: string;
+  deadlineAt?: { toMillis(): number };
 };
 
 let cachedQuizList: QuizSummary[] | null = null;
@@ -37,7 +39,9 @@ export default function QuizListPage() {
         ...(d.data() as Record<string, unknown>),
       } as QuizSummary));
 
-      const activeQuizzes = list.filter((q) => !(q.archived ?? false));
+      const activeQuizzes = list
+        .filter((q) => !(q.archived ?? false))
+        .sort(compareQuizDeadlines);
       cachedQuizList = activeQuizzes;
       setQuizzes(activeQuizzes);
       setLoadError(false);
@@ -91,6 +95,7 @@ export default function QuizListPage() {
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, marginBottom: 20 }}>ゆめつきクイズ</h1>
+      <p style={{ marginBottom: 16 }}>締切が近い順に表示しています。締切の翌日0:05（日本時間）に結果が確定します。</p>
 
       {/* ★ 完了済みクイズへのリンク */}
       <Link
@@ -147,6 +152,7 @@ export default function QuizListPage() {
                   </p>
 
                   <p style={{ color: "#555" }}>回答回数：{q.maxAnswers}</p>
+                  <p style={{ color: "#555" }}>回答締切：{formatQuizDeadline(q.deadlineAt)}</p>
                 </div>
               </Link>
 

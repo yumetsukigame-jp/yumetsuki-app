@@ -92,7 +92,7 @@ export default function QuizGuidePage() {
           id="find"
           number="02 / FIND"
           title="「クイズ一覧を見る」から挑戦"
-          intro="クイズメニューには、開催中、完了済み、ランキングへの入口がまとまっています。"
+          intro="クイズメニューには、開催中、完了済み、ランキングへの入口がまとまっています。一覧は回答締切が近い順に表示されます。"
         >
           <div className={styles.feature}>
             <div className={styles.visual}>
@@ -121,7 +121,7 @@ export default function QuizGuidePage() {
           id="answer"
           number="03 / ANSWER"
           title="答えを入力して送信"
-          intro="クイズ詳細で問題を読み、回答欄に答えを入力します。回答は送信後も追加できます。"
+          intro="クイズ詳細で問題と回答締切（日本時間）を確認し、締切前に答えを送信します。回答可能数の範囲で追加できます。"
         >
           <div className={`${styles.feature} ${styles.reverse}`}>
             <div className={styles.visual}>
@@ -181,7 +181,7 @@ export default function QuizGuidePage() {
           id="archive"
           number="05 / ARCHIVE"
           title="終了後は答え合わせを楽しむ"
-          intro="完了済みクイズでは、正解、解説、山分けポイント、参加者の回答を振り返れます。"
+          intro="締切の翌日0:05（日本時間）に正解判定とポイント配布を自動実行します。完了済みクイズでは、正解、解説、山分けポイント、参加者の回答を振り返れます。"
         >
           <div className={styles.feature}>
             <div className={styles.visual}>

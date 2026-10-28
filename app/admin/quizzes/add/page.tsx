@@ -4,8 +4,9 @@ import type { DocumentData } from "firebase/firestore";
 
 import { useState, useEffect } from "react";
 import { db } from "@/firebase";
-import { collection, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { parseJstDateTime } from "@/app/lib/dateTime";
 
 /* --------------------------------------------------
    ランダム英数字生成
@@ -66,6 +67,7 @@ export default function AddQuizForm() {
   const [explanation, setExplanation] = useState("");
   const [rewardPoint, setRewardPoint] = useState<number | "">(1000);
   const [maxAnswers, setMaxAnswers] = useState<number | "">(1);
+  const [deadline, setDeadline] = useState("");
 
   /* --------------------------------------------------
      Firestore から画像一覧を取得
@@ -89,8 +91,14 @@ export default function AddQuizForm() {
   const handleSave = async (e: DocumentData) => {
     e.preventDefault();
 
-    if (!title.trim() || !thumbnail || !question.trim()) {
-      alert("タイトル・サムネイル・問題文は必須です");
+    if (!title.trim() || !thumbnail || !question.trim() || !answer.trim()) {
+      alert("タイトル・サムネイル・問題文・正解は必須です");
+      return;
+    }
+
+    const deadlineDate = parseJstDateTime(deadline);
+    if (!Number.isFinite(deadlineDate.getTime()) || deadlineDate.getTime() <= Date.now()) {
+      alert("締切には未来の日時（日本時間）を設定してください");
       return;
     }
 
@@ -108,6 +116,7 @@ export default function AddQuizForm() {
       explanation,
       rewardPoint: Number(rewardPoint),
       maxAnswers: Number(maxAnswers),
+      deadlineAt: Timestamp.fromDate(deadlineDate),
       salt,
       thread,
       archived: false,
@@ -225,6 +234,20 @@ export default function AddQuizForm() {
             }
             style={inputStyle}
           />
+        </div>
+
+        <div>
+          <label htmlFor="quiz-deadline">回答締切（日本時間）</label>
+          <input
+            id="quiz-deadline"
+            type="datetime-local"
+            step="1"
+            required
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            style={inputStyle}
+          />
+          <p>締切以降は回答できません。翌日0:05に解答確定・ポイント配布を行います。</p>
         </div>
 
         {/* 作成ボタン */}

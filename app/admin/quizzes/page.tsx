@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { httpsCallable } from "firebase/functions";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import { compareQuizDeadlines, formatQuizDeadline } from "@/app/lib/quizDeadline";
 
 const getTimestampMillis = (value: unknown): number | null => {
   if (!value) return null;
@@ -70,7 +71,7 @@ export default function AdminQuizListPage() {
   -------------------------------------------------- */
   const fetchQuizzes = async () => {
     const snap = await getDocs(collection(db, "quizzes"));
-    const list = snap.docs.map((d) => {
+    const list: DocumentData[] = snap.docs.map((d) => {
       const data = d.data();
       return {
         id: d.id,
@@ -78,7 +79,7 @@ export default function AdminQuizListPage() {
         round: data.round ?? 0,
       };
     });
-    setQuizzes(list);
+    setQuizzes(list.sort(compareQuizDeadlines));
     setLoading(false);
   };
 
@@ -291,6 +292,7 @@ export default function AdminQuizListPage() {
               <p>ラウンド：{q.round}</p>
               <p>回答可能数：{q.maxAnswers}</p>
               <p>現在ラウンドの回答数：{q.newAnswerCount ?? 0}</p>
+              <p>回答締切：{formatQuizDeadline(q.deadlineAt)}</p>
             </div>
 
             <Link

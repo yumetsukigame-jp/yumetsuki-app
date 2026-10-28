@@ -10,8 +10,11 @@ import {
   collection,
   getDocs,
   runTransaction,
+  Timestamp,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { parseJstDateTime } from "@/app/lib/dateTime";
+import { quizDeadlineInput } from "@/app/lib/quizDeadline";
 
 /* --------------------------------------------------
    ランダム英数字生成
@@ -52,6 +55,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
 
   const [rewardPoint, setRewardPoint] = useState<number | "">(1000);
   const [maxAnswers, setMaxAnswers] = useState<number | "">(1);
+  const [deadline, setDeadline] = useState("");
 
   const [salt, setSalt] = useState("");
   const [thread, setThread] = useState("");
@@ -102,6 +106,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
       setExplanation(data.explanation ?? "");
       setRewardPoint(data.rewardPoint);
       setMaxAnswers(data.maxAnswers);
+      setDeadline(quizDeadlineInput(data.deadlineAt));
 
       setSalt(data.salt ?? "");
       setThread(data.thread ?? "");
@@ -132,6 +137,16 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
   const handleSave = async (e: DocumentData) => {
     e.preventDefault();
 
+    const deadlineDate = parseJstDateTime(deadline);
+    if (!Number.isFinite(deadlineDate.getTime())) {
+      alert("締切日時（日本時間）を設定してください");
+      return;
+    }
+    if (!answer.trim()) {
+      alert("自動確定のため正解を設定してください");
+      return;
+    }
+
     let newSalt = salt;
     let newThread = thread;
 
@@ -149,6 +164,7 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
         explanation,
         rewardPoint: Number(rewardPoint),
         maxAnswers: Number(maxAnswers),
+        deadlineAt: Timestamp.fromDate(deadlineDate),
         salt: newSalt,
         thread: newThread,
         newAnswerCount,
@@ -314,6 +330,20 @@ export default function EditQuizForm({ quizId }: { quizId: string }) {
             }
             style={inputStyle}
           />
+        </div>
+
+        <div>
+          <label htmlFor="quiz-deadline">回答締切（日本時間）</label>
+          <input
+            id="quiz-deadline"
+            type="datetime-local"
+            step="1"
+            required
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            style={inputStyle}
+          />
+          <p>締切以降は回答できません。翌日0:05に解答確定・ポイント配布を行います。</p>
         </div>
 
         {/* ラウンド表示 */}

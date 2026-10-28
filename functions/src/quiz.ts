@@ -3,6 +3,7 @@ import * as functions from "firebase-functions/v1";
 import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 
 import { finalizeArchiveWithAnnouncement } from "./common/archiveAnnouncements";
+import { quizFinalizationTime, startOfJstDay } from "./common/quizDeadline";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -90,25 +91,77 @@ async function requireAdmin(
   }
 }
 
-export const confirmQuizAnswer = functions
+export const submitQuizAnswer = functions
   .region("us-east1")
-  .runWith({ timeoutSeconds: 540, memory: "1GB" })
   .https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid) {
+      throw new functions.https.HttpsError("unauthenticated", "ログインが必要です");
+    }
+    const quizId = typeof data?.quizId === "string" ? data.quizId.trim() : "";
+    const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
+    if (!quizId || quizId.includes("/") || !answer) {
+      throw new functions.https.HttpsError("invalid-argument", "クイズと回答を指定してください");
+    }
+
+    const quizRef = db.collection("quizzes").doc(quizId);
+    const answerUserRef = quizRef.collection("answers").doc(uid);
+    const answerItemRef = answerUserRef.collection("items").doc();
+
+    return db.runTransaction(async (transaction) => {
+      const quizSnapshot = await transaction.get(quizRef);
+      if (!quizSnapshot.exists) {
+        throw new functions.https.HttpsError("not-found", "このクイズは終了しています");
+      }
+      const quiz = quizSnapshot.data()!;
+      const now = Timestamp.now();
+      if (
+        quiz.archived ||
+        quiz.answersClosedAt ||
+        quiz.finalizationStatus ||
+        (quiz.deadlineAt instanceof Timestamp &&
+          quiz.deadlineAt.toMillis() <= now.toMillis())
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "このクイズの回答受付は終了しています"
+        );
+      }
+
+      const [userSnapshot, itemsSnapshot] = await Promise.all([
+        transaction.get(db.collection("users").doc(uid)),
+        transaction.get(answerUserRef.collection("items")),
+      ]);
+      const round = quiz.round ?? 0;
+      const answerCount = itemsSnapshot.docs.filter(
+        (item) => (item.get("round") ?? 0) === round
+      ).length;
+      if (answerCount >= Number(quiz.maxAnswers ?? 1)) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "このラウンドの回答可能数に達しています"
+        );
+      }
+
+      const user = userSnapshot.data();
+      const newAnswerCount = Number(quiz.newAnswerCount ?? 0) + 1;
+      transaction.set(answerUserRef, {
+        xAccount: user?.xAccount ?? "未登録",
+        displayName: user?.displayName ?? "名無し",
+      }, { merge: true });
+      transaction.set(answerItemRef, { answer, createdAt: now, round });
+      transaction.update(quizRef, { newAnswerCount });
+
+      return { round, newAnswerCount, createdAt: now.toMillis() };
+    });
+  });
+
+async function finalizeQuiz(quizId: string, automatic = false) {
     let lockAcquired = false;
     let finalizationLockId: string | undefined;
     let quizRef: FirebaseFirestore.DocumentReference | undefined;
 
     try {
-      await requireAdmin(context);
-      const quizId =
-        typeof data?.quizId === "string" ? data.quizId.trim() : "";
-      if (!quizId) {
-        throw new functions.https.HttpsError(
-          "invalid-argument",
-          "quizId が必要です"
-        );
-      }
-
       quizRef = db.collection("quizzes").doc(quizId);
       finalizationLockId = `${Date.now()}_${Math.random()
         .toString(36)
@@ -123,6 +176,23 @@ export const confirmQuizAnswer = functions
         }
 
         const quizData = quizSnapshot.data()!;
+        if (
+          automatic &&
+          (quizData.archived ||
+            !(quizData.deadlineAt instanceof Timestamp) ||
+            quizFinalizationTime(quizData.deadlineAt.toMillis()) > Date.now())
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "自動確定の対象日時に達していません"
+          );
+        }
+        if (!quizData.answer) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "正解が設定されていません"
+          );
+        }
         const finalizationStartedAt = quizData.finalizationStartedAt;
         const lockIsActive =
           quizData.finalizationStatus === "processing" &&
@@ -400,6 +470,42 @@ export const confirmQuizAnswer = functions
         throw err;
       }
       throw new functions.https.HttpsError("internal", message);
+    }
+}
+
+export const confirmQuizAnswer = functions
+  .region("us-east1")
+  .runWith({ timeoutSeconds: 540, memory: "1GB" })
+  .https.onCall(async (data, context) => {
+    await requireAdmin(context);
+    const quizId = typeof data?.quizId === "string" ? data.quizId.trim() : "";
+    if (!quizId || quizId.includes("/")) {
+      throw new functions.https.HttpsError("invalid-argument", "quizId が必要です");
+    }
+    return finalizeQuiz(quizId);
+  });
+
+export const finalizeExpiredQuizzes = functions
+  .region("us-east1")
+  .runWith({ timeoutSeconds: 540, memory: "1GB", failurePolicy: true })
+  .pubsub.schedule("5 0 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
+    const snapshot = await db.collection("quizzes")
+      .where("deadlineAt", "<", Timestamp.fromMillis(startOfJstDay(Date.now())))
+      .get();
+    const failures: string[] = [];
+    for (const quiz of snapshot.docs) {
+      if (quiz.get("archived")) continue;
+      try {
+        await finalizeQuiz(quiz.id, true);
+      } catch (error) {
+        console.error("クイズ自動確定に失敗しました", { quizId: quiz.id, error });
+        failures.push(quiz.id);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`クイズ自動確定に失敗しました: ${failures.join(", ")}`);
     }
   });
 

@@ -3,18 +3,19 @@
 import type { DocumentData } from "firebase/firestore";
 
 import React, { useEffect, useState } from "react";
-import { db, auth } from "@/firebase";
+import { db, auth, functions } from "@/firebase";
 import {
   doc,
   getDoc,
   collection,
   getDocs,
-  runTransaction,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { formatQuizDeadline } from "@/app/lib/quizDeadline";
 
 type QuizDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -40,6 +41,12 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
 
   // ★ 追加：送信ロック
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   /* --------------------------------------------------
      Auth 初期化
@@ -115,58 +122,16 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
         return;
       }
 
-      const userRef = doc(db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      const userData = userSnap.exists()
-        ? userSnap.data()
-        : { displayName: "名無し", xAccount: "未登録" };
-      const quizRef = doc(db, "quizzes", quizId);
-      const answerUserRef = doc(db, "quizzes", quizId, "answers", uid);
-      const answerItemRef = doc(collection(answerUserRef, "items"));
-      const createdAt = new Date();
-      let submittedRound = quiz.round ?? 0;
-      let updatedAnswerCount = Number(quiz.newAnswerCount ?? 0) + 1;
-
-      await runTransaction(db, async (transaction) => {
-        const currentQuizSnapshot = await transaction.get(quizRef);
-        if (!currentQuizSnapshot.exists()) {
-          throw new Error("このクイズは終了しています");
-        }
-
-        const currentQuiz = currentQuizSnapshot.data();
-        if (
-          currentQuiz.answersClosedAt ||
-          currentQuiz.finalizationStatus === "processing" ||
-          currentQuiz.finalizationStatus === "deleting"
-        ) {
-          throw new Error("このクイズの回答受付は終了しています");
-        }
-
-        submittedRound = currentQuiz.round ?? 0;
-        updatedAnswerCount =
-          Number(currentQuiz.newAnswerCount ?? 0) + 1;
-        transaction.set(
-          answerUserRef,
-          {
-            xAccount: userData.xAccount ?? "未登録",
-            displayName: userData.displayName ?? "名無し",
-          },
-          { merge: true }
-        );
-        transaction.set(answerItemRef, {
-          answer,
-          createdAt,
-          round: submittedRound,
-        });
-        transaction.update(quizRef, {
-          newAnswerCount: updatedAnswerCount,
-        });
-      });
+      const submit = httpsCallable<
+        { quizId: string; answer: string },
+        { round: number; newAnswerCount: number; createdAt: number }
+      >(functions, "submitQuizAnswer");
+      const { data } = await submit({ quizId, answer });
 
       const newItem = {
         answer,
-        createdAt,
-        round: submittedRound,
+        createdAt: new Date(data.createdAt),
+        round: data.round,
       };
 
       setMyAnswers([...myAnswers, newItem]);
@@ -174,7 +139,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
 
       setQuiz({
         ...quiz,
-        newAnswerCount: updatedAnswerCount,
+        newAnswerCount: data.newAnswerCount,
       });
 
       setNewAnswer("");
@@ -270,6 +235,13 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
     );
   }
 
+  const answersClosed = Boolean(
+    quiz.archived ||
+    quiz.answersClosedAt ||
+    quiz.finalizationStatus ||
+    (quiz.deadlineAt && quiz.deadlineAt.toMillis() <= now)
+  );
+
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
       <h1>{quiz.title}</h1>
@@ -278,6 +250,9 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
 
       <h2>問題</h2>
       <p>{quiz.question}</p>
+      <p>回答締切：{formatQuizDeadline(quiz.deadlineAt)}</p>
+      <p>締切の翌日0:05（日本時間）に結果が確定します。</p>
+      {answersClosed && <p role="status">このクイズの回答受付は終了しました。</p>}
 
       <div style={{ padding: 12, background: "#eef2ff", borderRadius: 8 }}>
         <strong>このクイズの山分けポイント：</strong>
@@ -293,7 +268,7 @@ export default function QuizDetailPage({ params }: QuizDetailPageProps) {
         </div>
       )}
 
-      {myCurrentRoundAnswers.length < quiz.maxAnswers && (
+      {!answersClosed && myCurrentRoundAnswers.length < quiz.maxAnswers && (
         <div>
           <input
             type="text"

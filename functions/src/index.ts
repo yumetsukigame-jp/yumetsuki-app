@@ -12,6 +12,8 @@ export {
 
 export {
   confirmQuizAnswer,
+  submitQuizAnswer,
+  finalizeExpiredQuizzes,
   deleteActiveQuiz,
   deleteQuizArchive,
 } from "./quiz";
