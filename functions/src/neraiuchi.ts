@@ -11,6 +11,7 @@ import type {
   NeraiuchiPrize,
   NeraiuchiRevealedEntry,
   NeraiuchiResultRow,
+  NeraiuchiListedEvent,
 } from "./neraiuchiTypes";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -580,21 +581,78 @@ export const getNeraiuchiEvent = callable("getNeraiuchiEvent", async (raw, conte
   };
 });
 
+async function listedEvent(snapshot: FirebaseFirestore.DocumentSnapshot, uid: string): Promise<NeraiuchiListedEvent> {
+  const round = await findRound(snapshot.id);
+  const [entry, count] = await Promise.all([
+    round.ref.collection("entries").doc(uid).get(), roundCount(round),
+  ]);
+  const current = await refreshRound(round);
+  const now = Date.now();
+  return {
+    ...publicEvent(current.id, current.data()!, count, now),
+    entry: entry.exists ? entryResult(entry.data()!, resultsReleased(current.data()!, now)) : null,
+  };
+}
+
+async function latestEndedEvent(uid: string, now: number): Promise<NeraiuchiListedEvent | null> {
+  const [archived, expired] = await Promise.all([
+    archives.where("archiveComplete", "in", [true, false]).orderBy("closedAt", "desc").limit(1).get(),
+    events.where("state", "==", "published").where("endsAt", "<=", Timestamp.fromMillis(now))
+      .orderBy("endsAt", "desc").limit(1).get(),
+  ]);
+  const candidates = [...archived.docs, ...expired.docs];
+  candidates.sort((a, b) =>
+    (b.get("closedAt") ?? b.get("endsAt")).toMillis() - (a.get("closedAt") ?? a.get("endsAt")).toMillis());
+  const latest = candidates[0];
+  if (!latest) return null;
+  if (latest.ref.parent.id !== archives.id) return listedEvent(latest, uid);
+  // Frozen metadata and own history stay readable while the entries are transferred.
+  const entry = await db.collection("neraiuchiUserHistory").doc(uid).collection("items").doc(latest.id).get();
+  return {
+    ...publicEvent(latest.id, latest.data(), acceptedCount(latest), Date.now()),
+    entry: entry.exists ? entryResult(entry.data()!, true) : null,
+  };
+}
+
 export const listNeraiuchiEvents = callable("listNeraiuchiEvents", async (raw, context) => {
-  requireUser(context);
+  const uid = requireUser(context);
   const position = cursor(input(raw, ["cursor"]).cursor);
   const now = Date.now();
-  if (!enabled()) return { items: [], nextCursor: null, enabled: false, serverNow: now };
+  const latestEnded = position ? null : await latestEndedEvent(uid, now);
+  if (!enabled()) return { items: [], latestEnded, nextCursor: null, enabled: false, serverNow: now };
   let query = events.where("state", "==", "published").where("endsAt", ">", Timestamp.fromMillis(now))
     .orderBy("endsAt", "asc").orderBy(FieldPath.documentId(), "asc");
   if (position) query = query.startAfter(cursorTimestamp(position), position.id);
   const snapshot = await query.limit(21).get();
-  const items = await Promise.all(snapshot.docs.slice(0, 20).map(async (event) => {
-    const count = await roundCount(event);
-    const current = await refreshRound(event);
-    return publicEvent(event.id, current.data()!, count, now);
-  }));
-  return { items, nextCursor: nextCursor(snapshot.docs, 20, "endsAt"), enabled: true, serverNow: now };
+  const items = (await Promise.all(snapshot.docs.slice(0, 20).map((event) => listedEvent(event, uid))))
+    .filter((event) => !event.resultsReleased);
+  return { items, latestEnded, nextCursor: nextCursor(snapshot.docs, 20, "endsAt"), enabled: true, serverNow: Date.now() };
+});
+
+export const getNeraiuchiHomeStatus = callable("getNeraiuchiHomeStatus", async (raw, context) => {
+  requireUser(context);
+  input(raw, []);
+  const now = Date.now();
+  if (!enabled()) return { event: null, refreshAt: null, serverNow: now };
+  const [running, upcoming] = await Promise.all([
+    events.where("state", "==", "published").where("startsAt", "<=", Timestamp.fromMillis(now))
+      .where("endsAt", ">", Timestamp.fromMillis(now)).orderBy("startsAt", "desc")
+      .orderBy("endsAt", "asc").limit(1).get(),
+    events.where("state", "==", "published").where("startsAt", ">", Timestamp.fromMillis(now))
+      .orderBy("startsAt", "asc").limit(1).get(),
+  ]);
+  const round = running.docs[0] ? await refreshRound(running.docs[0]) : null;
+  const current = Date.now();
+  const event = round && round.get("state") === "published" &&
+    round.get("startsAt").toMillis() <= current && round.get("endsAt").toMillis() > current ? {
+      id: round.id, title: round.get("title"),
+      startsAt: round.get("startsAt").toMillis(), endsAt: round.get("endsAt").toMillis(),
+    } : null;
+  const boundaries: number[] = [
+    ...(round ? [round.get("endsAt").toMillis()] : []),
+    ...(upcoming.docs[0] ? [upcoming.docs[0].get("startsAt").toMillis()] : []),
+  ].filter((time) => time > now);
+  return { event, refreshAt: boundaries.length ? Math.min(...boundaries) : null, serverNow: current };
 });
 
 export const getNeraiuchiHistory = callable("getNeraiuchiHistory", async (raw, context) => {

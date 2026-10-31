@@ -16,6 +16,7 @@ import { homeGuide, visibleHomeMenu } from "@/app/lib/homeMenu";
 import { neraiuchiEnabled } from "@/app/lib/neraiuchi";
 import FeatureSection from "@/components/home/FeatureSection";
 import MenuImageCard from "@/components/home/MenuImageCard";
+import NeraiuchiHomeAnnouncement from "@/components/neraiuchi/NeraiuchiHomeAnnouncement";
 import styles from "./home.module.css";
 
 /* --------------------------------------------------
@@ -455,6 +456,7 @@ export default function Home() {
       />
 
       <div className={styles.content}>
+      <NeraiuchiHomeAnnouncement key={uid} />
       <div className={styles.info}>
       {userLoadError && <div className={styles.error} role="alert">
         最新のユーザー情報を取得できませんでした。表示中の情報は古い可能性があります。

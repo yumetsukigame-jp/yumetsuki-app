@@ -50,6 +50,14 @@ export type NeraiuchiRevealedEntry = NeraiuchiParticipation & {
 export type NeraiuchiEntry = NeraiuchiRevealedEntry |
   (NeraiuchiParticipation & { resultsReleased: false });
 
+export type NeraiuchiListedEvent = NeraiuchiEvent & { entry: NeraiuchiEntry | null };
+
+export type NeraiuchiHomeStatus = {
+  event: Pick<NeraiuchiEvent, "id" | "title" | "startsAt" | "endsAt"> | null;
+  refreshAt: number | null;
+  serverNow: number;
+};
+
 export type NeraiuchiResultRow = {
   number: number;
   acceptedAt: number;

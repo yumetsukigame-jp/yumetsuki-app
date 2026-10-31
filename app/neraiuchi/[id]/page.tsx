@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { callNeraiuchi, availabilityLabels } from "@/app/lib/neraiuchi";
 import type { NeraiuchiEntry, NeraiuchiEvent } from "@/app/lib/neraiuchi";
+import { participationConfirmation } from "@/app/lib/neraiuchiDisplay";
 import LoadingState from "@/app/components/LoadingState";
 import { EntryResult, EventInfo, ErrorNotice, errorMessage, LoginNotice, NeraiuchiFrame, useNeraiuchiAuth } from "@/components/neraiuchi/NeraiuchiCommon";
 import styles from "@/components/neraiuchi/neraiuchi.module.css";
@@ -30,7 +31,7 @@ export default function NeraiuchiDetail({ params }: { params: Promise<{ id: stri
 
   const join = async () => {
     if (busy || entry || recovery) return;
-    if (!confirm("無料・1アカウントにつき1企画1回です。サーバーで確定した順に番号を割り当てます。参加しますか？")) return;
+    if (!confirm(participationConfirmation)) return;
     setBusy(true); setError("");
     try {
       const data = await callNeraiuchi("joinNeraiuchi", { eventId: id });

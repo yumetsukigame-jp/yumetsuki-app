@@ -5,3 +5,6 @@
 .error { color: #b91c1c; background: #fff; padding: 12px; border-radius: 8px; }
 .error button { min-height: 44px; padding: 8px 12px; text-decoration: underline; }
 @media (max-width: 390px) { .content { padding-left: 16px; padding-right: 16px; } }
+.neraiuchiAnnouncement { padding: 16px; margin-bottom: 20px; border: 2px solid #22d3ee; border-radius: 12px; background: #ecfeff; text-align: left; }
+.neraiuchiAnnouncement a { display: grid; gap: 6px; min-height: 44px; color: #155e75; text-decoration: none; }
+.neraiuchiAnnouncement strong { font-size: 18px; }

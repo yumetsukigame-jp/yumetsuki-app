@@ -2,17 +2,18 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
 import type {
   NeraiuchiAdminEvent, NeraiuchiDraft, NeraiuchiEntry, NeraiuchiEvent, NeraiuchiPage,
-  NeraiuchiPrize, NeraiuchiRevealedEntry, NeraiuchiResultRow,
+  NeraiuchiPrize, NeraiuchiRevealedEntry, NeraiuchiResultRow, NeraiuchiListedEvent, NeraiuchiHomeStatus,
 } from "@/functions/src/neraiuchiTypes";
 export type {
   NeraiuchiAdminEvent, NeraiuchiDraft, NeraiuchiEntry, NeraiuchiEvent, NeraiuchiPage,
-  NeraiuchiPrize, NeraiuchiRevealedEntry, NeraiuchiResultRow,
+  NeraiuchiPrize, NeraiuchiRevealedEntry, NeraiuchiResultRow, NeraiuchiListedEvent, NeraiuchiHomeStatus,
 };
 
 export const neraiuchiEnabled = process.env.NEXT_PUBLIC_NERAIUCHI_ENABLED === "true";
 
 type Api = {
-  listNeraiuchiEvents: [{ cursor?: string }, NeraiuchiPage<NeraiuchiEvent> & { enabled: boolean }];
+  listNeraiuchiEvents: [{ cursor?: string }, NeraiuchiPage<NeraiuchiListedEvent> & { enabled: boolean; latestEnded: NeraiuchiListedEvent | null }];
+  getNeraiuchiHomeStatus: [Record<string, never>, NeraiuchiHomeStatus];
   getNeraiuchiEvent: [{ eventId: string }, { event: NeraiuchiEvent; entry: NeraiuchiEntry | null; enabled: boolean; serverNow: number }];
   joinNeraiuchi: [{ eventId: string }, { entry: NeraiuchiEntry }];
   getNeraiuchiHistory: [{ cursor?: string }, NeraiuchiPage<NeraiuchiEntry>];

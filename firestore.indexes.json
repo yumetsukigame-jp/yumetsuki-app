@@ -54,7 +54,32 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "startsAt", "order": "DESCENDING" },
         { "fieldPath": "endsAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "neraiuchiEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "startsAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "neraiuchiEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "endsAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "neraiuchiEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "endsAt", "order": "DESCENDING" }
       ]
     },
     {
@@ -71,6 +96,14 @@
       "fields": [
         { "fieldPath": "archiveComplete", "order": "ASCENDING" },
         { "fieldPath": "archivedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "neraiuchiEventsArchive",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "archiveComplete", "order": "ASCENDING" },
+        { "fieldPath": "closedAt", "order": "DESCENDING" }
       ]
     },
     {
