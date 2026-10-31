@@ -1,0 +1,36 @@
+.page { width: 100%; max-width: 800px; margin: 0 auto; padding: 24px 16px; color: #17243b; overflow-wrap: anywhere; }
+.page h1 { font-size: 26px; font-weight: 700; margin-bottom: 16px; }
+.page h2 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
+.page h3 { font-size: 17px; font-weight: 700; }
+.page p { margin: 12px 0; line-height: 1.7; white-space: pre-wrap; }
+.page a { color: #0369a1; text-decoration: underline; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 20px; }
+.nav a { display: flex; align-items: center; min-height: 44px; }
+.card, .info, .result { padding: 16px; margin: 16px 0; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
+.result { border: 2px solid #0e7490; background: #ecfeff; }
+.info dd { margin-bottom: 12px; white-space: pre-wrap; }
+.info dt { font-weight: 700; }
+.status { display: inline-block; border-radius: 6px; padding: 4px 8px; background: #e0f2fe; color: #075985; font-weight: 700; }
+.page button, .button { min-height: 44px; padding: 10px 16px; border: 1px solid #0e7490; border-radius: 8px; color: #fff; background: #0e7490; cursor: pointer; font-weight: 600; }
+.page button:disabled { color: #475569; background: #e2e8f0; border-color: #cbd5e1; cursor: not-allowed; }
+.error { border: 1px solid #fca5a5; padding: 12px; color: #991b1b; background: #fff1f2; border-radius: 8px; margin: 16px 0; }
+.form { display: grid; gap: 16px; margin: 16px 0; }
+.form label { display: grid; gap: 6px; font-weight: 600; }
+.form input, .form textarea { display: block; width: 100%; min-height: 44px; padding: 10px; color: #17243b; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; font-weight: 400; }
+.form textarea { min-height: 100px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.entries { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0; font-size: 14px; }
+.entries td, .entries th { padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: left; vertical-align: top; }
+.entries th:first-child { width: 18%; }
+.entries th:last-child { width: 22%; }
+.prize { display: grid; gap: 12px; padding: 16px; border: 1px solid #94a3b8; border-radius: 10px; min-width: 0; }
+.prize legend { font-weight: 700; }
+.form .checkbox { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.form .checkbox input { width: 24px; min-height: 24px; }
+.winningRow { background: #fff7d6; }
+.ownRow { border-left: 5px solid #0369a1; background: #e0f2fe; }
+.winningRow.ownRow { background: linear-gradient(90deg, #e0f2fe, #fff7d6); }
+.selfBadge, .winnerBadge { display: inline-block; padding: 2px 5px; border-radius: 4px; }
+.selfBadge { color: #075985; background: #bae6fd; margin-left: 4px; }
+.winnerBadge { color: #713f12; background: #fde68a; }
+.entries time { font-size: 12px; }

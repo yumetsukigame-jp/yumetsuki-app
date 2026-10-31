@@ -1,0 +1,7 @@
+.content { max-width: 480px; margin: 0 auto; padding: 0 20px 20px; }
+.loading { max-width: 480px; width: calc(100% - 32px); margin: 20px auto; background: #fff; color: #17243b; border-radius: 16px; }
+.info { background: #fff; padding: 16px; border-radius: 16px; margin-bottom: 24px; overflow-wrap: anywhere; }
+.standalone { background: #fff; padding: 16px; border-radius: 16px; margin-top: 24px; color: #17243b; }
+.error { color: #b91c1c; background: #fff; padding: 12px; border-radius: 8px; }
+.error button { min-height: 44px; padding: 8px 12px; text-decoration: underline; }
+@media (max-width: 390px) { .content { padding-left: 16px; padding-right: 16px; } }

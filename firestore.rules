@@ -1,15 +1,55 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Preserve the deployed rules outside quizzes.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isGameId(value) {
+      return value is string && value.matches('neraiuchi_.*');
+    }
+
+    function isGameRecord(data) {
+      return data.get('source', '') == 'neraiuchi'
+        || isGameId(data.get('requestId', ''))
+        || isGameId(data.get('rewardId', ''));
+    }
+
+    // Legacy records retain their permissions; game claims reserve their own IDs.
     match /{collection}/{document=**} {
-      allow read, write: if collection != 'quizzes';
+      allow read, write: if !(collection in [
+        'quizzes', 'neraiuchiEvents', 'neraiuchiEventsArchive', 'neraiuchiSecrets', 'neraiuchiCounters',
+        'neraiuchiUserHistory', 'neraiuchiAudit', 'admins', 'shippingPending',
+        'shippingDone', 'shippingHistory', 'selectedRewards', 'pointHistory'
+      ]);
+    }
+
+    match /admins/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{collection}/{recordId}/{document=**} {
+      allow read: if collection in [
+        'shippingPending', 'shippingDone', 'shippingHistory', 'selectedRewards', 'pointHistory'
+      ];
+      allow write: if collection in [
+        'shippingPending', 'shippingDone', 'shippingHistory', 'selectedRewards', 'pointHistory'
+      ] && (isAdmin() || (
+        !isGameId(recordId)
+        && (resource == null || !isGameRecord(resource.data))
+        && (request.resource == null || !isGameRecord(request.resource.data))
+      ));
+    }
+
+    match /{collection}/{document=**} {
+      allow read, write: if false;
     }
 
     match /quizzes/{quizId} {
       allow read: if true;
-      allow create, update, delete: if request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow create, update, delete: if isAdmin();
 
       match /answers/{document=**} {
         allow read: if true;

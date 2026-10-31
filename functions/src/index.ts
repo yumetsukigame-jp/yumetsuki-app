@@ -30,6 +30,7 @@ export {
 } from "./userProfile";
 
 export * from "./nibuichi";
+export * from "./neraiuchi";
 
 /* ============================================================
    ★ imageProcessor（そのまま re-export）

@@ -1,0 +1,14 @@
+.section { padding: 16px; margin-bottom: 24px; background: #fff; border-radius: 16px; border-top: 5px solid var(--accent); box-shadow: 0 3px 14px #0002; text-align: left; color: #17243b; }
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.sectionHeading h3 { margin: 0; color: var(--heading); font-size: 20px; font-weight: 700; }
+.sectionHeading button { min-height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; color: var(--heading); font-size: 13px; cursor: pointer; }
+.links { display: flex; flex-direction: column; gap: 12px; }
+.links[hidden] { display: none; }
+.card { display: block; border: 1px solid #dbe2ec; background: #fff; border-radius: 12px; overflow: hidden; color: #17243b; text-decoration: none; text-align: left; min-height: 44px; }
+.thumbnail { width: 100%; height: auto; object-fit: contain; display: block; }
+.caption { display: block; padding: 12px; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
+.description { display: block; margin-top: 4px; color: #475569; font-size: 14px; }
+.iconLink { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px; color: #17243b; text-decoration: none; border: 1px solid #dbe2ec; border-radius: 10px; font-size: 15px; }
+.icon { width: 40px; height: 40px; flex-shrink: 0; }
+.detailSummary { font-size: 13px; color: #475569; margin: 12px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.card:hover, .iconLink:hover { background: #f1f5f9; }

@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import UserFooter from "@/components/UserFooter";
-import UserHeader from "@/components/UserHeader";
+import UserShell from "@/components/UserShell";
 import LoginTracker from "@/components/LoginTracker";
 
 export const metadata: Metadata = {
@@ -34,9 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body className="min-h-full flex flex-col">
         <LoginTracker />
-        <UserHeader />
-        <div className="flex-1">{children}</div>
-        <UserFooter />
+        <UserShell>{children}</UserShell>
       </body>
     </html>
   );

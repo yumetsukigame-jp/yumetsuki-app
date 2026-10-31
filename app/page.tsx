@@ -12,6 +12,11 @@ import Link from "next/link";
 import Image from "next/image";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
+import { homeGuide, visibleHomeMenu } from "@/app/lib/homeMenu";
+import { neraiuchiEnabled } from "@/app/lib/neraiuchi";
+import FeatureSection from "@/components/home/FeatureSection";
+import MenuImageCard from "@/components/home/MenuImageCard";
+import styles from "./home.module.css";
 
 /* --------------------------------------------------
    JST 6時切り替えの今日の日付
@@ -139,6 +144,9 @@ export default function Home() {
   const [totalBakuado, setTotalBakuado] = useState(0);
   const [nibuichiLoaded, setNibuichiLoaded] = useState(false);
   const [topImage] = useState(getJSTWeekdayImage);
+  const [userLoadError, setUserLoadError] = useState(false);
+  const [userRetryKey, setUserRetryKey] = useState(0);
+  const [nibuichiError, setNibuichiError] = useState(false);
 
   /* --------------------------------------------------
      ① Auth 初期化（未ログインなら即ログイン画面へ）
@@ -253,9 +261,13 @@ export default function Home() {
           setTotalBakuado(bakuado);
           setTotalBattle(win + draw + lose + bakuado);
           setNibuichiLoaded(true);
+          setNibuichiError(false);
         },
         "ニブイチ戦績",
-        () => setNibuichiLoaded(true)
+        () => {
+          setNibuichiLoaded(true);
+          setNibuichiError(true);
+        }
       );
 
       void applySupplemental(
@@ -316,6 +328,7 @@ export default function Home() {
       try {
         const userSnap = await userPromise;
         if (userSnap.exists()) {
+          setUserLoadError(false);
           const u = userSnap.data();
           const nextNickname = u.displayName?.trim() || "";
           const nextPoints = u.points ?? 0;
@@ -340,27 +353,29 @@ export default function Home() {
           );
         } else {
           setNickname("");
+          setUserLoadError(true);
         }
       } catch (error) {
         console.error("トップページのユーザー情報読み込みに失敗しました", error);
+        setUserLoadError(true);
         if (!getCachedUser()) setNickname("");
       }
 
     };
 
     load();
-  }, [authReady, uid]);
+  }, [authReady, uid, userRetryKey]);
 
   /* --------------------------------------------------
      読み込み中
   -------------------------------------------------- */
   if (!authReady) {
-    return <LoadingState />;
+    return <div className={styles.loading}><LoadingState /></div>;
   }
 
   if (!uid) {
     return (
-      <div style={{ maxWidth: "480px", margin: "0 auto", padding: 20, textAlign: "center" }}>
+      <div className={styles.info} style={{ maxWidth: "480px", margin: "20px auto", textAlign: "center" }}>
         <p>
           ログインしてください。
           <br />
@@ -376,7 +391,7 @@ export default function Home() {
   }
 
   if (nickname === undefined) {
-    return <LoadingState />;
+    return <div className={styles.loading}><LoadingState /></div>;
   }
 
   /* --------------------------------------------------
@@ -439,13 +454,12 @@ export default function Home() {
         }}
       />
 
-      <div
-        style={{
-          maxWidth: "480px",
-          margin: "0 auto",
-          padding: "0 20px 20px",
-        }}
-      >
+      <div className={styles.content}>
+      <div className={styles.info}>
+      {userLoadError && <div className={styles.error} role="alert">
+        最新のユーザー情報を取得できませんでした。表示中の情報は古い可能性があります。
+        <button type="button" onClick={() => setUserRetryKey((key) => key + 1)}>再取得</button>
+      </div>}
       {subscriber && (
         <div
           style={{
@@ -469,10 +483,10 @@ export default function Home() {
 {/* 現在のポイント */}
 <h1 style={{ fontSize: "26px", marginBottom: "20px" }}>
   現在のポイント：
-  <span style={{ fontWeight: "bold" }}>{points} pt</span>
+  <span style={{ fontWeight: "bold" }}>{points === undefined ? "未取得" : `${points} pt`}</span>
 </h1>
 <p style={{ margin: "-12px 0 20px", color: "#6b7280", fontSize: "14px" }}>
-  累計ログイン日数：{totalLoginDays ?? 0}日
+  累計ログイン日数：{totalLoginDays === undefined ? "未取得" : `${totalLoginDays}日`}
 </p>
 
 {/* ★★★ 戦績をここに常時表示 ★★★ */}
@@ -488,19 +502,21 @@ export default function Home() {
   }}
 >
   <div style={{ marginBottom: "4px" }}>
-    {nibuichiLoaded ? nibuichiStatus : "ニブイチ情報を読み込み中…"}
+    {nibuichiError ? "ニブイチ情報を取得できませんでした" : nibuichiLoaded ? nibuichiStatus : "ニブイチ情報を読み込み中…"}
   </div>
   {/* 1行目：総戦績 */}
   <div>
-    【現戦績】{nibuichiLoaded ? `${totalBattle}戦` : "読み込み中…"}
+    【現戦績】{nibuichiError ? "未取得" : nibuichiLoaded ? `${totalBattle}戦` : "読み込み中…"}
   </div>
 
   {/* 2行目：内訳 */}
   <div>
-    {nibuichiLoaded
+    {nibuichiError ? "再取得をお試しください" : nibuichiLoaded
       ? `${totalWin}勝 / ${totalDraw}分 / ${totalLose}負 / ${totalBakuado}爆アド`
       : "戦績を取得中…"}
   </div>
+  {nibuichiError && <button type="button" onClick={() => setUserRetryKey((key) => key + 1)}
+    style={{ minHeight: 44, padding: "8px 12px", textDecoration: "underline" }}>戦績を再取得</button>}
 </div>
 
 {archiveAnnouncements.length > 0 && (
@@ -612,93 +628,18 @@ export default function Home() {
     )}
   </div>
 )}
+</div>
 
-{/* 🎯 今日のニブイチ */}
-<Section title="🎯 今日のニブイチ" color="#eab308" alwaysVisible={2}>
-  <MenuButton href="/nibuichi" color="#eab308">
-    今日のニブイチに参加する
-  </MenuButton>
-  <MenuButton href="/nibuichi/guide" color="#eab308" subtle>
-    ニブイチの遊び方を見る
-  </MenuButton>
+{visibleHomeMenu(neraiuchiEnabled)
+  .map((section) => <FeatureSection key={section.id} section={section} />)}
 
-  {/* ★ 折りたたみ部分 */}
-  <MenuButton href="/nibuichi/ranking" color="#eab308">
-    ランキングを見る
-  </MenuButton>
-  <MenuButton href="/nibuichi/history" color="#eab308">
-    自分の結果履歴を見る
-  </MenuButton>
-</Section>
-
-      {/* 🎰 ガチャ */}
-<Section title="🎰 ガチャ" color="#a855f7" alwaysVisible={2}>
-        <MenuButton href="/gacha/list" color="#a855f7">
-          ガチャ一覧を見る
-        </MenuButton>
-  <MenuButton
-    href="/gacha/guide"
-    color="#a855f7"
-    subtle
-  >
-    ガチャの遊び方を見る
-  </MenuButton>
-  <MenuButton href="/gacha" color="#a855f7">
-    ガチャを引く
-  </MenuButton>
-        <MenuButton href="/gacha/results" color="#a855f7">
-          ガチャ結果を見る
-        </MenuButton>
-        <MenuButton href="/gacha/archive" color="#a855f7">
-          ガチャアーカイブを見る
-        </MenuButton>
-      </Section>
-
-      {/* 🧠 クイズ */}
-      <Section title="クイズ" color="#0ea5e9" icon="🧠" alwaysVisible={2}>
-        <MenuButton href="/quizzes" color="#0ea5e9">
-          クイズ一覧を見る
-        </MenuButton>
-        <MenuButton href="/quizzes/guide" color="#0ea5e9" subtle>
-          クイズの遊び方を見る
-        </MenuButton>
-        <MenuButton href="/quizzes/archive" color="#0ea5e9">
-          完了済みクイズを見る
-        </MenuButton>
-        <MenuButton href="/quizzes/ranking" color="#0ea5e9">
-          クイズランキングを見る
-        </MenuButton>
-      </Section>
-
-      {/* 📦 ポイント */}
-      <Section title="📦 ポイント関連" color="#2563eb" alwaysVisible={2}>
-        <MenuButton href="/code" color="#2563eb">
-          コード入力でポイント獲得
-        </MenuButton>
-        <MenuButton href="/reward" color="#2563eb">
-          発送物を選ぶ
-        </MenuButton>
-        <MenuButton href="/history" color="#2563eb">
-          発送履歴を見る
-        </MenuButton>
-      </Section>
-
-      {/* 👤 アカウント */}
-      <Section title="👤 アカウント" color="#16a34a">
-        <MenuButton href="/archive" color="#16a34a">
-          書庫を見る
-        </MenuButton>
-        <MenuButton href="/profile" color="#16a34a">
-          プロフィールを編集する
-        </MenuButton>
-      </Section>
-
-      <div style={{ marginTop: "32px" }}>
+      <div className={styles.standalone}>
         <GuideLinkCard />
       </div>
 
       {/* ゆめつき本舗 */}
       <div
+        className={styles.standalone}
         style={{
           marginTop: "40px",
           paddingTop: "20px",
@@ -733,6 +674,7 @@ export default function Home() {
 
       {/* 🔴 管理者 */}
       <div
+        className={styles.standalone}
         style={{
           marginTop: "24px",
           paddingTop: "20px",
@@ -756,173 +698,8 @@ export default function Home() {
 /* ------------------------------
    セクションコンポーネント
 ------------------------------ */
-type SectionProps = {
-  title: React.ReactNode;
-  color: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-  forceCollapseAll?: boolean;
-  alwaysVisible?: number;
-};
-
-function Section({
-  title,
-  color,
-  icon,
-  children,
-  forceCollapseAll = false,
-  alwaysVisible = 1,
-}: SectionProps) {
-  const [open, setOpen] = useState(false);
-
-  const items = React.Children.toArray(children);
-  const visibleItems = items.slice(0, alwaysVisible);
-  const restItems = items.slice(alwaysVisible);
-  const showVisibleItems = !forceCollapseAll;
-  const hiddenItems = forceCollapseAll ? items : restItems;
-  const hiddenMenuLabels = hiddenItems.map((item, index) => (
-    <React.Fragment key={index}>
-      {index > 0 && " ・ "}
-      {React.isValidElement<{ children?: React.ReactNode }>(item)
-        ? item.props.children
-        : item}
-    </React.Fragment>
-  ));
-
-  return (
-    <div
-      style={{
-        background: "white",
-        padding: "16px",
-        borderRadius: "12px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        marginBottom: "24px",
-        textAlign: "left",
-      }}
-    >
-      {/* タイトル + 折り畳みボタン */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "12px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {icon && <span style={{ fontSize: "20px" }}>{icon}</span>}
-          <h3 style={{ color, margin: 0 }}>{title}</h3>
-        </div>
-
-        {(forceCollapseAll || restItems.length > 0) && (
-          <button
-            onClick={() => setOpen(!open)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "16px",
-              color,
-              padding: "4px 8px",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <span style={{ fontSize: "20px" }}>{open ? "▲" : "▼"}</span>
-            <span style={{ fontSize: "12px" }}>詳細メニュー表示</span>
-          </button>
-        )}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {showVisibleItems && visibleItems}
-        {!open && hiddenItems.length > 0 && (
-          <div
-            style={{
-              color: "#6b7280",
-              fontSize: "12px",
-              lineHeight: 1.5,
-              padding: "0 4px",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            詳細：{hiddenMenuLabels}
-          </div>
-        )}
-        {open && hiddenItems}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------
-   メニューボタン
------------------------------- */
-type MenuButtonProps = {
-  href: string;
-  color: string;
-  children: React.ReactNode;
-  subtle?: boolean;
-};
-
-function MenuButton({
-  href,
-  color,
-  children,
-  subtle = false,
-}: MenuButtonProps) {
-  return (
-    <Link
-      href={href}
-      prefetch={false}
-      style={{
-        display: "block",
-        width: "100%",
-        padding: subtle ? "9px" : "12px",
-        background: subtle ? "#fffbeb" : color,
-        color: subtle ? "#a16207" : "white",
-        borderRadius: "8px",
-        fontSize: subtle ? "15px" : "18px",
-        fontWeight: subtle ? 600 : "bold",
-        textAlign: "center",
-        border: subtle ? `1px solid ${color}` : "none",
-        cursor: "pointer",
-        boxSizing: "border-box",
-        textDecoration: "none",
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
 function GuideLinkCard() {
-  return (
-    <Link
-      href="/guide"
-      style={{
-        display: "block",
-        padding: "18px",
-        color: "#312e81",
-        fontSize: "18px",
-        fontWeight: "bold",
-        textAlign: "center",
-        textDecoration: "none",
-        background: "#eef2ff",
-        border: "2px solid #818cf8",
-        borderRadius: "12px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-      }}
-    >
-      📖 ゆめつきの書斎の使い方を見る
-      <span style={{ display: "block", marginTop: "4px", fontSize: "13px" }}>
-        アプリの機能や楽しみ方を画像つきで紹介しています
-      </span>
-    </Link>
-  );
+  return <MenuImageCard item={homeGuide} />;
 }
 
 const adminLinkStyle = {
