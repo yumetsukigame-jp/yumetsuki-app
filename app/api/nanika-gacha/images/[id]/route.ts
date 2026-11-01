@@ -1,4 +1,4 @@
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getApps, initializeApp, cert, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
@@ -11,13 +11,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return new Response("Invalid image ID", { status: 400 });
   }
   try {
-    if (!getApps().length) initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      }),
-    });
+    if (!getApps().length) {
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+      initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID ?? process.env.GCLOUD_PROJECT,
+        credential: clientEmail || privateKey ? cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail,
+          privateKey: privateKey?.replace(/\\n/g, "\n"),
+        }) : applicationDefault(),
+      });
+    }
     const db = getFirestore();
     const image = await db.collection("nanikaGachaImages").doc(id).get();
     if (!image.exists) return new Response("Image not found", { status: 404 });
