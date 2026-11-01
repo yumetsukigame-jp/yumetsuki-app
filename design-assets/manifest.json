@@ -16,7 +16,7 @@
       "height": 800,
       "bytes": 173370,
       "sha256": "7f20ce2b905ea7064661f485c64e675e0cceb782928d08a408b3cd48aab5026e",
-      "status": "implemented",
+      "status": "deployed",
       "source": "image_gen, optimized WebP"
     },
     {
@@ -25,7 +25,7 @@
       "sourceArtwork": "nanika-gacha/thumbnails/01-nanika-psa-yumetsuki-v2.png",
       "width": 960, "height": 640, "bytes": 140642,
       "sha256": "d3068fe62c139a46b600c666c76653bd8a18e25745a79c55c3d5d1554329855f",
-      "status": "implemented", "source": "image_gen, optimized WebP"
+      "status": "deployed", "source": "image_gen, optimized WebP"
     },
     {
       "id": "nanika-gacha/02-satellite-psa10-yumetsuki-v2",
@@ -33,7 +33,7 @@
       "sourceArtwork": "nanika-gacha/thumbnails/02-satellite-psa10-yumetsuki-v2.png",
       "width": 960, "height": 640, "bytes": 150924,
       "sha256": "b1a2c0e727c5919cb019d56c329bd4dac1de8de76e15f2b8d963b38a317f40d2",
-      "status": "implemented", "source": "image_gen, optimized WebP"
+      "status": "deployed", "source": "image_gen, optimized WebP"
     },
     {
       "id": "nanika-gacha/03-planet-psa10-yumetsuki-v2",
@@ -41,7 +41,7 @@
       "sourceArtwork": "nanika-gacha/thumbnails/03-planet-psa10-yumetsuki-v2.png",
       "width": 960, "height": 640, "bytes": 180948,
       "sha256": "af34fb8994d767ca0ad9f2072adef1ffe5924b8a92b6811ac6f282b6e0a84d12",
-      "status": "implemented", "source": "image_gen, optimized WebP"
+      "status": "deployed", "source": "image_gen, optimized WebP"
     },
     {
       "id": "nanika-gacha/04-star-psa10-yumetsuki-v2",
@@ -49,7 +49,7 @@
       "sourceArtwork": "nanika-gacha/thumbnails/04-star-psa10-yumetsuki-v2.png",
       "width": 960, "height": 640, "bytes": 169564,
       "sha256": "10e90ec2a29a0904d4cd90ea9819fcbe0c095da9f492430a299660ee77e18512",
-      "status": "implemented", "source": "image_gen, optimized WebP"
+      "status": "deployed", "source": "image_gen, optimized WebP"
     },
     {
       "id": "thumbnails/archive",
