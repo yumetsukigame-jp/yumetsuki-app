@@ -31,10 +31,13 @@ export default function NanikaImageManager() {
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
   const [busy, setBusy] = useState(false);
+  const [moveId, setMoveId] = useState<string | null>(null);
+  const [moveTier, setMoveTier] = useState<NanikaTier | "">("");
+  const [moveStatus, setMoveStatus] = useState("");
   const guard = useRef(false);
   const load = useCallback(async (position?: string) => {
     if (!uid) return;
-    setError(""); setSelected([]);
+    setError(""); setSelected([]); setMoveId(null); setMoveTier("");
     if (!position) { setItems([]); setCursor(null); }
     try {
       const result = await callNanika("adminListNanikaImages", { tier: t, past, ...(position ? { cursor: position } : {}) });
@@ -62,6 +65,18 @@ export default function NanikaImageManager() {
     guard.current = true; setBusy(true); setError("");
     try { await callNanika("adminRemoveNanikaImage", { id: item.id }); await load(); }
     catch (error) { setError(nanikaError(error)); }
+    finally { guard.current = false; setBusy(false); }
+  }
+  async function move(item: NanikaImage) {
+    if (guard.current || !moveTier || moveTier === item.tier) return;
+    const target = moveTier, label = NANIKA_TIERS.find(tier => tier.id === target)!.label;
+    if (!window.confirm(`${item.name}を「${label}」の抽選候補へ移動します。ID・画像・名称は変わりません。変更を確定しますか？`)) return;
+    guard.current = true; setBusy(true); setError(""); setMoveStatus("");
+    try {
+      await callNanika("adminMoveNanikaImage", { id: item.id, fromTier: item.tier, tier: target, confirmed: true });
+      setMoveStatus(`${item.name}を「${label}」へ移動しました。`);
+      await load();
+    } catch (error) { setError(`${nanikaError(error)} 通信エラーの場合は移動元・移動先の一覧を再取得して確認してください。`); }
     finally { guard.current = false; setBusy(false); }
   }
   async function purge() {
@@ -95,6 +110,7 @@ export default function NanikaImageManager() {
         {progress && <p role="status">{progress}</p>}
       </section>}
       {error && <p role="alert" className={styles.error}>{error}</p>}
+      {moveStatus && <p role="status">{moveStatus}</p>}
       {past && authorized && <div className={styles.warning}>
         <p>容量整理は発送完了・候補削除済みの大きい画像だけが対象です。未受取・発送処理中は削除できません。履歴用画像は残します。1回30件まで選択できます。</p>
         <button type="button" disabled={busy} onClick={() => setSelected(items.filter(item => item.canPurge && item.largeBytes > 0).slice(0, 30).map(item => item.id))}>削除可能な先頭30件を選択</button>
@@ -105,7 +121,21 @@ export default function NanikaImageManager() {
         <h2>{item.name}</h2><p>状態：{({ ready: "抽選候補", reserved: "当選者の選択待ち", shipping: "発送物", removed: "候補削除済み" })[item.state]}</p>
         <p>大きい画像：{Math.ceil(item.largeBytes / 1024)}KB／履歴用：{Math.ceil(item.thumbnailBytes / 1024)}KB</p>
         <a href={`${item.image}?size=full`} target="_blank" rel="noopener noreferrer">画像を別画面で確認</a>
-        {item.state === "ready" && <button type="button" disabled={busy} className={styles.danger} onClick={() => void remove(item)}>抽選候補から外す</button>}
+        {item.state === "ready" && <>
+          <div className={styles.actions}>
+            <button type="button" disabled={busy} className={styles.danger} onClick={() => void remove(item)}>抽選候補から外す</button>
+            <button type="button" disabled={busy} onClick={() => { setMoveId(item.id); setMoveTier(""); setMoveStatus(""); }}>別のカテゴリへ移動</button>
+          </div>
+          {moveId === item.id && <section className={styles.warning} aria-label={`${item.name}のカテゴリ移動`}>
+            <p>同じ景品を移動先の抽選候補へ移します。ID・画像・名称は保持されます。</p>
+            <label>移動先カテゴリ<select value={moveTier} disabled={busy} onChange={e => setMoveTier(e.target.value as NanikaTier | "")}>
+              <option value="">移動先を選択</option>
+              {NANIKA_TIERS.filter(tier => tier.id !== item.tier).map(tier => <option key={tier.id} value={tier.id}>{tier.label}</option>)}
+            </select></label>
+            <button type="button" disabled={busy || !moveTier} onClick={() => void move(item)}>変更を確定</button>
+            <button type="button" disabled={busy} onClick={() => { setMoveId(null); setMoveTier(""); }}>キャンセル</button>
+          </section>}
+        </>}
         {past && item.canPurge && item.largeBytes > 0 && <label><input type="checkbox" checked={selected.includes(item.id)} disabled={busy || (!selected.includes(item.id) && selected.length >= 30)}
           onChange={e => setSelected(current => e.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />大きい画像の削除対象にする</label>}
       </section>)}</div>

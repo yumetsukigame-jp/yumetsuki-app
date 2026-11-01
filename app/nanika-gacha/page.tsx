@@ -6,6 +6,7 @@ import Link from "next/link";
 import { callNanika, NANIKA_TIERS, type NanikaReceipt, type NanikaSlot } from "@/app/lib/nanikaGacha";
 import { NanikaFrame, nanikaError, useNanikaAuth } from "@/components/nanika-gacha/NanikaCommon";
 import NanikaReceiptCard from "@/components/nanika-gacha/NanikaReceiptCard";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 import styles from "@/components/nanika-gacha/nanika.module.css";
 
 export default function NanikaGachaPage() {
@@ -69,6 +70,7 @@ export default function NanikaGachaPage() {
       return <section className={styles.card} key={slot.tier}>
         <Image src={`/nanika-gacha/thumbnails/${t.thumbnail}.webp`} alt="" width={1536} height={1024} className={styles.thumbnail} />
         <h2>{t.label}</h2><p>参加費用：{slot.fee}ポイント／ポイント化：{slot.exchangePoints}ポイント</p>
+        <p>公開日時：{slot.publishedAt == null ? "未記録" : formatJstDateTime(new Date(slot.publishedAt))}</p>
         <p>抽選可能な景品：{slot.available}点／あなたの参加枠：{slot.remainingUses}回</p>
         <Link href={`/nanika-gacha/prizes/${slot.tier}`} className={styles.prizeListLink}>景品一覧を表示</Link>
         <button type="button" disabled={!uid || busy || slot.remainingUses < 1 || slot.available < 1 || animating}

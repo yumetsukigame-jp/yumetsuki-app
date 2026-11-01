@@ -16,6 +16,7 @@ type Api = {
   adminUploadNanikaImage: [{ tier: NanikaTier; id: string; name: string; base64: string }, { id: string }];
   adminListNanikaImages: [{ tier: NanikaTier; past: boolean; cursor?: string }, NanikaPage<NanikaImage>];
   adminRemoveNanikaImage: [{ id: string }, { id: string }];
+  adminMoveNanikaImage: [{ id: string; fromTier: NanikaTier; tier: NanikaTier; confirmed: true }, { id: string; tier: NanikaTier }];
   adminPurgeNanikaImages: [{ ids: string[]; confirmed: true }, { count: number }];
   adminEndNanikaGacha: [{ tier: NanikaTier; roundId: string; version: number; confirmed: true }, { items: NanikaSlot[] }];
   adminListNanikaArchives: [{ cursor?: string }, NanikaPage<NanikaRound>];

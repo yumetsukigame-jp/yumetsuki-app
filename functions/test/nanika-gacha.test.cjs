@@ -336,6 +336,97 @@ test("authentication and administrator boundaries reject writes", async () => {
   await assert.rejects(api.drawNanikaGacha.run({}, {}), e => e.code === "unauthenticated");
   await assert.rejects(call("adminGetNanikaGacha", {}, "alice"), e => e.code === "permission-denied");
 });
+test("publication dates change only on publishing or republishing and reset for the next round", async () => {
+  const roundId = await fixture(0);
+  const initial = data.get("nanikaGachaSlots/psa").publishedAt.toMillis();
+  const save = async visible => {
+    const slot = data.get("nanikaGachaSlots/psa");
+    return call("adminSaveNanikaGacha", { tier: "psa", version: slot.version, fee: 20, exchangePoints: 40, visible, xAccounts: slot.xAccounts });
+  };
+  now += 1000;
+  await save(true);
+  assert.equal(data.get("nanikaGachaSlots/psa").publishedAt.toMillis(), initial);
+  await save(false);
+  assert.equal(data.get("nanikaGachaSlots/psa").publishedAt.toMillis(), initial);
+  now += 1000;
+  const published = await save(true);
+  assert.equal(published.items.find(item => item.tier === "psa").publishedAt, now);
+  assert.equal(data.get(`nanikaGachaRounds/${roundId}`).publishedAt.toMillis(), now);
+  const latest = now;
+  await call("adminEndNanikaGacha", { tier: "psa", roundId, version: data.get("nanikaGachaSlots/psa").version, confirmed: true });
+  assert.equal(data.get("nanikaGachaSlots/psa").publishedAt, null);
+  assert.equal(data.get(`nanikaGachaArchives/${roundId}`).publishedAt.toMillis(), latest);
+  await save(false);
+  assert.equal(data.get("nanikaGachaSlots/psa").publishedAt, null);
+  now += 1000;
+  await save(true);
+  assert.equal(data.get("nanikaGachaSlots/psa").publishedAt.toMillis(), now);
+  assert.notEqual(data.get("nanikaGachaSlots/psa").roundId, roundId);
+});
+test("category moves atomically swap source pages, append destination pages and preserve physical identity on retry", async () => {
+  await fixture(102);
+  const original = copy(data.get("nanikaGachaImages/image0"));
+  const large = copy(data.get("nanikaGachaImageData/image0"));
+  const targetIds = Array.from({ length: 100 }, (_, index) => `destination${index}`);
+  data.set("nanikaGachaInventory/satellite", { available: 100 });
+  data.set("nanikaGachaInventory/satellite/pages/0", { ids: targetIds });
+  targetIds.forEach((id, poolIndex) => data.set(`nanikaGachaImages/${id}`, { ...copy(original), tier: "satellite", poolIndex }));
+  const request = { id: "image0", fromTier: "psa", tier: "satellite", confirmed: true };
+  retryOnce = true;
+  await call("adminMoveNanikaImage", request);
+  assert.equal(data.get("nanikaGachaInventory/psa").available, 101);
+  assert.equal(data.get("nanikaGachaInventory/satellite").available, 101);
+  assert.equal(data.get("nanikaGachaImages/image101").poolIndex, 0);
+  assert.deepEqual(data.get("nanikaGachaInventory/psa/pages/1").ids, ["image100"]);
+  assert.deepEqual(data.get("nanikaGachaInventory/satellite/pages/1").ids, ["image0"]);
+  assert.deepEqual(data.get("nanikaGachaImages/image0"), { ...original, tier: "satellite", poolIndex: 100 });
+  assert.deepEqual(data.get("nanikaGachaImageData/image0"), large);
+  const after = copy([...data]);
+  await call("adminMoveNanikaImage", request);
+  assert.deepEqual([...data], after);
+});
+test("category moves reject non-admins, stale categories, missing confirmation and non-drawable images", async () => {
+  await fixture();
+  const request = { id: "image0", fromTier: "psa", tier: "planet", confirmed: true };
+  await assert.rejects(api.adminMoveNanikaImage.run(request, {}), error => error.code === "unauthenticated");
+  await assert.rejects(call("adminMoveNanikaImage", request, "alice"), error => error.code === "permission-denied");
+  await assert.rejects(call("adminMoveNanikaImage", { ...request, confirmed: false }));
+  await assert.rejects(call("adminMoveNanikaImage", { ...request, tier: "psa" }));
+  await assert.rejects(call("adminMoveNanikaImage", { ...request, tier: "invalid" }));
+  await assert.rejects(call("adminMoveNanikaImage", { ...request, fromTier: "satellite" }), error => error.code === "aborted");
+  for (const state of ["reserved", "shipping", "removed"]) {
+    data.get("nanikaGachaImages/image0").state = state;
+    await assert.rejects(call("adminMoveNanikaImage", request), error => error.code === "failed-precondition");
+    assert.equal(data.get("nanikaGachaImages/image0").state, state);
+  }
+  assert.equal(data.get("nanikaGachaInventory/psa").available, 1);
+  assert.equal(data.has("nanikaGachaInventory/planet"), false);
+});
+test("simultaneous category changes cannot duplicate a physical prize", async () => {
+  await fixture();
+  const results = await Promise.allSettled(["satellite", "planet"].map(tier =>
+    call("adminMoveNanikaImage", { id: "image0", fromTier: "psa", tier, confirmed: true })));
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(data.get("nanikaGachaInventory/psa").available, 0);
+  assert.equal((data.get("nanikaGachaInventory/satellite")?.available ?? 0) + (data.get("nanikaGachaInventory/planet")?.available ?? 0), 1);
+});
+test("moving a returned prize preserves earlier receipt history and permits drawing it only from the new category", async () => {
+  const roundId = await fixture();
+  const { receipt } = await draw(roundId, "before-move");
+  await call("claimNanikaGacha", { id: receipt.id, choice: "points", confirmed: true }, "alice");
+  const history = copy(data.get(`nanikaGachaHistory/alice/entries/${receipt.id}`));
+  await call("adminMoveNanikaImage", { id: receipt.imageId, fromTier: "psa", tier: "satellite", confirmed: true });
+  assert.deepEqual(data.get(`nanikaGachaHistory/alice/entries/${receipt.id}`), history);
+  assert.equal(data.get(`nanikaGachaReceipts/${receipt.id}`).tier, "psa");
+  await call("adminSaveNanikaGacha", { tier: "satellite", version: 0, fee: 10, exchangePoints: 30, visible: true, xAccounts: ["@alice"] });
+  const destinationRound = data.get("nanikaGachaSlots/satellite").roundId;
+  const next = await call("drawNanikaGacha", {
+    tier: "satellite", roundId: destinationRound, requestId: "after-move", fee: 10, exchangePoints: 30, consent72h: true, participantUid: "alice",
+  }, "alice");
+  assert.equal(next.receipt.imageId, receipt.imageId);
+  assert.equal(next.receipt.tier, "satellite");
+  assert.equal(data.get("nanikaGachaInventory/psa").available, 0);
+});
 test("draw, retry and transaction retry deduct once and preserve server-side consent", async () => {
   const round = await fixture(2); retryOnce = true;
   const first = await draw(round, "retry"), repeated = await draw(round, "retry");

@@ -40,6 +40,7 @@ async function run() {
       }, { apiKey, uid, token });
       let slots = ["psa", "satellite", "planet", "star"].map(tier => ({
         tier, fee: 10, exchangePoints: 30, visible: true, version: 1, roundId: "mock-round",
+        publishedAt: Date.parse("2026-11-01T11:56:00.000Z"),
         available: 2, remainingUses: 2, xAccounts: ["@browser_test", "@browser_test"],
       }));
       const receipts = [];
@@ -108,9 +109,23 @@ async function run() {
           receipt.choice = input.choice; if (input.choice === "points") slots[0].available++;
           result = { receipt };
         } else if (action === "adminSaveNanikaGacha") {
-          slots = slots.map(slot => slot.tier === input.tier ? { ...slot, ...input, version: slot.version + 1 } : slot);
+          slots = slots.map(slot => slot.tier === input.tier ? {
+            ...slot, ...input, publishedAt: input.visible && !slot.visible ? Date.now() : slot.publishedAt, version: slot.version + 1,
+          } : slot);
           result = { items: slots };
-        } else if (action === "adminListNanikaImages") result = { items: images, nextCursor: null };
+        } else if (action === "adminListNanikaImages") result = {
+          items: images.filter(image => image.tier === input.tier && (input.past ? ["shipping", "removed"] : ["ready", "reserved"]).includes(image.state)), nextCursor: null,
+        };
+        else if (action === "adminMoveNanikaImage") {
+          assert.equal(input.confirmed, true);
+          const image = images.find(image => image.id === input.id);
+          assert.equal(image.tier, input.fromTier);
+          assert.equal(image.state, "ready");
+          assert.notEqual(input.tier, input.fromTier);
+          image.tier = input.tier;
+          slots = slots.map(slot => ({ ...slot, available: slot.available + (slot.tier === input.tier ? 1 : slot.tier === input.fromTier ? -1 : 0) }));
+          result = { id: image.id, tier: image.tier };
+        }
         else if (action === "adminUploadNanikaImage") {
           assert.ok(Buffer.from(input.base64, "base64").length <= 6 * 1024 * 1024);
           images.push({ id: input.id, name: input.name, tier: input.tier, state: "ready",
@@ -128,6 +143,7 @@ async function run() {
         await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().waitFor();
         await page.waitForFunction(() => [...document.querySelectorAll("button")].some(b => b.textContent === "参加条件を確認" && !b.disabled));
         assert.equal(await page.getByRole("button", { name: "参加条件を確認", exact: true }).count(), 4);
+        assert.equal(await page.getByText("公開日時：2026/11/01 20:56:00 JST", { exact: true }).count(), 4);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         if (process.env.NANIKA_TEST_ARTIFACTS) {
           fs.mkdirSync(process.env.NANIKA_TEST_ARTIFACTS, { recursive: true });
@@ -202,8 +218,28 @@ async function run() {
       await page.getByRole("button", { name: "未完了の画像を一括アップロード" }).click();
       await page.getByText("一括アップロードが完了しました", { exact: true }).waitFor();
       assert.equal(images[0].name, "一括アップロード確認");
+      const originalImageId = images[0].id;
+      images.push({ id: "reserved-only", tier: "psa", name: "選択待ちの景品", state: "reserved",
+        image: "/api/nanika-gacha/images/reserved-only", largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
+      await page.getByRole("button", { name: "画像を再取得", exact: true }).click();
+      const pendingCard = page.getByRole("heading", { name: "選択待ちの景品", exact: true }).locator("..");
+      await pendingCard.waitFor();
+      assert.equal(await pendingCard.getByRole("button", { name: "別のカテゴリへ移動" }).count(), 0);
+      const uploadedCard = page.getByRole("heading", { name: "一括アップロード確認", exact: true }).locator("..");
+      await uploadedCard.getByRole("button", { name: "別のカテゴリへ移動" }).click();
+      const moveForm = page.getByRole("region", { name: "一括アップロード確認のカテゴリ移動" });
+      assert.equal(await moveForm.getByRole("button", { name: "変更を確定", exact: true }).isDisabled(), true);
+      const destination = moveForm.getByLabel("移動先カテゴリ");
+      assert.equal(await destination.locator('option[value="psa"]').count(), 0);
+      await destination.selectOption("satellite");
+      await moveForm.getByRole("button", { name: "変更を確定", exact: true }).click();
+      await page.getByText("一括アップロード確認を「何かのPSA10ガチャ（衛星級）」へ移動しました。", { exact: true }).waitFor();
+      assert.equal(images.find(image => image.id === originalImageId).tier, "satellite");
+      await page.getByLabel("表示カテゴリ").selectOption("satellite");
+      await page.getByRole("heading", { name: "一括アップロード確認", exact: true }).waitFor();
+      assert.equal(images.filter(image => image.id === originalImageId).length, 1);
       assert.deepEqual(errors, [], "Uncaught browser errors");
-      console.log(`${name}: thumbnail-only gallery, on-demand full image/name, pagination, modal dismissal, ended notice, contextual errors and existing Nanika flows passed.`);
+      console.log(`${name}: publication dates, confirmed category moves, thumbnail gallery, notices and existing Nanika flows passed.`);
     } finally { await browser.close(); }
   }
 }

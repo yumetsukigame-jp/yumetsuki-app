@@ -124,6 +124,7 @@ async function slotViews(adminMode: boolean, uid?: string) {
     return {
       tier: t.id, fee: d?.fee ?? null, exchangePoints: d?.exchangePoints ?? null,
       visible: d?.visible ?? false, version: d?.version ?? 0, roundId: d?.roundId ?? null,
+      publishedAt: d?.publishedAt instanceof Timestamp ? d.publishedAt.toMillis() : null,
       available: count(stock), remainingUses: uid ? xAccounts.filter(line => nanikaXMatches(line, account?.get("xAccount") ?? "")).length : 0,
       ...(adminMode ? { xAccounts } : {}),
     };
@@ -171,7 +172,8 @@ export const adminSaveNanikaGacha = callable("adminSaveNanikaGacha", async (raw,
     const slot = await tx.get(slots.doc(t));
     if ((slot.get("version") ?? 0) !== version) fail("参加または設定更新がありました。再読込して変更をやり直してください", "aborted");
     const roundId = slot.get("roundId") ?? newRound.id;
-    const values = { tier: t, fee, exchangePoints, visible: d.visible, xAccounts, roundId, version: version + 1 };
+    const publishedAt = d.visible && slot.get("visible") !== true ? Timestamp.now() : slot.get("publishedAt") ?? null;
+    const values = { tier: t, fee, exchangePoints, visible: d.visible, publishedAt, xAccounts, roundId, version: version + 1 };
     tx.set(slots.doc(t), values);
     tx.set(rounds.doc(roundId), { ...values, state: "active", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     tx.create(db.collection("nanikaGachaAudit").doc(), { actorUid: uid, operation: "save", tier: t, roundId, createdAt: FieldValue.serverTimestamp() });
@@ -390,6 +392,30 @@ export const adminRemoveNanikaImage = callable("adminRemoveNanikaImage", async (
   });
   return { id };
 });
+export const adminMoveNanikaImage = callable("adminMoveNanikaImage", async (raw, context) => {
+  const uid = await administrator(context), d = object(raw, ["id", "fromTier", "tier", "confirmed"]);
+  const id = identifier(d.id, 100), from = tier(d.fromTier), target = tier(d.tier);
+  if (d.confirmed !== true || from === target) fail("別カテゴリへの移動を確認してください", "invalid-argument");
+  await db.runTransaction(async tx => {
+    const image = await tx.get(images.doc(id));
+    if (!image.exists) fail("画像がありません", "not-found");
+    if (image.get("state") !== "ready") fail("抽選候補の画像だけカテゴリを移動できます");
+    if (image.get("tier") === target) return;
+    if (image.get("tier") !== from) fail("カテゴリが変更されています。再取得してください", "aborted");
+    const [sourceStock, targetStock] = await Promise.all([tx.get(inventory.doc(from)), tx.get(inventory.doc(target))]);
+    const n = count(targetStock);
+    const remove = await removePlan(tx, from, count(sourceStock), image.get("poolIndex"));
+    if (remove.selected.id !== id) fail("画像在庫に不整合があります");
+    const append = await appendPlan(tx, target, n);
+    remove.apply(); append(id);
+    tx.set(inventory.doc(target), { available: n + 1 }, { merge: true });
+    tx.update(image.ref, { tier: target, poolIndex: n });
+    tx.create(db.collection("nanikaGachaAudit").doc(), {
+      operation: "move-image", actorUid: uid, imageId: id, fromTier: from, tier: target, createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { id, tier: target };
+});
 export const adminPurgeNanikaImages = callable("adminPurgeNanikaImages", async (raw, context) => {
   const uid = await administrator(context), d = object(raw, ["ids", "confirmed"]);
   if (d.confirmed !== true || !Array.isArray(d.ids) || d.ids.length < 1 || d.ids.length > 30) fail("削除対象を1〜30件指定し確認してください", "invalid-argument");
@@ -448,7 +474,7 @@ export const adminEndNanikaGacha = callable("adminEndNanikaGacha", async (raw, c
     const closedAt = Timestamp.now();
     tx.create(archives.doc(roundId), { ...round.data(), state: "closed", closedAt, archiveComplete: false });
     tx.update(round.ref, { state: "closed", closedAt });
-    tx.update(slot.ref, { visible: false, roundId: null, xAccounts: [], version: slot.get("version") + 1 });
+    tx.update(slot.ref, { visible: false, publishedAt: null, roundId: null, xAccounts: [], version: slot.get("version") + 1 });
     tx.create(db.collection("nanikaGachaAudit").doc(), { operation: "end", actorUid: uid, roundId, createdAt: closedAt });
   });
   await archiveRound(roundId);

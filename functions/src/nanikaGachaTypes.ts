@@ -12,6 +12,7 @@ export type NanikaSlot = {
   fee: number | null;
   exchangePoints: number | null;
   visible: boolean;
+  publishedAt: number | null;
   version: number;
   roundId: string | null;
   available: number;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { callNanika, NANIKA_TIERS, type NanikaSlot } from "@/app/lib/nanikaGacha";
 import { useNanikaAuth, nanikaError } from "@/components/nanika-gacha/NanikaCommon";
 import styles from "@/components/nanika-gacha/nanika.module.css";
+import { formatJstDateTime } from "@/app/lib/dateTime";
 
 function SlotForm({ slot, onSaved }: { slot: NanikaSlot; onSaved: (items: NanikaSlot[]) => void }) {
   const [fee, setFee] = useState(slot.fee === null ? "" : String(slot.fee));
@@ -36,10 +37,12 @@ function SlotForm({ slot, onSaved }: { slot: NanikaSlot; onSaved: (items: Nanika
   return <section className={styles.card}>
     <h2>{NANIKA_TIERS.find(t => t.id === slot.tier)?.label}</h2>
     <p>抽選可能な画像：{slot.available}点／開催回：{slot.roundId ?? "未作成"}</p>
+    <p>公開日時：{slot.publishedAt == null ? "未記録" : formatJstDateTime(new Date(slot.publishedAt))}</p>
     <form onSubmit={save}>
       <label>参加費用（ポイント）<input type="number" required min={0} max={1000000} step={1} value={fee} disabled={busy} onChange={e => setFee(e.target.value)} /></label>
       <label>ポイント化の受取ポイント<input type="number" required min={0} max={1000000} step={1} value={points} disabled={busy} onChange={e => setPoints(e.target.value)} /></label>
       <label><input type="checkbox" checked={visible} disabled={busy} onChange={e => setVisible(e.target.checked)} />全体に表示・受付する（外すと受付停止のみ）</label>
+      <p>非公開から公開へ切り替えると、公開日時を更新します。公開中の設定変更では日時は変わりません。</p>
       <label>残り対象X一覧（1行1回・最大5000行）<textarea rows={6} value={accounts} disabled={busy} placeholder="@account" onChange={e => setAccounts(e.target.value)} /></label>
       <p>抽選で消費済みの行は一覧から減ります。追加する際は最新の残り一覧を再取得してから編集してください。金額変更は新しい抽選だけに適用されます。</p>
       <button type="submit" disabled={busy}>設定を保存</button>
