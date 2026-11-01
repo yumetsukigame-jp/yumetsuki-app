@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { createHash } from "node:crypto";
 import { FieldPath, FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { neraiuchiTitleBody, numberedNeraiuchiTitle } from "./neraiuchiTitle";
 import type {
   NeraiuchiAdminEvent,
   NeraiuchiAvailability,
@@ -20,6 +21,7 @@ const events = db.collection("neraiuchiEvents");
 const archives = db.collection("neraiuchiEventsArchive");
 const secrets = db.collection("neraiuchiSecrets");
 const counters = db.collection("neraiuchiCounters");
+const roundSequence = counters.doc("_roundSequence");
 const audits = db.collection("neraiuchiAudit");
 
 const POLICY = { entryCost: 0, maxPerAccount: 1, maxEntries: 10000, maxWinningNumbers: 100 } as const;
@@ -99,7 +101,7 @@ function validateDraft(data: Record<string, unknown>): ValidatedDraft {
   if (new Set(prizes.map((prize) => prize.number)).size !== prizes.length) invalid("当選番号が重複しています");
   if (data.thumbnailPath !== "/menu/thumbnails/neraiuchi.png") invalid("指定できない画像です");
   return {
-    title: text(data.title, "企画名", 80),
+    title: text(neraiuchiTitleBody(text(data.title, "企画名", 120)), "企画名", 80),
     description: text(data.description, "説明", 2000),
     thumbnailPath: data.thumbnailPath,
     startsAt, endsAt, maxEntries,
@@ -189,7 +191,7 @@ function publicEvent(eventId: string, data: FirebaseFirestore.DocumentData, coun
   const status = availability(data, count, now);
   return {
     id: eventId,
-    title: data.title,
+    title: numberedNeraiuchiTitle(data.title, data.roundNumber),
     description: data.description,
     thumbnailPath: data.thumbnailPath,
     startsAt: data.startsAt.toMillis(),
@@ -217,7 +219,7 @@ function entryResult(data: FirebaseFirestore.DocumentData, released: boolean): N
   }
   const participation = {
     eventId: data.eventId,
-    eventTitleSnapshot: data.eventTitleSnapshot,
+    eventTitleSnapshot: numberedNeraiuchiTitle(data.eventTitleSnapshot, data.roundNumber),
     eventVersion: data.eventVersion,
     acceptedAt: data.acceptedAt.toMillis(),
   };
@@ -315,6 +317,7 @@ export const adminSaveNeraiuchiDraft = callable("adminSaveNeraiuchiDraft", async
     const winningNumbers = prizes.map((prize) => prize.number);
     transaction.set(eventRef, {
       ...visible,
+      roundNumber: null,
       rewardLabel: rewardMode === "manual" ? prizes[0].label : "当選内容は企画終了後にご確認ください",
       rewardMode,
       startsAt: Timestamp.fromMillis(draft.startsAt),
@@ -347,10 +350,10 @@ export const adminPublishNeraiuchi = callable("adminPublishNeraiuchi", async (ra
   const data = input(raw, ["eventId", "expectedVersion"]);
   const eventId = id(data.eventId);
   const auditRef = audits.doc();
-  const version = await db.runTransaction(async (transaction) => {
-    const [event, secret, counter] = await Promise.all([
+  const result = await db.runTransaction(async (transaction) => {
+    const [event, secret, counter, sequence] = await Promise.all([
       transaction.get(events.doc(eventId)), transaction.get(secrets.doc(eventId)),
-      transaction.get(counters.doc(eventId)),
+      transaction.get(counters.doc(eventId)), transaction.get(roundSequence),
     ]);
     if (!event.exists || !secret.exists) throw new functions.https.HttpsError("not-found", "企画設定が見つかりません");
     if (event.get("state") !== "draft") throw new functions.https.HttpsError("failed-precondition", "下書きのみ公開できます");
@@ -360,16 +363,29 @@ export const adminPublishNeraiuchi = callable("adminPublishNeraiuchi", async (ra
     if (acceptedCount(counter) !== 0 || secret.get("rulesVersion") !== event.get("version")) {
       throw new functions.https.HttpsError("failed-precondition", "公開設定に不整合があります");
     }
+    if (!sequence.exists) {
+      const [previous, archived] = await Promise.all([
+        transaction.get(events.where("state", "in", ["published", "closed"]).limit(1)),
+        transaction.get(archives.limit(1)),
+      ]);
+      if (!previous.empty || !archived.empty) {
+        throw new functions.https.HttpsError("failed-precondition", "既存企画の開催回番号を初期設定してから公開してください");
+      }
+    }
+    const roundNumber = (sequence.exists
+      ? integer(sequence.get("lastNumber"), "開催回番号", 0, Number.MAX_SAFE_INTEGER - 1) : 0) + 1;
+    const title = numberedNeraiuchiTitle(draft.title, roundNumber);
     const next = event.get("version") + 1;
-    transaction.update(events.doc(eventId), { state: "published", version: next, publishedAt: FieldValue.serverTimestamp() });
+    transaction.update(events.doc(eventId), { state: "published", version: next, roundNumber, title, publishedAt: FieldValue.serverTimestamp() });
+    transaction.set(roundSequence, { lastNumber: roundNumber, updatedAt: FieldValue.serverTimestamp() });
     transaction.update(secrets.doc(eventId), { rulesVersion: next, publishedVersion: next });
     transaction.create(auditRef, {
-      eventId, operation: "publish", actorUid: uid, version: next,
+      eventId, operation: "publish", actorUid: uid, version: next, roundNumber, title,
       changes: draft, createdAt: FieldValue.serverTimestamp(),
     });
-    return next;
+    return { version: next, roundNumber, title };
   });
-  return { eventId, version };
+  return { eventId, ...result };
 });
 
 async function archiveRound(eventId: string, actorUid: string, expectedVersion?: number): Promise<number> {
@@ -544,6 +560,7 @@ export const joinNeraiuchi = callable("joinNeraiuchi", async (raw, context) => {
       uid, eventId, number, isWinner: Boolean(prize),
       displayNameSnapshot: typeof displayName === "string" && displayName.trim() ? displayName.trim() : "名称未登録",
       eventTitleSnapshot: eventData.title,
+      roundNumber: eventData.roundNumber ?? null,
       rewardLabelSnapshot: prize?.label ?? "",
       claimInstructionsSnapshot: eventData.claimInstructions,
       ...(prize && draft.rewardMode === "claim" ? { prizeSnapshot: prize } : {}),
@@ -639,7 +656,7 @@ export const getNeraiuchiHomeStatus = callable("getNeraiuchiHomeStatus", async (
   const now = Date.now();
   const ended = await latestEndedRound(now);
   const latestEnded = ended ? {
-    id: ended.id, title: ended.get("title"),
+    id: ended.id, title: numberedNeraiuchiTitle(ended.get("title"), ended.get("roundNumber")),
     endedAt: (ended.get("closedAt") ?? ended.get("endsAt")).toMillis(),
   } : null;
   if (!enabled()) return { event: null, latestEnded, refreshAt: null, serverNow: now };
@@ -654,7 +671,7 @@ export const getNeraiuchiHomeStatus = callable("getNeraiuchiHomeStatus", async (
   const current = Date.now();
   const event = round && round.get("state") === "published" &&
     round.get("startsAt").toMillis() <= current && round.get("endsAt").toMillis() > current ? {
-      id: round.id, title: round.get("title"),
+      id: round.id, title: numberedNeraiuchiTitle(round.get("title"), round.get("roundNumber")),
       startsAt: round.get("startsAt").toMillis(), endsAt: round.get("endsAt").toMillis(),
     } : null;
   const boundaries: number[] = [

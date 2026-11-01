@@ -20,7 +20,7 @@ type Api = {
   adminListNeraiuchiEvents: [{ cursor?: string; archived?: boolean }, NeraiuchiPage<NeraiuchiAdminEvent>];
   adminGetNeraiuchiEvent: [{ eventId: string }, { event: NeraiuchiAdminEvent; serverNow: number }];
   adminSaveNeraiuchiDraft: [NeraiuchiDraft & { eventId?: string; expectedVersion?: number }, { eventId: string; version: number }];
-  adminPublishNeraiuchi: [{ eventId: string; expectedVersion: number }, { eventId: string; version: number }];
+  adminPublishNeraiuchi: [{ eventId: string; expectedVersion: number }, { eventId: string; version: number; roundNumber: number; title: string }];
   adminCloseNeraiuchi: [{ eventId: string; expectedVersion: number; reason: string }, { eventId: string; version: number }];
   adminArchiveNeraiuchi: [{ eventId: string; expectedVersion: number }, { eventId: string; version: number }];
   adminListNeraiuchiEntries: [{ eventId: string; cursor?: string }, NeraiuchiPage<NeraiuchiRevealedEntry & { uid: string; displayName: string; isSelf: boolean; acceptedAtNanoseconds: number }>];

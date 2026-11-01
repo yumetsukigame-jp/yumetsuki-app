@@ -6,6 +6,7 @@ import { callNeraiuchi } from "@/app/lib/neraiuchi";
 import type { NeraiuchiAdminEvent } from "@/app/lib/neraiuchi";
 import { parseJstDateTime } from "@/app/lib/dateTime";
 import { quizDeadlineInput } from "@/app/lib/quizDeadline";
+import { neraiuchiTitleBody } from "@/functions/src/neraiuchiTitle";
 import { ErrorNotice, errorMessage } from "./NeraiuchiCommon";
 import styles from "./neraiuchi.module.css";
 
@@ -14,7 +15,7 @@ type PrizeInput = { number: string; label: string; points: string; shippingEnabl
 
 export default function NeraiuchiDraftForm({ event, onSaved }: { event?: NeraiuchiAdminEvent; onSaved?: () => void }) {
   const router = useRouter();
-  const [title, setTitle] = useState(event?.title ?? "");
+  const [title, setTitle] = useState(neraiuchiTitleBody(event?.title ?? ""));
   const [description, setDescription] = useState(event?.description ?? "");
   const [startsAt, setStartsAt] = useState(datetime(event?.startsAt));
   const [endsAt, setEndsAt] = useState(datetime(event?.endsAt));
@@ -47,6 +48,7 @@ export default function NeraiuchiDraftForm({ event, onSaved }: { event?: Neraiuc
   return <form className={styles.form} onSubmit={save} aria-busy={busy}>
     <p>無料・1アカウント1企画1回。番号・当落・参加者一覧は企画終了後に公開します。公開後は設定を変更できません。</p>
     <label>企画名（80文字まで）<input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={80} disabled={busy} /></label>
+    <p>タイトル先頭の<strong>【第n回】</strong>は公開時に自動で付き、編集できません。下書きの保存では開催回番号を消費しません。</p>
     <label>説明（2,000文字まで）<textarea value={description} onChange={(e) => setDescription(e.target.value)} required maxLength={2000} disabled={busy} /></label>
     <label>開始日時（日本時間）<input type="datetime-local" step="1" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required disabled={busy} /></label>
     <label>終了日時（日本時間・この時刻から受付不可）<input type="datetime-local" step="1" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required disabled={busy} /></label>
