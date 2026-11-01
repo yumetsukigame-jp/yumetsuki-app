@@ -8,7 +8,9 @@ import { formatJstDateTime } from "@/app/lib/dateTime";
 import { errorMessage, useNeraiuchiAuth } from "./NeraiuchiCommon";
 import styles from "@/app/home.module.css";
 
-export default function NeraiuchiHomeAnnouncement() {
+export default function NeraiuchiHomeAnnouncement({ onEnded }: {
+  onEnded?: (event: NeraiuchiHomeStatus["latestEnded"]) => void;
+}) {
   const { ready, uid } = useNeraiuchiAuth();
   const [event, setEvent] = useState<NeraiuchiHomeStatus["event"]>(null);
   const [error, setError] = useState("");
@@ -25,6 +27,7 @@ export default function NeraiuchiHomeAnnouncement() {
         const data = await callNeraiuchi("getNeraiuchiHomeStatus", {});
         if (!active) return;
         setEvent(data.event); setError("");
+        onEnded?.(data.latestEnded ?? null);
         window.clearTimeout(transitionTimer);
         if (data.refreshAt !== null) transitionTimer = window.setTimeout(() => {
           setEvent(null);
@@ -46,11 +49,11 @@ export default function NeraiuchiHomeAnnouncement() {
       window.clearTimeout(transitionTimer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [ready, uid, retry]);
+  }, [ready, uid, retry, onEnded]);
   if (!neraiuchiEnabled) return null;
   return <>
     {error && <div role="alert" className={styles.error}>
-      開催状況を取得できませんでした。
+      ゆめつきの狙い撃ち企画の開催状況が確認できませんでした。
       <button type="button" onClick={() => setRetry((current) => current + 1)}>開催状況を再取得</button>
     </div>}
     {event && <aside className={styles.neraiuchiAnnouncement} aria-label="狙い撃ち開催のお知らせ">

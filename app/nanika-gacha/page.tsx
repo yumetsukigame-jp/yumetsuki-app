@@ -70,6 +70,7 @@ export default function NanikaGachaPage() {
         <Image src={`/nanika-gacha/thumbnails/${t.thumbnail}.webp`} alt="" width={1536} height={1024} className={styles.thumbnail} />
         <h2>{t.label}</h2><p>参加費用：{slot.fee}ポイント／ポイント化：{slot.exchangePoints}ポイント</p>
         <p>抽選可能な景品：{slot.available}点／あなたの参加枠：{slot.remainingUses}回</p>
+        <Link href={`/nanika-gacha/prizes/${slot.tier}`} className={styles.prizeListLink}>景品一覧を表示</Link>
         <button type="button" disabled={!uid || busy || slot.remainingUses < 1 || slot.available < 1 || animating}
           onClick={() => { setSelected(slot); setAgree(false); }}>参加条件を確認</button>
       </section>;

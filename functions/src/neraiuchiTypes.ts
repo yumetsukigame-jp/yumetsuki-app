@@ -54,6 +54,7 @@ export type NeraiuchiListedEvent = NeraiuchiEvent & { entry: NeraiuchiEntry | nu
 
 export type NeraiuchiHomeStatus = {
   event: Pick<NeraiuchiEvent, "id" | "title" | "startsAt" | "endsAt"> | null;
+  latestEnded: (Pick<NeraiuchiEvent, "id" | "title"> & { endedAt: number }) | null;
   refreshAt: number | null;
   serverNow: number;
 };

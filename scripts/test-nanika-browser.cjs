@@ -21,6 +21,9 @@ async function run() {
     try {
       const context = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: "no-preference" });
       await context.addInitScript(({ apiKey, uid, token }) => {
+        sessionStorage.setItem("home-user", JSON.stringify({
+          uid, nickname: "ローカル画面検証", points: 100, totalLoginDays: 1, subscriber: false,
+        }));
         const open = indexedDB.open("firebaseLocalStorageDb", 1);
         open.onupgradeneeded = () => open.result.createObjectStore("firebaseLocalStorage", { keyPath: "fbase_key" });
         open.onsuccess = () => {
@@ -41,6 +44,8 @@ async function run() {
       }));
       const receipts = [];
       const images = [];
+      const imageRequests = [];
+      let homeStatusFails = false;
       let claims = 0, draws = 0;
       await context.route("**/*", async route => {
         const url = new URL(route.request().url());
@@ -52,9 +57,12 @@ async function run() {
             assert.ok(cache && text.includes(`${cache[1]}.has(`) && text.includes(`${cache[1]}.add(`), "Admin role cache fixture needs updating");
             return route.fulfill({ response, body: text.replace(cache[0], `${cache[1]}=new Set(["${uid}"]);`) });
           }
-          if (url.pathname.startsWith("/api/nanika-gacha/images/")) return route.fulfill({
-            contentType: "image/png", body: fs.readFileSync(path.join(root, "public/menu/thumbnails/nanika-gacha.png")),
-          });
+          if (url.pathname.startsWith("/api/nanika-gacha/images/")) {
+            imageRequests.push(url);
+            return route.fulfill({
+              contentType: "image/png", body: fs.readFileSync(path.join(root, "public/menu/thumbnails/nanika-gacha.png")),
+            });
+          }
           return route.continue();
         }
         if (["identitytoolkit.googleapis.com", "us-east1-point-app-1f854.cloudfunctions.net"].includes(url.hostname) && route.request().method() === "OPTIONS") {
@@ -69,7 +77,22 @@ async function run() {
         const action = url.pathname.split("/").at(-1), input = route.request().postDataJSON().data;
         let result;
         if (action === "listNanikaGacha" || action === "adminGetNanikaGacha") result = { items: slots };
+        else if (action === "listNanikaGachaPrizes") {
+          const start = input.cursor ? 50 : 0, end = input.cursor ? 51 : 50;
+          result = { items: Array.from({ length: end - start }, (_, index) => ({
+            id: `gallery-${input.tier}-${start + index}`, tier: input.tier, name: `${input.tier}景品${start + index}`,
+            image: `/api/nanika-gacha/images/gallery-${input.tier}-${start + index}`,
+          })), nextCursor: input.cursor ? null : "gallery-cursor" };
+        }
+        else if (action === "getNeraiuchiHomeStatus") {
+          if (homeStatusFails) return route.fulfill({
+            status: 500, contentType: "application/json", headers: cors,
+            body: JSON.stringify({ error: { status: "INTERNAL", message: "Mock status failure" } }),
+          });
+          result = { event: null, latestEnded: { id: "ended-event", title: "終了告知の画面検証", endedAt: Date.now() - 1000 }, refreshAt: null };
+        }
         else if (action === "recordDailyLogin") result = { points: 100, totalLoginDays: 1 };
+        else if (action === "getNibuichiUserStats") result = { global: {} };
         else if (action === "drawNanikaGacha") {
           assert.equal(input.consent72h, true); assert.equal(input.participantUid, uid);
           draws++; slots[0].available--; slots[0].remainingUses--;
@@ -111,6 +134,41 @@ async function run() {
           await page.screenshot({ path: path.join(process.env.NANIKA_TEST_ARTIFACTS, `nanika-${name}-${width}.png`), fullPage: true });
         }
       }
+      await page.getByRole("link", { name: "景品一覧を表示", exact: true }).first().click();
+      await page.getByRole("heading", { name: "何かのPSAガチャの景品一覧", exact: true }).waitFor();
+      await page.getByRole("button", { name: "景品1を拡大", exact: true }).waitFor();
+      assert.equal(await page.getByRole("list", { name: "景品の縮小画像一覧" }).locator("li").count(), 50);
+      assert.equal(await page.getByText("psa景品0", { exact: true }).count(), 0, "Names are not displayed in the thumbnail grid");
+      assert.equal(imageRequests.filter(url => url.searchParams.get("size") === "full").length, 0);
+      for (const width of [360, 390, 768, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      }
+      const firstPrize = page.getByRole("button", { name: "景品1を拡大", exact: true });
+      await firstPrize.click();
+      const dialog = page.getByRole("dialog", { name: "psa景品0" });
+      await dialog.waitFor();
+      await dialog.locator('img[src$="?size=full"]').waitFor();
+      await page.waitForFunction(() => document.querySelector('dialog img')?.complete);
+      assert.equal(imageRequests.filter(url => url.searchParams.get("size") === "full").length, 1);
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      assert.equal(await firstPrize.evaluate(element => element === document.activeElement), true);
+      await page.getByRole("button", { name: "次の50件を表示" }).click();
+      await page.getByRole("button", { name: "景品51を拡大", exact: true }).waitFor();
+      assert.equal(await page.getByRole("list", { name: "景品の縮小画像一覧" }).locator("li").count(), 51);
+      await page.goto(`${base}/`);
+      const endedNotice = page.getByRole("link", { name: /ゆめつきの狙い撃ち企画「終了告知の画面検証」が終了しました/ });
+      await endedNotice.waitFor();
+      assert.equal(await endedNotice.getAttribute("href"), "/neraiuchi/ended-event");
+      homeStatusFails = true;
+      await page.goto(`${base}/`);
+      await page.getByText("ゆめつきの狙い撃ち企画の開催状況が確認できませんでした。", { exact: false }).waitFor();
+      homeStatusFails = false;
+      await page.getByRole("button", { name: "開催状況を再取得", exact: true }).click();
+      await endedNotice.waitFor();
+      await page.goto(`${base}/nanika-gacha`);
+      await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().waitFor();
       page.on("dialog", dialog => dialog.accept());
       await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().click();
       const confirmation = page.getByRole("region", { name: "抽選前の確認" });
@@ -145,7 +203,7 @@ async function run() {
       await page.getByText("一括アップロードが完了しました", { exact: true }).waitFor();
       assert.equal(images[0].name, "一括アップロード確認");
       assert.deepEqual(errors, [], "Uncaught browser errors");
-      console.log(`${name}: four widths, required consent, GIF, history recovery, final point confirmation, per-tier settings and upload passed.`);
+      console.log(`${name}: thumbnail-only gallery, on-demand full image/name, pagination, modal dismissal, ended notice, contextual errors and existing Nanika flows passed.`);
     } finally { await browser.close(); }
   }
 }

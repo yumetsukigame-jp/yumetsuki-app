@@ -42,6 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 source_images/
+/temp_info/nanika-stock/
 
 serviceAccountKey.json
 

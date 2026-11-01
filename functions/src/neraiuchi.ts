@@ -594,7 +594,7 @@ async function listedEvent(snapshot: FirebaseFirestore.DocumentSnapshot, uid: st
   };
 }
 
-async function latestEndedEvent(uid: string, now: number): Promise<NeraiuchiListedEvent | null> {
+async function latestEndedRound(now: number): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
   const [archived, expired] = await Promise.all([
     archives.where("archiveComplete", "in", [true, false]).orderBy("closedAt", "desc").limit(1).get(),
     events.where("state", "==", "published").where("endsAt", "<=", Timestamp.fromMillis(now))
@@ -603,7 +603,11 @@ async function latestEndedEvent(uid: string, now: number): Promise<NeraiuchiList
   const candidates = [...archived.docs, ...expired.docs];
   candidates.sort((a, b) =>
     (b.get("closedAt") ?? b.get("endsAt")).toMillis() - (a.get("closedAt") ?? a.get("endsAt")).toMillis());
-  const latest = candidates[0];
+  return candidates[0] ?? null;
+}
+
+async function latestEndedEvent(uid: string, now: number): Promise<NeraiuchiListedEvent | null> {
+  const latest = await latestEndedRound(now);
   if (!latest) return null;
   if (latest.ref.parent.id !== archives.id) return listedEvent(latest, uid);
   // Frozen metadata and own history stay readable while the entries are transferred.
@@ -633,7 +637,12 @@ export const getNeraiuchiHomeStatus = callable("getNeraiuchiHomeStatus", async (
   requireUser(context);
   input(raw, []);
   const now = Date.now();
-  if (!enabled()) return { event: null, refreshAt: null, serverNow: now };
+  const ended = await latestEndedRound(now);
+  const latestEnded = ended ? {
+    id: ended.id, title: ended.get("title"),
+    endedAt: (ended.get("closedAt") ?? ended.get("endsAt")).toMillis(),
+  } : null;
+  if (!enabled()) return { event: null, latestEnded, refreshAt: null, serverNow: now };
   const [running, upcoming] = await Promise.all([
     events.where("state", "==", "published").where("startsAt", "<=", Timestamp.fromMillis(now))
       .where("endsAt", ">", Timestamp.fromMillis(now)).orderBy("startsAt", "desc")
@@ -652,7 +661,7 @@ export const getNeraiuchiHomeStatus = callable("getNeraiuchiHomeStatus", async (
     ...(round ? [round.get("endsAt").toMillis()] : []),
     ...(upcoming.docs[0] ? [upcoming.docs[0].get("startsAt").toMillis()] : []),
   ].filter((time) => time > now);
-  return { event, refreshAt: boundaries.length ? Math.min(...boundaries) : null, serverNow: current };
+  return { event, latestEnded, refreshAt: boundaries.length ? Math.min(...boundaries) : null, serverNow: current };
 });
 
 export const getNeraiuchiHistory = callable("getNeraiuchiHistory", async (raw, context) => {

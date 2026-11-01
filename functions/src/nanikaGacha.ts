@@ -134,6 +134,25 @@ export const listNanikaGacha = callable("listNanikaGacha", async (raw, context) 
   object(raw, []);
   return { items: await slotViews(false, context.auth?.uid), serverNow: Date.now() };
 });
+export const listNanikaGachaPrizes = callable("listNanikaGachaPrizes", async raw => {
+  const d = object(raw, ["tier", "cursor"]), t = tier(d.tier);
+  const slot = await slots.doc(t).get();
+  if (slot.get("visible") !== true) fail("現在公開中の企画ではありません", "not-found");
+  let query = images.where("tier", "==", t).where("state", "==", "ready")
+    .orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc");
+  if (d.cursor !== undefined) {
+    const previous = await images.doc(identifier(d.cursor, 100)).get();
+    if (!previous.exists || previous.get("tier") !== t) fail("続きの景品がありません");
+    query = query.startAfter(previous);
+  }
+  const snapshot = await query.select("name").limit(51).get();
+  return {
+    items: snapshot.docs.slice(0, 50).map(image => ({
+      id: image.id, tier: t, name: image.get("name"), image: `/api/nanika-gacha/images/${image.id}`,
+    })),
+    nextCursor: snapshot.size > 50 ? snapshot.docs[49].id : null,
+  };
+});
 export const adminGetNanikaGacha = callable("adminGetNanikaGacha", async (raw, context) => {
   await administrator(context); object(raw, []);
   return { items: await slotViews(true), serverNow: Date.now() };

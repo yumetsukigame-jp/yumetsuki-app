@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 export const dynamic = "force-dynamic";
 
 import { db, auth } from "../firebase";
@@ -13,7 +13,8 @@ import Image from "next/image";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 import { homeGuide, visibleHomeMenu } from "@/app/lib/homeMenu";
-import { neraiuchiEnabled } from "@/app/lib/neraiuchi";
+import { neraiuchiEnabled, type NeraiuchiHomeStatus } from "@/app/lib/neraiuchi";
+import { initialHomeAnnouncementIds } from "@/app/lib/homeAnnouncementsDisplay";
 import FeatureSection from "@/components/home/FeatureSection";
 import MenuImageCard from "@/components/home/MenuImageCard";
 import NeraiuchiHomeAnnouncement from "@/components/neraiuchi/NeraiuchiHomeAnnouncement";
@@ -65,7 +66,8 @@ type CachedUser = {
 
 type ArchiveAnnouncement = {
   id: string;
-  type: "quiz" | "gacha" | "quiz_new" | "gacha_new" | "gacha_win";
+  type: "quiz" | "gacha" | "quiz_new" | "gacha_new" | "gacha_win" | "neraiuchi";
+  sourceId?: string;
   title: string;
   frame?: string;
   gachaCode?: string;
@@ -132,9 +134,13 @@ export default function Home() {
   const [subscriber, setSubscriber] = useState<boolean>(false);
   const [todayPrediction, setTodayPrediction] = useState<string | null>(null);
   const [todayResult, setTodayResult] = useState<string | null>(null);
-  const [archiveAnnouncements, setArchiveAnnouncements] = useState<
+  const [storedArchiveAnnouncements, setArchiveAnnouncements] = useState<
     ArchiveAnnouncement[]
   >([]);
+  const [latestEnded, setLatestEnded] = useState<NeraiuchiHomeStatus["latestEnded"]>(null);
+  const handleEnded = useCallback((ended: NeraiuchiHomeStatus["latestEnded"]) => {
+    setLatestEnded(ended && ended.endedAt >= Date.now() - ANNOUNCEMENT_RETENTION_MS ? ended : null);
+  }, []);
   const [showAllArchiveAnnouncements, setShowAllArchiveAnnouncements] =
     useState(false);
 
@@ -411,19 +417,16 @@ export default function Home() {
     }）`;
   }
 
-  const initialAnnouncementIds = new Set([
-    ...archiveAnnouncements
-      .filter((announcement) => announcement.type !== "gacha_win")
-      .slice(0, 2)
-      .map((announcement) => announcement.id),
-    ...archiveAnnouncements
-      .filter(
-        (announcement) =>
-          announcement.type === "gacha_win" &&
-          announcement.isTopFrame === true
-      )
-      .map((announcement) => announcement.id),
-  ]);
+  const archiveAnnouncements: ArchiveAnnouncement[] = [...storedArchiveAnnouncements];
+  if (neraiuchiEnabled && latestEnded) {
+    archiveAnnouncements.push({
+      id: `neraiuchi_${latestEnded.id}`, type: "neraiuchi", sourceId: latestEnded.id,
+      title: latestEnded.title, archivedAt: new Date(latestEnded.endedAt),
+    });
+    archiveAnnouncements.sort((a, b) =>
+      (toAnnouncementDate(b.archivedAt)?.getTime() ?? 0) - (toAnnouncementDate(a.archivedAt)?.getTime() ?? 0));
+  }
+  const initialAnnouncementIds = initialHomeAnnouncementIds(archiveAnnouncements);
   const initialArchiveAnnouncements = archiveAnnouncements.filter(
     (announcement) => initialAnnouncementIds.has(announcement.id)
   );
@@ -456,7 +459,7 @@ export default function Home() {
       />
 
       <div className={styles.content}>
-      <NeraiuchiHomeAnnouncement key={uid} />
+      <NeraiuchiHomeAnnouncement key={uid} onEnded={handleEnded} />
       <div className={styles.info}>
       {userLoadError && <div className={styles.error} role="alert">
         最新のユーザー情報を取得できませんでした。表示中の情報は古い可能性があります。
@@ -544,6 +547,7 @@ export default function Home() {
     </div>
     <div style={{ display: "grid", gap: "6px" }}>
       {visibleArchiveAnnouncements.map((announcement) => {
+        const isNeraiuchi = announcement.type === "neraiuchi";
         const isGachaWin = announcement.type === "gacha_win";
         const isQuiz =
           announcement.type === "quiz" || announcement.type === "quiz_new";
@@ -564,7 +568,9 @@ export default function Home() {
           <Link
             key={announcement.id}
             href={
-              isGachaWin
+              isNeraiuchi
+                ? `/neraiuchi/${announcement.sourceId}`
+                : isGachaWin
                 ? `/gacha/results?code=${announcement.gachaCode}`
                 : isNew
                   ? isQuiz
@@ -581,7 +587,9 @@ export default function Home() {
               textDecoration: "none",
             }}
           >
-            {isGachaWin ? (
+            {isNeraiuchi ? (
+              <>🎯 ゆめつきの狙い撃ち企画「{announcement.title}」が終了しました。</>
+            ) : isGachaWin ? (
               <>
                 🎉 {announcement.winnerNickname || "ユーザー"}
                 {formattedWinnerXAccount &&

@@ -42,5 +42,6 @@ export type NanikaImage = {
   thumbnailBytes: number;
   canPurge: boolean;
 };
+export type NanikaPrize = Pick<NanikaImage, "id" | "tier" | "name" | "image">;
 export type NanikaRound = { id: string; tier: NanikaTier; closedAt: number; archiveComplete: boolean };
 export type NanikaPage<T> = { items: T[]; nextCursor: string | null };

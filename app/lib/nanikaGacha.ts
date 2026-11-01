@@ -1,11 +1,12 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
-import type { NanikaImage, NanikaPage, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier } from "@/functions/src/nanikaGachaTypes";
+import type { NanikaImage, NanikaPage, NanikaPrize, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier } from "@/functions/src/nanikaGachaTypes";
 export { NANIKA_TIERS, NANIKA_HOLD_MS } from "@/functions/src/nanikaGachaTypes";
-export type { NanikaImage, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier };
+export type { NanikaImage, NanikaPrize, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier };
 
 type Api = {
   listNanikaGacha: [Record<string, never>, { items: NanikaSlot[]; serverNow: number }];
+  listNanikaGachaPrizes: [{ tier: NanikaTier; cursor?: string }, NanikaPage<NanikaPrize>];
   adminGetNanikaGacha: [Record<string, never>, { items: NanikaSlot[] }];
   adminSaveNanikaGacha: [{ tier: NanikaTier; version: number; fee: number; exchangePoints: number; visible: boolean; xAccounts: string[] }, { items: NanikaSlot[] }];
   drawNanikaGacha: [{ tier: NanikaTier; requestId: string; roundId: string; fee: number; exchangePoints: number; consent72h: true; participantUid: string }, { receipt: NanikaReceipt; serverNow: number }];

@@ -44,6 +44,7 @@ class Query {
   orderBy(key, direction = "asc") { return new Query(this.path, this.filters, [...this.orders, [key, direction]], this.maximum, this.after); }
   limit(n) { return new Query(this.path, this.filters, this.orders, n, this.after); }
   startAfter(snapshot) { return new Query(this.path, this.filters, this.orders, this.maximum, snapshot); }
+  select() { return this; }
   compare(a, b) {
     for (const [key, direction] of this.orders.length ? this.orders : [["__name__", "asc"]]) {
       const av = scalar(key === "__name__" ? a.id : a.get(key)), bv = scalar(key === "__name__" ? b.id : b.get(key));
@@ -139,6 +140,31 @@ const draw = (roundId, requestId, uid = "alice", extra = {}) => call("drawNanika
   tier: "psa", roundId, requestId, fee: 10, exchangePoints: 30, consent72h: true, participantUid: uid, ...extra,
 }, uid);
 
+test("public prize gallery lists only drawable tier images, paginates and exposes no binary or administrative data", async () => {
+  await fixture(0);
+  for (let i = 0; i < 51; i++) data.set(`nanikaGachaImages/prize${String(i).padStart(2, "0")}`, {
+    tier: "psa", name: `景品${i}`, state: "ready", createdAt: Timestamp.now(),
+    thumbnail: Buffer.from("thumbnail"), sourceHash: "private-hash", poolIndex: i,
+  });
+  for (const state of ["reserved", "shipping", "removed"]) data.set(`nanikaGachaImages/${state}`, {
+    tier: "psa", name: state, state, createdAt: Timestamp.now(),
+  });
+  data.set("nanikaGachaImages/other-tier", { tier: "planet", name: "別のガチャ", state: "ready", createdAt: Timestamp.now() });
+  const first = await api.listNanikaGachaPrizes.run({ tier: "psa" }, {});
+  assert.equal(first.items.length, 50);
+  assert.ok(first.nextCursor);
+  assert.ok(first.items.every(item => item.tier === "psa" && item.id.startsWith("prize")));
+  assert.deepEqual(Object.keys(first.items[0]).sort(), ["id", "image", "name", "tier"]);
+  assert.ok(first.items.every(item => !item.image.includes("size=full")));
+  const second = await call("listNanikaGachaPrizes", { tier: "psa", cursor: first.nextCursor }, "alice");
+  assert.equal(second.items.length, 1);
+  assert.equal(second.nextCursor, null);
+  assert.equal(new Set([...first.items, ...second.items].map(item => item.id)).size, 51);
+  await assert.rejects(call("listNanikaGachaPrizes", { tier: "psa", cursor: "other-tier" }));
+  await assert.rejects(call("listNanikaGachaPrizes", { tier: "planet" }), error => error.code === "not-found");
+  await assert.rejects(call("listNanikaGachaPrizes", { tier: "invalid" }), error => error.code === "invalid-argument");
+  await assert.rejects(call("listNanikaGachaPrizes", { tier: "psa", past: true }));
+});
 test("reward redemption is atomic, idempotent and survives fulfillment migration", async () => {
   await fixture(0);
   data.set("rewards/item", { name: "商品", cost: 30, stock: 2, image: "/rewards/test.webp" });
