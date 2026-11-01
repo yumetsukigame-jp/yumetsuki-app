@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import styles from "./UserBranding.module.css";
 
 export default function UserHeader() {
   return (
-    <header className="w-full">
-      <Link href="/" aria-label="ゆめつきの書斎 トップへ戻る" style={{ display: "block" }}>
-      <Image
-        src="/header.webp"
-        alt="ゆめつきの書斎 ヘッダー"
-        width={6936}
-        height={995}
-        sizes="100vw"
-        priority
-        className="w-full h-auto object-contain pointer-events-none"
-      />
+    <header className={styles.header}>
+      <Link href="/" aria-label="ゆめつきの書斎 トップへ" className={styles.banner}>
+        <Image
+          src="/branding/header-starry-wide.svg"
+          alt="ゆめつきの書斎"
+          width={2100}
+          height={300}
+          unoptimized
+          priority
+          className={styles.image}
+        />
       </Link>
     </header>
   );

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import styles from "./UserBranding.module.css";
 
 export default function UserFooter() {
   const pathname = usePathname();
@@ -17,24 +19,9 @@ export default function UserFooter() {
   };
 
   return (
-    <footer
-      style={{
-        marginTop: "50px",
-        padding: "20px 16px calc(24px + env(safe-area-inset-bottom, 0px))",
-        borderTop: "1px solid #ddd",
-        textAlign: "center",
-        background: "#fff",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        {pathname !== "/" && (
+    <footer className={styles.footer}>
+      {pathname !== "/" && (
+        <div className={styles.backControls}>
           <button
             type="button"
             onClick={handleBack}
@@ -51,23 +38,19 @@ export default function UserFooter() {
           >
             一つ前の画面に戻る
           </button>
-        )}
-
-        <Link
-          href="/"
-          style={{
-            minWidth: 140,
-            padding: "12px 18px",
-            borderRadius: 8,
-            background: "#2563eb",
-            color: "#fff",
-            textDecoration: "none",
-            fontSize: 16,
-          }}
-        >
-          トップページへ戻る
-        </Link>
-      </div>
+        </div>
+      )}
+      <Link href="/" aria-label="トップページへ戻る" className={styles.banner}>
+        <Image
+          src="/branding/footer-starry-wide.svg"
+          alt=""
+          width={2100}
+          height={300}
+          unoptimized
+          className={styles.image}
+        />
+        <small className={styles.caption}>クリックでトップページへ</small>
+      </Link>
     </footer>
   );
 }

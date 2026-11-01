@@ -1,0 +1,17 @@
+生成方法：内蔵 image_gen ツール
+生成済み画像の配置先：public/menu/thumbnails/neraiuchi.png、public/backgrounds/yumetsuki-stars.png、public/menu/icons/{target,gift,history}.png
+
+[thumbnail]
+Use case: ads-marketing. Create a polished landscape 16:9 Japanese game announcement thumbnail for 「ゆめつきの狙い撃ち」. Reference images define official character identity: long black hair, blue eyes, oversized white witch hat with white bow and pale cyan underside, white mage robe, gold staff. Preserve her appearance faithfully. Character on left aiming a gentle magical cyan star toward a glowing concentric target on right. Deep navy starry magical backdrop, icy cyan, white and subtle gold. Elegant anime illustration, legible refined Japanese typography on right. Exact text only: 「ゆめつきの狙い撃ち」 as large dominant title, and 「次の一押しが、当たりの一番かもしれない。」 as smaller tagline. No weapons, no additional characters, no UI screenshots, no prize promises, no watermark. Safe margins, beautiful usable promotional artwork.
+
+[background]
+Use case: stylized-concept. Portrait 9:16 background art for the Japanese magical lottery game ゆめつきの狙い撃ち. Deep navy blue night sky, delicate cyan magical arcs and small gold and white stars only near outer edges, a subtle glowing concentric target near upper right corner, bottom edge a faint magical mist. Central 65 percent must be calm dark navy negative space suitable for overlaying readable UI cards. Polished elegant anime fantasy game environment. No characters, no letters, no numbers, no UI, no watermark.
+
+[target]
+Use case: stylized-concept. Single isolated premium fantasy mobile game button icon: a luminous icy cyan concentric archery target with a tiny white four point magical star at the bullseye. Circular navy enamel medallion with narrow gold rim, restrained cyan glow. Front view, centered, generous transparent padding, clean bold silhouette readable at 48px. White witch magical theme. No text, no letters, no numbers, no arrows or weapons, no mockup. Truly transparent background outside the medallion.
+
+[gift]
+Use case: stylized-concept. Single isolated premium fantasy mobile game button icon: a white gift box with icy cyan ribbon and a small golden four point star on top. Circular navy enamel medallion with narrow gold rim, restrained cyan glow. Front view, centered, generous transparent padding, clean bold silhouette readable at 48px. White witch magical theme. No text, no letters, no numbers, no mockup. Truly transparent background outside the medallion.
+
+[history]
+Use case: stylized-concept. Single isolated premium fantasy mobile game button icon: a white parchment scroll with three simple cyan horizontal strokes and a small golden clock overlapping its lower right corner. Circular navy enamel medallion with narrow gold rim, restrained cyan glow. Front view, centered, generous transparent padding, clean bold silhouette readable at 48px. White witch magical theme. No text, no letters, no numbers, no mockup. Truly transparent background outside the medallion.

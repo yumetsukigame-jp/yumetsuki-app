@@ -1,0 +1,46 @@
+.header {
+  width: 100%;
+  background: #08152e;
+}
+
+.banner {
+  display: block;
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  text-decoration: none;
+}
+
+.banner:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: -3px;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.footer {
+  margin-top: 50px;
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  background: #08152e;
+}
+
+.backControls {
+  display: flex;
+  justify-content: center;
+  margin: 0 16px 12px;
+}
+
+.caption {
+  display: block;
+  padding: 5px 12px 0;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.6;
+}
