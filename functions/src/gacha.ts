@@ -8,7 +8,8 @@ import {
   getHomeAnnouncementRef,
   recordGachaWinAnnouncementInTransaction,
 } from "./common/archiveAnnouncements";
-import { normalizeX } from "./common/normalize";
+import { matchesXAccountRow, normalizeX } from "./common/normalize";
+import { gachaShippingImage } from "./fulfillment";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -112,18 +113,8 @@ function findMatchingXAccountIndex(
   gacha: GachaDocument,
   xAccount: unknown
 ): number {
-  const userX = normalizeX(
-    typeof xAccount === "string" ? xAccount : undefined
-  );
-  if (!userX) {
-    return -1;
-  }
-
   return (gacha.xAccountList ?? []).findIndex(
-    (account) =>
-      typeof account === "string" &&
-      account.includes("@") &&
-      normalizeX(account).includes(userX)
+    (account) => matchesXAccountRow(account, xAccount)
   );
 }
 
@@ -714,6 +705,12 @@ export const useGachaCode = functions
           reward,
           createdAt: resultCreatedAt,
         });
+        tx.create(db.collection("gachaShippingClaims").doc(resultRef.id), {
+          uid, code, frame: selectedFrame.label, reward,
+          shippingEnabled: selectedFrame.shippingEnabled === true,
+          image: gachaShippingImage(freshGacha.thumbnail),
+          choice: "pending", createdAt: resultCreatedAt,
+        });
 
         if (announcementRef && announcementSnapshot) {
           recordGachaWinAnnouncementInTransaction(
@@ -749,6 +746,8 @@ export const useGachaCode = functions
         return {
           frame: selectedFrame.label,
           reward,
+          resultId: resultRef.id,
+          shippingEnabled: selectedFrame.shippingEnabled === true,
         };
       });
     } catch (err: unknown) {

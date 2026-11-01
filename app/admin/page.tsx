@@ -250,9 +250,15 @@ export default function AdminTopPage() {
         <MenuLink href="/admin/neraiuchi">狙い撃ちの企画・公開・参加結果</MenuLink>
       </Section>
 
+      <Section title="何かの景品ガチャ管理" forceCollapseAll>
+        <MenuLink href="/admin/nanika-gacha">4種類の設定・参加条件・抽選結果</MenuLink>
+        <MenuLink href="/admin/nanika-gacha/archive">専用開催回アーカイブ</MenuLink>
+      </Section>
+
       <Section title="🖼 画像管理" forceCollapseAll>
         <MenuLink href="/admin/images/upload">画像アップロード</MenuLink>
         <MenuLink href="/admin/images">画像一覧</MenuLink>
+        <MenuLink href="/admin/nanika-gacha/images">何かの景品ガチャ（画像・一括アップロード・容量整理）</MenuLink>
       </Section>
     </div>
   );

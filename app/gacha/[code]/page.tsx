@@ -16,6 +16,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import { matchesXAccountRow } from "../../../functions/src/common/normalize";
 
 /* --------------------------------------------------
    JST 6時切り替え（完全修正版）
@@ -225,18 +226,7 @@ if (isXAccountMatch) {
   const userSnap = await getDoc(doc(db, "users", uid));
   const user = userSnap.data();
 
-  // ★ 最強 normalize（不可視文字・全角カッコ・全角@・改行すべて除去）
-  function normalizeX(x: string) {
-    return x
-      .toLowerCase()
-      .replace(/[\s\r\n\t]+/g, "")              // 改行・空白・タブ
-      .replace(/[()（）【】［］]/g, "")         // 全角・半角カッコ類
-      .replace(/[@＠]/g, "")                    // 全角・半角 @
-      .replace(/[\u200B-\u200D\uFEFF]/g, "")    // ゼロ幅スペース類
-      .replace(/[^\x20-\x7E]/g, "");            // その他不可視文字
-  }
-
-  const userX = normalizeX(user?.xAccount ?? "");
+  const userX = user?.xAccount ?? "";
 
   if (!userX) {
     setError("Xアカウントを登録していないため、このガチャは引けません");
@@ -244,16 +234,7 @@ if (isXAccountMatch) {
     return;
   }
 
-  // ★ ガチャ側リストから「@ を含む行」だけを抽出（名前行を除外）
-  const rawList = (data.xAccountList ?? []).filter((s: string) =>
-    s.includes("@")
-  );
-
-  // ★ normalize
-  const list = rawList.map((s: string) => normalizeX(s));
-
-  // ★ 部分一致（あなたの仕様）
-  const matched = list.some((entry: string) => entry.includes(userX));
+  const matched = (data.xAccountList ?? []).some((entry: string) => matchesXAccountRow(entry, userX));
 
   if (!matched) {
     setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます。登録Xアカウントをご確認ください。");

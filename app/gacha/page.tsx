@@ -7,15 +7,13 @@ import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
 import {
-  collection,
   doc,
   getDoc,
-  increment,
-  serverTimestamp,
-  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
+import { claimGachaShipping } from "@/app/lib/fulfillment";
+import { matchesXAccountRow } from "../../functions/src/common/normalize";
 
 /* --------------------------------------------------
    JST 6時切り替え（Functions と完全一致）
@@ -34,15 +32,6 @@ function getYesterdayJST6() {
     now.setDate(now.getDate() - 1);
   }
   return now.toISOString().slice(0, 10);
-}
-
-function getGachaThumbnailSrc(thumbnail: unknown) {
-  if (typeof thumbnail !== "string") return "";
-
-  const value = thumbnail.trim();
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
-  return `/gacha/${value}`;
 }
 
 export default function GachaInner() {
@@ -69,13 +58,9 @@ export default function GachaInner() {
     useState(false);
   const shippingGuardActiveRef = useRef(false);
 
-  const shippingFrame = result && gacha
-    ? gacha.frames.find(
-        (frame: DocumentData) => frame.label === result.frame
-      )
-    : null;
+  const shippingReceiptRef = useRef<{ resultId: string; uid: string } | null>(null);
   const shouldWarnBeforeLeaving =
-    Boolean(result && shippingFrame?.shippingEnabled) &&
+    Boolean(result?.shippingEnabled) &&
     !shippingDecisionResolved;
   const shippingWarningMessage =
     "この画面を遷移すると賞品はポイントとして確定し、今回の景品の発送は出来なくなります。移動してよろしいですか？";
@@ -86,6 +71,12 @@ export default function GachaInner() {
 
     shippingGuardActiveRef.current = false;
     setShippingDecisionResolved(true);
+    const receipt = shippingReceiptRef.current;
+    if (receipt) {
+      void claimGachaShipping({ resultId: receipt.resultId, participantUid: receipt.uid, choice: "points", confirmed: true })
+        .catch(error => console.error("ポイント受取の確定に失敗しました", error));
+      shippingReceiptRef.current = null;
+    }
     return true;
   };
 
@@ -318,18 +309,7 @@ const checkCode = async () => {
     const userSnap = await getDoc(doc(db, "users", userUid));
     const user = userSnap.data();
 
-    // ★ 最強 normalize
-    function normalizeX(x: string) {
-      return x
-        .toLowerCase()
-        .replace(/[\s\r\n\t]+/g, "")
-        .replace(/[()（）【】［］]/g, "")
-        .replace(/[@＠]/g, "")
-        .replace(/[\u200B-\u200D\uFEFF]/g, "")
-        .replace(/[^\x20-\x7E]/g, "");
-    }
-
-    const userX = normalizeX(user?.xAccount ?? "");
+    const userX = user?.xAccount ?? "";
 
     if (!userX) {
       setError("Xアカウントを登録していないため、このガチャは引けません");
@@ -337,14 +317,7 @@ const checkCode = async () => {
       return;
     }
 
-    // ★ 名前行を除外
-    const rawList = (data.xAccountList ?? []).filter((s: string) =>
-      s.includes("@")
-    );
-
-    const list = rawList.map((s: string) => normalizeX(s));
-
-    const matched = list.some((entry: string) => entry.includes(userX));
+    const matched = (data.xAccountList ?? []).some((entry: string) => matchesXAccountRow(entry, userX));
 
     if (!matched) {
       setError("このガチャは指定されたXアカウント(リポストなど条件達成者)のみ引けます");
@@ -387,11 +360,16 @@ const checkCode = async () => {
     setStop(false);
 
     try {
+      const participantUid = auth.currentUser?.uid;
+      if (!participantUid) throw new Error("ログインが必要です");
       const fn = httpsCallable(functions, "useGachaCode");
       const res: DocumentData = await fn({ code });
+      if (auth.currentUser?.uid !== participantUid) throw new Error("ログインアカウントが変更されました。再読込してください");
 
       const frame = res.data.frame;
-      const reward = res.data.reward;
+      shippingReceiptRef.current = res.data.shippingEnabled
+        ? { resultId: res.data.resultId, uid: participantUid }
+        : null;
 
       setFinalFrame(frame);
 
@@ -445,7 +423,6 @@ const handleShipping = async () => {
   }
 
   const frameName = result.frame;
-  const rewardPoints = result.reward;
   const shippingItemName = `${frameName}（ガチャ）`;
 
   if (
@@ -456,38 +433,11 @@ const handleShipping = async () => {
 
   setIsShipping(true);
   try {
-    const userSnap = await getDoc(doc(db, "users", uid));
-    const userData = userSnap.data() ?? {};
-
-    const pendingRef = doc(collection(db, "shippingPending"));
-    const requestId = pendingRef.id;
-    const rewardData = {
-      requestId,
-      uid,
-      rewardId: `gacha_${code}_${Date.now()}`,
-      name: shippingItemName,
-      cost: rewardPoints,
-      image:
-        getGachaThumbnailSrc(gacha.thumbnail) || "/rewards/gacha.webp",
-      timestamp: new Date(),
-      requestedAt: serverTimestamp(),
-      status: "pending",
-      shipped: false,
-      userName: userData.name ?? "",
-      userEmail: userData.email ?? "",
-      userX: userData.xAccount ?? "",
-      userNickname: userData.displayName ?? "",
-      xAccountConfirmed: userData.xAccountConfirmed ?? false,
-    };
-
-    const batch = writeBatch(db);
-    // shippingPending is the source of truth for unshipped requests.
-    batch.set(pendingRef, rewardData);
-    batch.set(doc(db, "selectedRewards", requestId), rewardData);
-    batch.update(doc(db, "users", uid), {
-      points: increment(-rewardPoints),
+    const response = await claimGachaShipping({
+      resultId: result.resultId, choice: "shipping", participantUid: uid, confirmed: true,
     });
-    await batch.commit();
+    setUserPoints(response.data.points);
+    shippingReceiptRef.current = null;
 
     shippingGuardActiveRef.current = false;
     setShippingDecisionResolved(true);
@@ -725,11 +675,7 @@ const handleShipping = async () => {
 
               {/* 発送ボタン */}
               {(() => {
-                const frameInfo = gacha.frames.find(
-                  (f: DocumentData) => f.label === result.frame
-                );
-
-                if (frameInfo?.shippingEnabled) {
+                if (result.shippingEnabled) {
                   return (
                     <>
                       <p

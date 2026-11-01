@@ -4,6 +4,9 @@
 
 ## 残っている内容
 
+- **「何かの景品ガチャ」は実装済み・本番未反映。** 利用者の `/nanika-gacha`、管理者の `/admin/nanika-gacha` に追加済み。公開には専用Functions・ルール・インデックス・Hostingの反映が必要。新インデックスがREADYになってからAPIを反映し、その後にPushによるVercel公開とFirebase Hostingを反映する。
+- **公開前に4種類の初期設定と景品在庫の登録が必要。** 参加費用・受取ポイント・対象X一覧は管理者が種類ごとに設定する。未設定の状態では抽選できない。画像1枚を景品1点として登録するため、同じ実物を重複登録しない。
+- **共有データの書き込み権限対策は実装済み・本番未反映。** 利用者の残高・X情報・当選／利用記録はサーバー管理へ制限。通常のポイント交換・通常ガチャの発送選択と、管理者のX編集・プロフィール削除を専用Functionsへ移行した。管理者の設定・発送管理と本人のオリカ所有チェックは維持。公開時、すでに開いている旧画面は再読み込みが必要。既存データの削除・残高の再計算はしない。
 - **ガイドの説明・スクリーンショット更新は未確認。** 旧資料02にあった、新しいトップページと狙い撃ち画面に合わせる作業。完了扱いにしない。
 - **実機iPhone Safariでの表示・操作確認は未実施。** ブラウザ自動確認とは区別する。本番で抽選・ポイント交換・発送の試験は行わない。
 
@@ -19,6 +22,7 @@
 - 使用中の背景：`public/backgrounds/yumetsuki-stars.png` と `.webp`
 - 本番反映済みのヘッダー・フッター：`public/branding/`
 - ヘッダー・フッターの生成原本・生成指示・旧案参考画像：`design-assets/branding/`
+- 何かの景品ガチャの実装済み仕様・生成原本・参考画像・制作メモ：`design-assets/nanika-gacha/`。実アプリ用WebPは `public/nanika-gacha/thumbnails/` と `public/menu/thumbnails/nanika-gacha.webp`
 - 素材一覧・ハッシュ・生成指示：`design-assets/manifest.json`、`design-assets/*generation-prompts.txt`
 
-素材一覧の `file` は一覧ファイルのあるフォルダからの相対パス。`status: deployed` は本番反映済み、`superseded` / `reference` は非公開の保管用。
+素材一覧の `file` は一覧ファイルのあるフォルダからの相対パス。`status: implemented` はコードへ組み込み済み・本番反映待ち、`deployed` は本番反映済み、`superseded` / `reference` は非公開の保管用。

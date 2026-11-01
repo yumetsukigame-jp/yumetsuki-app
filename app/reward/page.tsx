@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { db, auth } from "@/firebase";
 import {
   collection,
   getDocs,
   doc,
   getDoc,
-  serverTimestamp,
-  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { redeemReward } from "@/app/lib/fulfillment";
 
 type RewardItem = {
   id: string;
@@ -25,6 +24,8 @@ export default function RewardPage() {
   const [rewards, setRewards] = useState<RewardItem[]>([]);
   const [points, setPoints] = useState<number | null>(null);
   const router = useRouter();
+  const selecting = useRef(false);
+  const [busy, setBusy] = useState(false);
 
   /* --------------------------------------------------
      ユーザーのポイント取得
@@ -71,6 +72,7 @@ export default function RewardPage() {
      発送物を選択
   -------------------------------------------------- */
   const handleSelect = async (reward: RewardItem) => {
+    if (selecting.current) return;
     if (points === null) return;
 
     if (points < reward.cost) {
@@ -92,47 +94,26 @@ export default function RewardPage() {
     const user = auth.currentUser;
     if (!user) return;
 
-    const uid = user.uid;
-
-    const newPoints = points - reward.cost;
-
-    /* --------------------------------------------------
-       ① 発送依頼ごとに一意なIDで保存
-    -------------------------------------------------- */
-    const pendingRef = doc(collection(db, "shippingPending"));
-    const requestId = pendingRef.id;
-    const legacyRef = doc(db, "selectedRewards", requestId);
-
-    const pendingData = {
-      requestId,
-      uid,
-      rewardId: reward.id,
-      name: reward.name,
-      cost: reward.cost,
-      image: reward.image ?? null,
-      requestedAt: serverTimestamp(),
-      status: "pending",
-      shipped: false,
-      timestamp: new Date(),
-    };
-
-    const batch = writeBatch(db);
-    batch.update(doc(db, "users", uid), {
-      points: newPoints,
-    });
-    batch.update(doc(db, "rewards", reward.id), {
-      stock: reward.stock - 1,
-    });
-    batch.set(pendingRef, pendingData);
-    batch.set(legacyRef, pendingData);
-    await batch.commit();
-
-    /* --------------------------------------------------
-       ② ポイントを画面に反映
-    -------------------------------------------------- */
-    setPoints(newPoints);
-
-    router.push("/reward/complete");
+    selecting.current = true;
+    setBusy(true);
+    try {
+      const key = `reward-request:${user.uid}:${reward.id}`;
+      const requestId = localStorage.getItem(key) ?? crypto.randomUUID();
+      localStorage.setItem(key, requestId);
+      const response = await redeemReward({
+        rewardId: reward.id, requestId, cost: reward.cost, participantUid: user.uid, confirmed: true,
+      });
+      localStorage.removeItem(key);
+      if (auth.currentUser?.uid !== user.uid) return;
+      setPoints(response.data.points);
+      router.push("/reward/complete");
+    } catch (error) {
+      console.error("ポイント交換の発送依頼に失敗しました", error);
+      alert(error instanceof Error ? error.message : "発送依頼を保存できませんでした。同じ操作を再試行してください。");
+    } finally {
+      selecting.current = false;
+      setBusy(false);
+    }
   };
 
   return (
@@ -173,6 +154,7 @@ export default function RewardPage() {
             {/* ★ 改善したボタン（①のデザイン） */}
             <button
               onClick={() => handleSelect(reward)}
+              disabled={busy}
               style={{
                 padding: "12px 20px",
                 background: "#4f46e5",

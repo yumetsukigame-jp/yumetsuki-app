@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { auth, storage, db } from "@/firebase";
 import { ref, uploadBytesResumable } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
@@ -12,6 +13,7 @@ import {
 } from "@/app/lib/imageFolders";
 
 export default function ImageUploadPage() {
+  const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -146,7 +148,10 @@ export default function ImageUploadPage() {
         <label>フォルダ：</label>
         <select
           value={folder}
-          onChange={(e) => setFolder(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value === "nanika-gacha") router.push("/admin/nanika-gacha/images");
+            else setFolder(e.target.value);
+          }}
           style={{ padding: 8, marginLeft: 10 }}
         >
           {IMAGE_FOLDER_OPTIONS.map((option) => (
@@ -154,6 +159,7 @@ export default function ImageUploadPage() {
               {option.label}
             </option>
           ))}
+          <option value="nanika-gacha">何かの景品ガチャ（専用一括アップロード）</option>
         </select>
       </div>
 

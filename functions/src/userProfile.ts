@@ -83,14 +83,15 @@ async function claimXAccount(
   uid: string,
   xAccount: string,
   previousXAccount: string | undefined,
-  writeUserProfile: (transaction: FirebaseFirestore.Transaction) => void
+  writeUserProfile: (transaction: FirebaseFirestore.Transaction) => void,
+  administratorOverride = false
 ): Promise<void> {
   const normalizedXAccount = normalizeX(xAccount);
-  await assertNoExistingXAccount(normalizedXAccount, uid);
+  if (normalizedXAccount) await assertNoExistingXAccount(normalizedXAccount, uid);
 
-  const claimRef = db
+  const claimRef = normalizedXAccount ? db
     .collection("xAccountClaims")
-    .doc(xAccountClaimId(normalizedXAccount));
+    .doc(xAccountClaimId(normalizedXAccount)) : undefined;
   const previousNormalizedXAccount = normalizeX(previousXAccount);
   const previousClaimRef =
     previousNormalizedXAccount && previousNormalizedXAccount !== normalizedXAccount
@@ -100,12 +101,20 @@ async function claimXAccount(
       : undefined;
 
   await db.runTransaction(async (transaction) => {
-    const claim = await transaction.get(claimRef);
+    const currentUser = await transaction.get(db.collection("users").doc(uid));
+    const claim = claimRef ? await transaction.get(claimRef) : undefined;
     const previousClaim = previousClaimRef
       ? await transaction.get(previousClaimRef)
       : undefined;
 
-    if (claim.exists && claim.get("uid") !== uid) {
+    if (normalizeX(currentUser.get("xAccount")) !== normalizeX(previousXAccount)) {
+      throw new functions.https.HttpsError("aborted", "Xアカウントが更新されました。再読込してください。");
+    }
+    if (!administratorOverride && currentUser.get("xAccountConfirmed") === true &&
+        normalizeX(currentUser.get("xAccount")) !== normalizedXAccount) {
+      throw new functions.https.HttpsError("permission-denied", "確定済みのXアカウントは変更できません。");
+    }
+    if (claim?.exists && claim.get("uid") !== uid) {
       throw new functions.https.HttpsError(
         "already-exists",
         "このXアカウントはすでに登録されています。"
@@ -113,7 +122,7 @@ async function claimXAccount(
     }
 
     writeUserProfile(transaction);
-    transaction.set(claimRef, {
+    if (claimRef) transaction.set(claimRef, {
       uid,
       normalizedXAccount,
       updatedAt: Timestamp.now(),
@@ -138,6 +147,51 @@ function requireUid(context: functions.https.CallableContext): string {
 
   return uid;
 }
+
+export const adminUpdateUserXAccount = functions.region("us-east1").https.onCall(async (data, context) => {
+  const actor = requireUid(context);
+  if (!(await db.collection("admins").doc(actor).get()).exists) {
+    throw new functions.https.HttpsError("permission-denied", "管理者のみ実行できます。");
+  }
+  if (typeof data?.uid !== "string" || !data.uid || data.uid.includes("/") ||
+      typeof data?.xAccount !== "string" || data.xAccount.length > 200) {
+    throw new functions.https.HttpsError("invalid-argument", "アカウント情報が不正です。");
+  }
+  const xAccount = data.xAccount.trim();
+  if (xAccount && (!xAccount.startsWith("@") || !normalizeX(xAccount))) {
+    throw new functions.https.HttpsError("invalid-argument", "Xアカウントは @ から入力してください。");
+  }
+  const ref = db.collection("users").doc(data.uid), user = await ref.get();
+  if (!user.exists) throw new functions.https.HttpsError("not-found", "ユーザーがありません。");
+  await claimXAccount(data.uid, xAccount, user.get("xAccount"),
+    tx => tx.update(ref, { xAccount, xAccountConfirmed: false }), true);
+  return { updated: true };
+});
+
+export const adminDeleteUserProfile = functions.region("us-east1").https.onCall(async (data, context) => {
+  const actor = requireUid(context);
+  if (!(await db.collection("admins").doc(actor).get()).exists) {
+    throw new functions.https.HttpsError("permission-denied", "管理者のみ実行できます。");
+  }
+  if (typeof data?.uid !== "string" || !data.uid || data.uid.includes("/")) {
+    throw new functions.https.HttpsError("invalid-argument", "ユーザーIDが不正です。");
+  }
+  await db.runTransaction(async tx => {
+    const ref = db.collection("users").doc(data.uid), user = await tx.get(ref);
+    if (!user.exists) return;
+    const pending = await tx.get(db.collection("nanikaGachaHistory").doc(data.uid).collection("entries")
+      .where("choice", "==", "pending").limit(1));
+    if (!pending.empty) {
+      throw new functions.https.HttpsError("failed-precondition", "何かの景品ガチャに未確定の受取があります。先に受取方法を確定してください。");
+    }
+    const normalized = normalizeX(user.get("xAccount"));
+    const claimRef = normalized ? db.collection("xAccountClaims").doc(xAccountClaimId(normalized)) : null;
+    const claim = claimRef ? await tx.get(claimRef) : null;
+    if (claimRef && claim?.get("uid") === data.uid) tx.delete(claimRef);
+    tx.delete(ref);
+  });
+  return { deleted: true };
+});
 
 export const createUserProfile = functions
   .region("us-east1")

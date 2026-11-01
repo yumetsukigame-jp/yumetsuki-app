@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   GACHA_REGULAR_FOLDER,
   IMAGE_FOLDER_OPTIONS,
@@ -19,6 +20,7 @@ import {
 } from "@/app/lib/imageFolders";
 
 export default function ImageListPage() {
+  const router = useRouter();
   const [images, setImages] = useState<DocumentData[]>([]);
   const [folder, setFolder] = useState(GACHA_REGULAR_FOLDER);
   const [loading, setLoading] = useState(true);
@@ -62,7 +64,10 @@ export default function ImageListPage() {
         <label>フォルダ：</label>
         <select
           value={folder}
-          onChange={(e) => setFolder(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value === "nanika-gacha") router.push("/admin/nanika-gacha/images");
+            else setFolder(e.target.value);
+          }}
           style={{ padding: 8, marginLeft: 10 }}
         >
           {IMAGE_FOLDER_OPTIONS.map((option) => (
@@ -70,6 +75,7 @@ export default function ImageListPage() {
               {option.label}
             </option>
           ))}
+          <option value="nanika-gacha">何かの景品ガチャ（専用管理）</option>
         </select>
 
         <Link

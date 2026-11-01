@@ -11,7 +11,7 @@ export default function MenuImageCard({ item }: { item: HomeMenuLink }) {
   return (
     <Link href={item.href} prefetch={false} className={styles.card}>
       {!imageFailed && <Image
-        src={`/menu/thumbnails/${item.image}.webp`} alt="" width={1672} height={941}
+        src={`/menu/thumbnails/${item.image}.webp`} alt="" width={item.imageWidth ?? 1672} height={item.imageHeight ?? 941}
         sizes="(max-width: 480px) calc(100vw - 64px), 408px"
         className={styles.thumbnail}
         onError={() => setImageFailed(true)}

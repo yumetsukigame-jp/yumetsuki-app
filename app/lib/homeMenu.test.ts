@@ -8,7 +8,7 @@ const links = (enabled: boolean) => [
   homeGuide.href, "https://yumetsuki.base.shop", "/admin",
 ];
 
-test("all 21 existing destinations are preserved and the three new links are flag-gated", () => {
+test("all 21 existing destinations are preserved; Nanika is separate and Neraiuchi remains flag-gated", () => {
   const old = [
     "/nibuichi", "/nibuichi/guide", "/nibuichi/ranking", "/nibuichi/history",
     "/gacha/list", "/gacha/guide", "/gacha", "/gacha/results", "/gacha/archive",
@@ -16,10 +16,11 @@ test("all 21 existing destinations are preserved and the three new links are fla
     "/code", "/reward", "/history", "/archive", "/profile", "/guide",
     "https://yumetsuki.base.shop", "/admin",
   ];
-  assert.deepEqual(new Set(links(false)), new Set(old));
-  assert.deepEqual(new Set(links(true)), new Set([...old, "/neraiuchi", "/neraiuchi/guide", "/neraiuchi/history"]));
+  const nanika = ["/nanika-gacha", "/nanika-gacha/guide", "/nanika-gacha/history"];
+  assert.deepEqual(new Set(links(false)), new Set([...old, ...nanika]));
+  assert.deepEqual(new Set(links(true)), new Set([...old, ...nanika, "/neraiuchi", "/neraiuchi/guide", "/neraiuchi/history"]));
   assert.deepEqual(visibleHomeMenu(true).map((section) => section.id),
-    ["nibuichi", "gacha", "quiz", "neraiuchi", "points", "account"]);
+    ["nibuichi", "gacha", "nanika-gacha", "quiz", "neraiuchi", "points", "account"]);
   assert.ok(visibleHomeMenu(false).every((section) => section.id !== "neraiuchi"));
 });
 

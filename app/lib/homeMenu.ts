@@ -4,6 +4,8 @@ export type HomeMenuLink = {
   icon?: string;
   image?: string;
   description?: string;
+  imageWidth?: number;
+  imageHeight?: number;
 };
 export type HomeMenuSection = {
   id: string;
@@ -34,6 +36,12 @@ export const homeMenu: HomeMenuSection[] = [
       { label: "ガチャ結果を見る", href: "/gacha/results", icon: "history" },
       { label: "ガチャアーカイブを見る", href: "/gacha/archive", icon: "book" },
     ],
+  },
+  {
+    id: "nanika-gacha", title: "何かの景品ガチャ", color: "#4338ca", accent: "#818cf8",
+    cards: [{ label: "何かの景品ガチャを見る", href: "/nanika-gacha", image: "nanika-gacha", imageWidth: 1536, imageHeight: 1024, description: "画像の景品を、発送またはポイントで。" }],
+    guides: [{ label: "何かの景品ガチャの遊び方", href: "/nanika-gacha/guide", icon: "book" }],
+    details: [{ label: "自分の当選・受取履歴を見る", href: "/nanika-gacha/history", icon: "history" }],
   },
   {
     id: "quiz", title: "クイズ", color: "#0369a1", accent: "#0ea5e9",

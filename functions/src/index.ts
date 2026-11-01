@@ -27,10 +27,14 @@ export {
   recordDailyLogin,
   updateUserProfile,
   syncUserEmail,
+  adminUpdateUserXAccount,
+  adminDeleteUserProfile,
 } from "./userProfile";
 
 export * from "./nibuichi";
 export * from "./neraiuchi";
+export * from "./nanikaGacha";
+export * from "./fulfillment";
 
 /* ============================================================
    ★ imageProcessor（そのまま re-export）

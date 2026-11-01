@@ -1,0 +1,152 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Local UI checks with mock services only. */
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
+
+const base = process.env.NANIKA_TEST_URL || "http://127.0.0.1:3215";
+if (new URL(base).hostname !== "127.0.0.1") throw Error("Only loopback UI tests are allowed");
+const root = path.join(__dirname, "..");
+const apiKey = fs.readFileSync(path.join(root, "firebase.ts"), "utf8").match(/apiKey: "([^"]+)"/)[1];
+const uid = "browser_test";
+const token = `${Buffer.from('{"alg":"none"}').toString("base64url")}.${Buffer.from(JSON.stringify({
+  aud: "point-app-1f854", sub: uid, user_id: uid, iat: Math.floor(Date.now() / 1000),
+  exp: Math.floor(Date.now() / 1000) + 3600, firebase: { sign_in_provider: "password" },
+})).toString("base64url")}.mock`;
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+
+async function run() {
+  for (const [name, engine] of [["chromium", chromium], ["webkit", webkit]]) {
+    const browser = await engine.launch();
+    try {
+      const context = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: "no-preference" });
+      await context.addInitScript(({ apiKey, uid, token }) => {
+        const open = indexedDB.open("firebaseLocalStorageDb", 1);
+        open.onupgradeneeded = () => open.result.createObjectStore("firebaseLocalStorage", { keyPath: "fbase_key" });
+        open.onsuccess = () => {
+          const tx = open.result.transaction("firebaseLocalStorage", "readwrite");
+          tx.objectStore("firebaseLocalStorage").put({
+            fbase_key: `firebase:authUser:${apiKey}:[DEFAULT]`,
+            value: { uid, email: "local@example.invalid", emailVerified: true, isAnonymous: false,
+              providerData: [], apiKey, appName: "[DEFAULT]",
+              stsTokenManager: { refreshToken: "mock-only", accessToken: token, expirationTime: Date.now() + 3600000 },
+              createdAt: String(Date.now()), lastLoginAt: String(Date.now()) },
+          });
+          tx.oncomplete = () => { open.result.close(); window.nanikaSeeded = true; };
+        };
+      }, { apiKey, uid, token });
+      let slots = ["psa", "satellite", "planet", "star"].map(tier => ({
+        tier, fee: 10, exchangePoints: 30, visible: true, version: 1, roundId: "mock-round",
+        available: 2, remainingUses: 2, xAccounts: ["@browser_test", "@browser_test"],
+      }));
+      const receipts = [];
+      const images = [];
+      let claims = 0, draws = 0;
+      await context.route("**/*", async route => {
+        const url = new URL(route.request().url());
+        if (url.origin === base) {
+          if (/\/chunks\/app\/admin\/layout-[^/]+\.js$/.test(url.pathname)) {
+            // Mock the legacy client role cache only; actual new API authorization is tested separately.
+            const response = await route.fetch(), text = await response.text();
+            const cache = text.match(/([\w$]+)=new Set;/);
+            assert.ok(cache && text.includes(`${cache[1]}.has(`) && text.includes(`${cache[1]}.add(`), "Admin role cache fixture needs updating");
+            return route.fulfill({ response, body: text.replace(cache[0], `${cache[1]}=new Set(["${uid}"]);`) });
+          }
+          if (url.pathname.startsWith("/api/nanika-gacha/images/")) return route.fulfill({
+            contentType: "image/png", body: fs.readFileSync(path.join(root, "public/menu/thumbnails/nanika-gacha.png")),
+          });
+          return route.continue();
+        }
+        if (["identitytoolkit.googleapis.com", "us-east1-point-app-1f854.cloudfunctions.net"].includes(url.hostname) && route.request().method() === "OPTIONS") {
+          return route.fulfill({ status: 204, headers: { ...cors, "Access-Control-Allow-Headers": route.request().headers()["access-control-request-headers"] || "Authorization,Content-Type" } });
+        }
+        if (url.hostname === "identitytoolkit.googleapis.com") return route.fulfill({
+          contentType: "application/json", headers: cors,
+          body: JSON.stringify({ users: [{ localId: uid, email: "local@example.invalid", emailVerified: true }] }),
+        });
+        if (url.hostname !== "us-east1-point-app-1f854.cloudfunctions.net") return route.abort();
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+        const action = url.pathname.split("/").at(-1), input = route.request().postDataJSON().data;
+        let result;
+        if (action === "listNanikaGacha" || action === "adminGetNanikaGacha") result = { items: slots };
+        else if (action === "recordDailyLogin") result = { points: 100, totalLoginDays: 1 };
+        else if (action === "drawNanikaGacha") {
+          assert.equal(input.consent72h, true); assert.equal(input.participantUid, uid);
+          draws++; slots[0].available--; slots[0].remainingUses--;
+          const receipt = { id: `nanika_gacha_${uid}_${input.requestId}`, tier: input.tier, roundId: input.roundId,
+            imageId: "mock-image", name: "画面確認用の景品", image: "/api/nanika-gacha/images/mock-image",
+            fee: input.fee, exchangePoints: input.exchangePoints, acceptedAt: Date.now(), deadline: Date.now() + 72 * 3600000,
+            choice: "pending", automatic: false };
+          receipts.unshift(receipt); result = { receipt };
+        } else if (action === "getNanikaGachaHistory") result = { items: receipts, nextCursor: null };
+        else if (action === "claimNanikaGacha") {
+          claims++; assert.equal(input.confirmed, true);
+          const receipt = receipts.find(item => item.id === input.id);
+          receipt.choice = input.choice; if (input.choice === "points") slots[0].available++;
+          result = { receipt };
+        } else if (action === "adminSaveNanikaGacha") {
+          slots = slots.map(slot => slot.tier === input.tier ? { ...slot, ...input, version: slot.version + 1 } : slot);
+          result = { items: slots };
+        } else if (action === "adminListNanikaImages") result = { items: images, nextCursor: null };
+        else if (action === "adminUploadNanikaImage") {
+          assert.ok(Buffer.from(input.base64, "base64").length <= 6 * 1024 * 1024);
+          images.push({ id: input.id, name: input.name, tier: input.tier, state: "ready",
+            image: `/api/nanika-gacha/images/${input.id}`, largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
+          result = { id: input.id };
+        } else throw Error(`Unexpected callable in local test: ${action}`);
+        return route.fulfill({ contentType: "application/json", headers: cors, body: JSON.stringify({ result: { ...result, serverNow: Date.now() } }) });
+      });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", error => errors.push(error.message));
+      for (const width of [360, 390, 768, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${base}/nanika-gacha`);
+        await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().waitFor();
+        await page.waitForFunction(() => [...document.querySelectorAll("button")].some(b => b.textContent === "参加条件を確認" && !b.disabled));
+        assert.equal(await page.getByRole("button", { name: "参加条件を確認", exact: true }).count(), 4);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (process.env.NANIKA_TEST_ARTIFACTS) {
+          fs.mkdirSync(process.env.NANIKA_TEST_ARTIFACTS, { recursive: true });
+          await page.screenshot({ path: path.join(process.env.NANIKA_TEST_ARTIFACTS, `nanika-${name}-${width}.png`), fullPage: true });
+        }
+      }
+      page.on("dialog", dialog => dialog.accept());
+      await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().click();
+      const confirmation = page.getByRole("region", { name: "抽選前の確認" });
+      assert.equal(await confirmation.getByRole("button", { name: "最終確認して抽選する" }).isDisabled(), true);
+      await confirmation.getByRole("checkbox").check();
+      await confirmation.getByRole("button", { name: "最終確認して抽選する" }).click();
+      await page.getByRole("button", { name: "演出をスキップして当選品を見る" }).click();
+      await page.getByRole("button", { name: "ポイント化の確認へ" }).waitFor();
+      assert.equal(draws, 1); assert.equal(claims, 0);
+      await page.goto(`${base}/nanika-gacha/history`);
+      await page.getByRole("button", { name: "ポイント化の確認へ" }).click();
+      assert.equal(claims, 0, "Navigation must not auto-convert the prize");
+      const points = page.getByRole("region", { name: "ポイント化の最終確認" });
+      const final = points.getByRole("button", { name: "最終確認して30ポイントを受け取る" });
+      assert.equal(await final.isDisabled(), true);
+      await points.getByRole("checkbox").check(); await final.click();
+      await page.getByText("30ポイント受取済み", { exact: true }).waitFor();
+      assert.equal(claims, 1); assert.equal(slots[0].available, 2);
+      await page.goto(`${base}/admin/nanika-gacha`);
+      await page.getByRole("button", { name: "設定を保存", exact: true }).first().waitFor();
+      await page.getByLabel("参加費用（ポイント）").first().fill("42");
+      await Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/adminSaveNanikaGacha")),
+        page.getByRole("button", { name: "設定を保存", exact: true }).first().click(),
+      ]);
+      await page.waitForFunction(() => document.querySelector('input[type="number"]')?.value === "42");
+      assert.equal(slots[0].fee, 42); assert.equal(slots[1].fee, 10);
+      await page.goto(`${base}/admin/nanika-gacha/images`);
+      await page.getByLabel("景品画像を複数選択").setInputFiles(path.join(root, "public/menu/thumbnails/nanika-gacha.png"));
+      await page.getByLabel("景品名", { exact: true }).fill("一括アップロード確認");
+      await page.getByRole("button", { name: "未完了の画像を一括アップロード" }).click();
+      await page.getByText("一括アップロードが完了しました", { exact: true }).waitFor();
+      assert.equal(images[0].name, "一括アップロード確認");
+      assert.deepEqual(errors, [], "Uncaught browser errors");
+      console.log(`${name}: four widths, required consent, GIF, history recovery, final point confirmation, per-tier settings and upload passed.`);
+    } finally { await browser.close(); }
+  }
+}
+run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/firebase";
+import { db, functions } from "@/firebase";
+import { httpsCallable } from "firebase/functions";
 import {
   collection,
-  deleteDoc,
   doc,
   DocumentData,
   getDocs,
@@ -191,8 +191,8 @@ export default function UsersPage() {
     if (input === null) return;
 
     const newPoints = Number(input);
-    if (Number.isNaN(newPoints)) {
-      alert("数字を入力してください");
+    if (!Number.isSafeInteger(newPoints) || newPoints < 0) {
+      alert("0以上の整数を入力してください");
       return;
     }
 
@@ -204,9 +204,14 @@ export default function UsersPage() {
   const deleteUser = async (uid: string) => {
     if (!confirm("本当に削除しますか？")) return;
 
-    await deleteDoc(doc(db, "users", uid));
-    alert("ユーザーを削除しました");
-    await refreshCurrentPage();
+    try {
+      await httpsCallable(functions, "adminDeleteUserProfile")({ uid });
+      alert("ユーザーを削除しました");
+      await refreshCurrentPage();
+    } catch (error) {
+      console.error("ユーザーの削除に失敗しました", error);
+      alert(error instanceof Error ? error.message : "ユーザーを削除できませんでした");
+    }
   };
 
   const confirmXAccount = async (uid: string) => {
@@ -219,12 +224,14 @@ export default function UsersPage() {
     const input = prompt("新しいXアカウントを入力してください", currentX ?? "");
     if (input === null) return;
 
-    await updateDoc(doc(db, "users", uid), {
-      xAccount: input,
-      xAccountConfirmed: false,
-    });
-    alert("Xアカウントを更新しました");
-    await refreshCurrentPage();
+    try {
+      await httpsCallable(functions, "adminUpdateUserXAccount")({ uid, xAccount: input });
+      alert("Xアカウントを更新しました");
+      await refreshCurrentPage();
+    } catch (error) {
+      console.error("Xアカウントの更新に失敗しました", error);
+      alert(error instanceof Error ? error.message : "Xアカウントを更新できませんでした");
+    }
   };
 
   return (

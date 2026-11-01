@@ -18,6 +18,7 @@ import { getCountFromServer } from "firebase/firestore";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import { matchesXAccountRow } from "../../../functions/src/common/normalize";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -331,7 +332,7 @@ export default function PublicGachaListPage() {
           if (flags.includes("x_account_match")) {
             const isMatched = Boolean(userXAccount) &&
               (gacha.xAccountList ?? []).some((account) =>
-                normalizeXAccount(account).includes(userXAccount)
+                matchesXAccountRow(account, userXAccount)
               );
             if (!isMatched) {
               return [gacha.code, { canPlay: false, reason: "対象のXアカウントではありません" }];

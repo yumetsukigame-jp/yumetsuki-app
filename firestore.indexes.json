@@ -1,6 +1,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "nanikaGachaImages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tier", "order": "ASCENDING" },
+        { "fieldPath": "state", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "nibuichi_user_predictions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -115,5 +125,8 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "nanikaGachaImages", "fieldPath": "thumbnail", "indexes": [] },
+    { "collectionGroup": "nanikaGachaImageData", "fieldPath": "data", "indexes": [] }
+  ]
 }
