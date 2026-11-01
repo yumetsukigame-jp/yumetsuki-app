@@ -254,7 +254,7 @@
     {
       "id": "branding/header-starry-wide",
       "file": "../public/branding/header-starry-wide.svg",
-      "status": "implemented",
+      "status": "deployed",
       "sourceArtwork": "branding/header-starry-wide-source.png",
       "generationPrompt": "branding/header-wide-generation-prompt.txt",
       "destination": "public/branding/header-starry-wide.svg",
@@ -264,7 +264,7 @@
       "bytes": 2241023,
       "sha256": "1af0d9e6d23328d3f6647a89af77dcc7227dfa8febaec8939bfaac15203b836c",
       "source": "image_gen artwork in self-contained SVG viewport",
-      "usage": "Installed shared header. max-width 840px, height auto, max rendered height 120px. Production deployment pending."
+      "usage": "Deployed shared header on Vercel and Firebase Hosting. max-width 840px, height auto, max rendered height 120px."
     },
     {
       "id": "branding/footer-starry-wide",
@@ -278,8 +278,8 @@
       "bytes": 2184936,
       "sha256": "75d56b864440ea25f24ae1b2443c4c543e203fad7131cdd3ac091b61ad7ffce2",
       "source": "image_gen artwork in self-contained SVG viewport",
-      "status": "implemented",
-      "usage": "Installed shared footer, entire banner links to /. Small caption: クリックでトップページへ. Production deployment pending."
+      "status": "deployed",
+      "usage": "Deployed shared footer on Vercel and Firebase Hosting, entire banner links to /. Small caption: クリックでトップページへ."
     },
     {
       "id": "branding/footer-starry-wide-source",

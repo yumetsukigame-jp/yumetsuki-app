@@ -4,7 +4,6 @@
 
 ## 残っている内容
 
-- **共通ヘッダー・フッターの本番反映は未実施。** 横長SVGを `public/branding/` に配置し、共通部品への組み込みは完了。旧ヘッダー原本は保存した。フッターのトップリンク・戻る操作・安全領域の余白を維持し、360／390／768／1280pxのChromium・WebKitで表示と操作を確認済み。Push・本番デプロイは未実施。反映済みの実装指示と旧見本は削除した。
 - **ガイドの説明・スクリーンショット更新は未確認。** 旧資料02にあった、新しいトップページと狙い撃ち画面に合わせる作業。完了扱いにしない。
 - **実機iPhone Safariでの表示・操作確認は未実施。** ブラウザ自動確認とは区別する。本番で抽選・ポイント交換・発送の試験は行わない。
 
@@ -18,8 +17,8 @@
 
 - 使用中のサムネイル・アイコン：`public/menu/thumbnails/`、`public/menu/icons/`
 - 使用中の背景：`public/backgrounds/yumetsuki-stars.png` と `.webp`
-- コードに組み込み済みのヘッダー・フッター：`public/branding/`
+- 本番反映済みのヘッダー・フッター：`public/branding/`
 - ヘッダー・フッターの生成原本・生成指示・旧案参考画像：`design-assets/branding/`
 - 素材一覧・ハッシュ・生成指示：`design-assets/manifest.json`、`design-assets/*generation-prompts.txt`
 
-素材一覧の `file` は一覧ファイルのあるフォルダからの相対パス。`status: implemented` はコードに組み込み済み・本番反映待ち、`superseded` / `reference` は非公開の保管用。
+素材一覧の `file` は一覧ファイルのあるフォルダからの相対パス。`status: deployed` は本番反映済み、`superseded` / `reference` は非公開の保管用。
