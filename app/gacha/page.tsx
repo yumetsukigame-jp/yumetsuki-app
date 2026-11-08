@@ -2,7 +2,7 @@
 
 import type { DocumentData } from "firebase/firestore";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions, db, auth } from "@/firebase";
@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
+import GachaAnimation from "@/components/GachaAnimation";
 import { claimGachaShipping } from "@/app/lib/fulfillment";
 import { matchesXAccountRow } from "../../functions/src/common/normalize";
 
@@ -50,9 +51,15 @@ export default function GachaInner() {
 
   const [userPoints, setUserPoints] = useState<number>(0);
 
-  const [gif, setGif] = useState<"win" | "lose" | null>(null);
+  const [animation, setAnimation] = useState<"win" | "lose" | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const finishAnimation = useCallback(() => {
+    setSpinning(false);
+    setStop(true);
+    setAnimation(null);
+    setIsPlaying(false);
+  }, []);
   const [isShipping, setIsShipping] = useState(false);
   const [shippingDecisionResolved, setShippingDecisionResolved] =
     useState(false);
@@ -377,30 +384,18 @@ const checkCode = async () => {
       const lastFrame = frames[frames.length - 1];
       const isLose = frame === lastFrame;
 
-      setGif(isLose ? "lose" : "win");
-
+      setResult(res.data);
+      setAnimation(isLose ? "lose" : "win");
       setSpinning(true);
 
-      setTimeout(() => {
-        setSpinning(false);
-        setStop(true);
-        setResult(res.data);
-
-        // ポイント更新
-        if (uid) {
-          getDoc(doc(db, "users", uid)).then((snap) => {
-            if (snap.exists()) {
-              setUserPoints(snap.data().points ?? 0);
-            }
-          });
-        }
-
-        setGif(null);
-        setIsPlaying(false);
-      }, 10000);
+      if (uid) {
+        void getDoc(doc(db, "users", uid)).then((snap) => {
+          if (snap.exists()) setUserPoints(snap.data().points ?? 0);
+        }).catch(error => console.error("ポイントの更新に失敗しました", error));
+      }
     } catch (e: unknown) {
       setSpinning(false);
-      setGif(null);
+      setAnimation(null);
       setError(e instanceof Error ? e.message : "抽選に失敗しました");
       setIsPlaying(false);
     }
@@ -529,9 +524,15 @@ const handleShipping = async () => {
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      {/* ★ GIF オーバーレイ */}
-      {gif && (
+      {animation && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="抽選結果の演出"
+          onKeyDown={event => {
+            if (event.key === "Tab") event.preventDefault();
+            if (event.key === "Escape") finishAnimation();
+          }}
           style={{
             position: "fixed",
             top: 0,
@@ -542,13 +543,11 @@ const handleShipping = async () => {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
+            padding: 16,
             zIndex: 9999,
           }}
         >
-          <img
-            src={gif === "win" ? "/gacha/win.gif" : "/gacha/lose.gif"}
-            style={{ width: "70%", maxWidth: 500 }}
-          />
+          <GachaAnimation outcome={animation} onComplete={finishAnimation} />
         </div>
       )}
 
@@ -583,7 +582,7 @@ const handleShipping = async () => {
 
         <button
           onClick={checkCode}
-          disabled={loading}
+          disabled={loading || isPlaying}
           style={{
             width: "100%",
             padding: "12px 0",
@@ -654,7 +653,7 @@ const handleShipping = async () => {
             {renderReel(gacha.frames)}
           </div>
 
-          {result && (
+          {result && !animation && (
             <div
               style={{
                 background: "white",

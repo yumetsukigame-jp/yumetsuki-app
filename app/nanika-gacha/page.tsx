@@ -6,6 +6,7 @@ import Link from "next/link";
 import { callNanika, NANIKA_TIERS, type NanikaReceipt, type NanikaSlot } from "@/app/lib/nanikaGacha";
 import { NanikaFrame, nanikaError, useNanikaAuth } from "@/components/nanika-gacha/NanikaCommon";
 import NanikaReceiptCard from "@/components/nanika-gacha/NanikaReceiptCard";
+import GachaAnimation from "@/components/GachaAnimation";
 import { formatJstDateTime } from "@/app/lib/dateTime";
 import styles from "@/components/nanika-gacha/nanika.module.css";
 
@@ -34,12 +35,8 @@ export default function NanikaGachaPage() {
     finally { setLoading(false); }
   }, [ready, uid]);
   const updateReceipt = useCallback((next: NanikaReceipt) => { setReceipt(next); void load(); }, [load]);
+  const finishAnimation = useCallback(() => setAnimating(false), []);
   useEffect(() => { void Promise.resolve().then(() => load()); }, [load]);
-  useEffect(() => {
-    if (!animating) return;
-    const timer = window.setTimeout(() => setAnimating(false), 3500);
-    return () => window.clearTimeout(timer);
-  }, [animating]);
   async function draw() {
     if (!selected || !uid || !agree || !selected.roundId || selected.fee === null || selected.exchangePoints === null || guard.current) return;
     if (!window.confirm(`${selected.fee}ポイントで抽選します。72時間以内に受取方法を選ばない場合は${selected.exchangePoints}ポイントに自動確定し、発送できなくなります。同意して抽選しますか？`)) return;
@@ -86,8 +83,7 @@ export default function NanikaGachaPage() {
       <button type="button" className={styles.confirm} disabled={!agree || busy} onClick={() => void draw()}>{busy ? "抽選結果を確認中…" : "最終確認して抽選する"}</button>
     </section>}
     {animating && receiptOwner === uid && <section className={styles.card} aria-live="polite">
-      <h2>抽選結果の演出</h2><Image src="/gacha/win.gif" alt="抽選結果を表示する演出" unoptimized width={240} height={286} className={styles.prize} />
-      <button type="button" onClick={() => setAnimating(false)}>演出をスキップして当選品を見る</button>
+      <h2>抽選結果の演出</h2><GachaAnimation outcome="win" onComplete={finishAnimation} />
     </section>}
     {receipt && uid && receiptOwner === uid && !animating && <NanikaReceiptCard key={receipt.id} receipt={receipt} onChange={updateReceipt} serverOffset={serverOffset} />}
   </NanikaFrame>;

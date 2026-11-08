@@ -47,10 +47,22 @@ async function run() {
       const images = [];
       const imageRequests = [];
       let homeStatusFails = false;
+      let videoFails = false;
+      let normalOutcome = "win", normalDraws = 0;
       let claims = 0, draws = 0;
       await context.route("**/*", async route => {
         const url = new URL(route.request().url());
         if (url.origin === base) {
+          if (process.env.GACHA_VIDEO_TEST_ONLY === "1" && /\/chunks\/app\/gacha\/page-[^/]+\.js$/.test(url.pathname)) {
+            // Replace only legacy document reads; all draw/claim calls remain network mocks.
+            const response = await route.fetch(), text = await response.text();
+            const read = text.match(/await (\(0,[\w$]+\.[\w$]+\))\(\(0,[\w$]+\.[\w$]+\)\([\w$.]+,"gachaCodes"/);
+            assert.ok(read, "Legacy gacha document-read fixture needs updating");
+            return route.fulfill({ response, body: text.replaceAll(read[1], "window.mockGachaDocument") });
+          }
+          if (videoFails && /^\/gacha\/(win|lose)\.mp4$/.test(url.pathname)) {
+            return route.fulfill({ status: 503, body: "Mock video failure" });
+          }
           if (/\/chunks\/app\/admin\/layout-[^/]+\.js$/.test(url.pathname)) {
             // Mock the legacy client role cache only; actual new API authorization is tested separately.
             const response = await route.fetch(), text = await response.text();
@@ -78,6 +90,12 @@ async function run() {
         const action = url.pathname.split("/").at(-1), input = route.request().postDataJSON().data;
         let result;
         if (action === "listNanikaGacha" || action === "adminGetNanikaGacha") result = { items: slots };
+        else if (action === "unlockGachaCode") result = {};
+        else if (action === "useGachaCode") {
+          normalDraws++;
+          result = { resultId: `normal-video-${normalDraws}`, frame: normalOutcome === "win" ? "当たり" : "はずれ",
+            reward: 30, shippingEnabled: normalOutcome === "lose" };
+        }
         else if (action === "listNanikaGachaPrizes") {
           const start = input.cursor ? 50 : 0, end = input.cursor ? 51 : 50;
           result = { items: Array.from({ length: end - start }, (_, index) => ({
@@ -137,6 +155,99 @@ async function run() {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", error => errors.push(error.message));
+      if (process.env.GACHA_VIDEO_TEST_ONLY === "1") {
+        await context.addInitScript(() => {
+          window.mockGachaDocument = async ref => ({
+            exists: () => true,
+            data: () => ref.path.startsWith("gachaCodes/") ? {
+              title: "動画の通常ガチャ確認", publicFlags: ["public"], frames: [{ label: "当たり" }, { label: "はずれ" }],
+            } : { points: 100 },
+          });
+        });
+        page.on("dialog", dialog => dialog.accept());
+        await page.goto(`${base}/nanika-gacha`);
+        await page.waitForFunction(() => [...document.querySelectorAll("button")].some(b => b.textContent === "参加条件を確認" && !b.disabled));
+        const draw = async () => {
+          slots[0].available = 10; slots[0].remainingUses = 10;
+          await page.getByRole("button", { name: "受付状況を再取得", exact: true }).click();
+          await page.getByRole("button", { name: "参加条件を確認", exact: true }).first().click();
+          const confirmation = page.getByRole("region", { name: "抽選前の確認" });
+          await confirmation.getByRole("checkbox").check();
+          await confirmation.getByRole("button", { name: "最終確認して抽選する" }).click();
+          await confirmation.waitFor({ state: "detached" });
+        };
+        const result = page.getByRole("button", { name: "ポイント化の確認へ" });
+        const video = page.locator("video");
+        await draw();
+        await video.waitFor();
+        await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
+        assert.equal(await video.getAttribute("src"), "/gacha/win.mp4");
+        assert.equal(await video.evaluate(element => element.muted && element.playsInline), true);
+        await page.waitForTimeout(4000);
+        assert.equal(await result.count(), 0, "The former 3.5-second timer must not cut the video short");
+        assert.equal(await video.isVisible(), true);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        await result.waitFor({ timeout: 15000 });
+        assert.equal(await video.count(), 0, "Natural video completion reveals the committed receipt");
+        assert.equal(draws, 1); assert.equal(claims, 0);
+        await draw();
+        await video.waitFor();
+        await page.getByRole("button", { name: "演出をスキップして当選品を見る" }).click();
+        await result.waitFor();
+        assert.equal(draws, 2); assert.equal(claims, 0);
+        videoFails = true;
+        await draw();
+        await result.waitFor();
+        assert.equal(await video.count(), 0, "Failed video requests cannot hide the receipt");
+        videoFails = false;
+        await page.evaluate(() => {
+          window.originalGachaPlay = HTMLMediaElement.prototype.play;
+          HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException("Mock autoplay rejection", "NotAllowedError"));
+        });
+        await draw();
+        await result.waitFor();
+        assert.equal(await video.count(), 0, "Autoplay rejection reveals the receipt");
+        await page.evaluate(() => {
+          HTMLMediaElement.prototype.play = window.originalGachaPlay;
+          window.originalGachaTimeout = window.setTimeout;
+          window.setTimeout = (callback, delay, ...args) => window.originalGachaTimeout(callback, delay === 30000 ? 50 : delay, ...args);
+        });
+        await draw();
+        await result.waitFor();
+        assert.equal(await video.count(), 0, "The playback watchdog reveals the receipt without an ended event");
+        await page.evaluate(() => { window.setTimeout = window.originalGachaTimeout; });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await draw();
+        await result.waitFor();
+        assert.equal(await video.count(), 0, "Reduced motion skips the video");
+        assert.equal(draws, 6); assert.equal(claims, 0, "Playback must never trigger draws or prize claims");
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        for (const outcome of ["win", "lose"]) {
+          normalOutcome = outcome;
+          await page.goto(`${base}/gacha?code=mock-video`);
+          await page.getByRole("button", { name: "ガチャを確認", exact: true }).click();
+          await page.getByRole("button", { name: "ガチャを引く", exact: true }).click();
+          await video.waitFor();
+          assert.equal(await video.getAttribute("src"), `/gacha/${outcome}.mp4`);
+          assert.equal(await page.getByRole("heading", { name: "🎉 結果", exact: true }).count(), 0);
+          if (outcome === "win") {
+            const skip = page.getByRole("button", { name: "演出をスキップして当選品を見る" });
+            assert.equal(await skip.evaluate(element => element === document.activeElement), true);
+            await page.keyboard.press("Tab");
+            assert.equal(await skip.evaluate(element => element === document.activeElement), true);
+            await page.keyboard.press("Escape");
+          } else {
+            await video.evaluate(element => element.dispatchEvent(new Event("error")));
+          }
+          await page.getByRole("heading", { name: "🎉 結果", exact: true }).waitFor();
+          assert.equal(await page.getByRole("button", { name: "ガチャを引く", exact: true }).isEnabled(), true);
+          if (outcome === "lose") await page.getByRole("button", { name: "📦 この商品を発送する", exact: true }).waitFor();
+        }
+        assert.equal(normalDraws, 2, "Finishing an animation must not repeat a normal draw");
+        assert.deepEqual(errors, [], "Uncaught browser errors");
+        console.log(`${name}: both normal outcomes and shipping eligibility; Nanika natural end, skip, failed request, rejected autoplay, watchdog and reduced motion passed.`);
+        continue;
+      }
       for (const width of [360, 390, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`${base}/nanika-gacha`);
