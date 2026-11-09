@@ -183,6 +183,8 @@ async function run() {
         await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
         assert.equal(await video.getAttribute("src"), "/gacha/win.mp4");
         assert.equal(await video.evaluate(element => element.muted && element.playsInline), true);
+        assert.equal(await page.getByRole("button", { name: /スキップ/ }).count(), 0);
+        await page.keyboard.press("Escape");
         await page.waitForTimeout(4000);
         assert.equal(await result.count(), 0, "The former 3.5-second timer must not cut the video short");
         assert.equal(await video.isVisible(), true);
@@ -190,37 +192,50 @@ async function run() {
         await result.waitFor({ timeout: 15000 });
         assert.equal(await video.count(), 0, "Natural video completion reveals the committed receipt");
         assert.equal(draws, 1); assert.equal(claims, 0);
-        await draw();
-        await video.waitFor();
-        await page.getByRole("button", { name: "演出をスキップして当選品を見る" }).click();
-        await result.waitFor();
-        assert.equal(draws, 2); assert.equal(claims, 0);
         videoFails = true;
         await draw();
-        await result.waitFor();
-        assert.equal(await video.count(), 0, "Failed video requests cannot hide the receipt");
+        const retry = page.getByRole("button", { name: "動画の再生をやり直す", exact: true });
+        await retry.waitFor();
+        assert.equal(await result.count(), 0, "Failed video requests must not bypass playback");
         videoFails = false;
+        await retry.click();
+        await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
+        await result.waitFor({ timeout: 15000 });
+        assert.equal(draws, 2); assert.equal(claims, 0, "Video retries must not redraw or claim the prize");
         await page.evaluate(() => {
           window.originalGachaPlay = HTMLMediaElement.prototype.play;
-          HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException("Mock autoplay rejection", "NotAllowedError"));
+          HTMLMediaElement.prototype.play = function () {
+            this.pause();
+            return Promise.reject(new DOMException("Mock autoplay rejection", "NotAllowedError"));
+          };
         });
         await draw();
-        await result.waitFor();
-        assert.equal(await video.count(), 0, "Autoplay rejection reveals the receipt");
+        await retry.waitFor();
+        assert.equal(await result.count(), 0, "Autoplay rejection must not reveal the receipt");
         await page.evaluate(() => {
           HTMLMediaElement.prototype.play = window.originalGachaPlay;
+        });
+        await retry.click();
+        await result.waitFor({ timeout: 15000 });
+        await page.evaluate(() => {
           window.originalGachaTimeout = window.setTimeout;
           window.setTimeout = (callback, delay, ...args) => window.originalGachaTimeout(callback, delay === 30000 ? 50 : delay, ...args);
         });
-        await draw();
-        await result.waitFor();
-        assert.equal(await video.count(), 0, "The playback watchdog reveals the receipt without an ended event");
-        await page.evaluate(() => { window.setTimeout = window.originalGachaTimeout; });
         await page.emulateMedia({ reducedMotion: "reduce" });
         await draw();
-        await result.waitFor();
-        assert.equal(await video.count(), 0, "Reduced motion skips the video");
-        assert.equal(draws, 6); assert.equal(claims, 0, "Playback must never trigger draws or prize claims");
+        await video.waitFor();
+        await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
+        await video.evaluate(element => { element.pause(); element.dispatchEvent(new Event("stalled")); });
+        await retry.waitFor();
+        await page.waitForTimeout(100);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Tab");
+        assert.equal(await retry.evaluate(element => element === document.activeElement), true);
+        assert.equal(await result.count(), 0, "Stalls, timeouts and reduced motion must not bypass playback");
+        await page.evaluate(() => { window.setTimeout = window.originalGachaTimeout; });
+        await retry.click();
+        await result.waitFor({ timeout: 15000 });
+        assert.equal(draws, 4); assert.equal(claims, 0, "Playback must never trigger draws or prize claims");
         await page.emulateMedia({ reducedMotion: "no-preference" });
         for (const outcome of ["win", "lose"]) {
           normalOutcome = outcome;
@@ -230,22 +245,28 @@ async function run() {
           await video.waitFor();
           assert.equal(await video.getAttribute("src"), `/gacha/${outcome}.mp4`);
           assert.equal(await page.getByRole("heading", { name: "🎉 結果", exact: true }).count(), 0);
+          assert.equal(await page.getByRole("button", { name: /スキップ/ }).count(), 0);
           if (outcome === "win") {
-            const skip = page.getByRole("button", { name: "演出をスキップして当選品を見る" });
-            assert.equal(await skip.evaluate(element => element === document.activeElement), true);
+            const dialog = page.getByRole("dialog", { name: "抽選結果の演出", exact: true });
+            assert.equal(await dialog.evaluate(element => element === document.activeElement), true);
             await page.keyboard.press("Tab");
-            assert.equal(await skip.evaluate(element => element === document.activeElement), true);
+            assert.equal(await dialog.evaluate(element => element === document.activeElement), true);
             await page.keyboard.press("Escape");
+            await video.click();
+            assert.equal(await page.getByRole("heading", { name: "🎉 結果", exact: true }).count(), 0);
           } else {
-            await video.evaluate(element => element.dispatchEvent(new Event("error")));
+            await video.evaluate(element => { element.pause(); element.dispatchEvent(new Event("error")); });
+            await retry.waitFor();
+            assert.equal(await page.getByRole("heading", { name: "🎉 結果", exact: true }).count(), 0);
+            await retry.click();
           }
-          await page.getByRole("heading", { name: "🎉 結果", exact: true }).waitFor();
+          await page.getByRole("heading", { name: "🎉 結果", exact: true }).waitFor({ timeout: 15000 });
           assert.equal(await page.getByRole("button", { name: "ガチャを引く", exact: true }).isEnabled(), true);
           if (outcome === "lose") await page.getByRole("button", { name: "📦 この商品を発送する", exact: true }).waitFor();
         }
         assert.equal(normalDraws, 2, "Finishing an animation must not repeat a normal draw");
         assert.deepEqual(errors, [], "Uncaught browser errors");
-        console.log(`${name}: both normal outcomes and shipping eligibility; Nanika natural end, skip, failed request, rejected autoplay, watchdog and reduced motion passed.`);
+        console.log(`${name}: both gacha flows wait for video completion; skip/Escape, failures, retries, stalls and reduced motion cannot bypass playback.`);
         continue;
       }
       for (const width of [360, 390, 768, 1280]) {
@@ -302,8 +323,7 @@ async function run() {
       assert.equal(await confirmation.getByRole("button", { name: "最終確認して抽選する" }).isDisabled(), true);
       await confirmation.getByRole("checkbox").check();
       await confirmation.getByRole("button", { name: "最終確認して抽選する" }).click();
-      await page.getByRole("button", { name: "演出をスキップして当選品を見る" }).click();
-      await page.getByRole("button", { name: "ポイント化の確認へ" }).waitFor();
+      await page.getByRole("button", { name: "ポイント化の確認へ" }).waitFor({ timeout: 15000 });
       assert.equal(draws, 1); assert.equal(claims, 0);
       await page.goto(`${base}/nanika-gacha/history`);
       await page.getByRole("button", { name: "ポイント化の確認へ" }).click();

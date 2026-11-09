@@ -524,32 +524,7 @@ const handleShipping = async () => {
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      {animation && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="抽選結果の演出"
-          onKeyDown={event => {
-            if (event.key === "Tab") event.preventDefault();
-            if (event.key === "Escape") finishAnimation();
-          }}
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 16,
-            zIndex: 9999,
-          }}
-        >
-          <GachaAnimation outcome={animation} onComplete={finishAnimation} />
-        </div>
-      )}
+      {animation && <GachaAnimation outcome={animation} onComplete={finishAnimation} />}
 
       <h1 style={{ textAlign: "center", marginBottom: 20 }}>🎰 ガチャを引く</h1>
 

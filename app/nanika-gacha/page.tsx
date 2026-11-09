@@ -50,7 +50,7 @@ export default function NanikaGachaPage() {
         exchangePoints: selected.exchangePoints, requestId, consent72h: true, participantUid: uid,
       });
       localStorage.removeItem(key); setReceipt(result.receipt); setReceiptOwner(uid); setSelected(null); setAgree(false);
-      setAnimating(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      setAnimating(true);
       await load();
     } catch (error) { setError(`${nanikaError(error)} 成立した可能性がある場合は履歴を確認してください。再送時は同じリクエストIDを使用します。`); }
     finally { guard.current = false; setBusy(false); }
@@ -82,9 +82,7 @@ export default function NanikaGachaPage() {
       <label><input type="checkbox" checked={agree} disabled={busy} onChange={e => setAgree(e.target.checked)} />参加費用・受取ポイント・72時間後の自動ポイント化と発送不可に同意します</label>
       <button type="button" className={styles.confirm} disabled={!agree || busy} onClick={() => void draw()}>{busy ? "抽選結果を確認中…" : "最終確認して抽選する"}</button>
     </section>}
-    {animating && receiptOwner === uid && <section className={styles.card} aria-live="polite">
-      <h2>抽選結果の演出</h2><GachaAnimation outcome="win" onComplete={finishAnimation} />
-    </section>}
+    {animating && receiptOwner === uid && <GachaAnimation outcome="win" onComplete={finishAnimation} />}
     {receipt && uid && receiptOwner === uid && !animating && <NanikaReceiptCard key={receipt.id} receipt={receipt} onChange={updateReceipt} serverOffset={serverOffset} />}
   </NanikaFrame>;
 }
