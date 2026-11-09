@@ -160,7 +160,9 @@ async function run() {
           window.mockGachaDocument = async ref => ({
             exists: () => true,
             data: () => ref.path.startsWith("gachaCodes/") ? {
-              title: "動画の通常ガチャ確認", publicFlags: ["public"], frames: [{ label: "当たり" }, { label: "はずれ" }],
+              title: "動画の通常ガチャ確認", publicFlags: ["public"], frames: [
+                { label: "当たり" }, { label: "名前の長い景品も省略せずに確認できる特別な景品枠の表示確認" }, { label: "はずれ" },
+              ],
             } : { points: 100 },
           });
         });
@@ -241,6 +243,13 @@ async function run() {
           normalOutcome = outcome;
           await page.goto(`${base}/gacha?code=mock-video`);
           await page.getByRole("button", { name: "ガチャを確認", exact: true }).click();
+          const frames = page.getByRole("list", { name: "景品枠一覧", exact: true });
+          await frames.waitFor();
+          assert.equal(await frames.locator("li").count(), 3, "Every frame is available in the static preview");
+          for (const width of [360, 390, 768]) {
+            await page.setViewportSize({ width, height: 900 });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "Frame previews must wrap on narrow screens");
+          }
           await page.getByRole("button", { name: "ガチャを引く", exact: true }).click();
           await video.waitFor();
           assert.equal(await video.getAttribute("src"), `/gacha/${outcome}.mp4`);
@@ -261,6 +270,14 @@ async function run() {
             await retry.click();
           }
           await page.getByRole("heading", { name: "🎉 結果", exact: true }).waitFor({ timeout: 15000 });
+          await page.waitForFunction(() => document.querySelector('[aria-label="抽選結果"]') === document.activeElement);
+          const resultCard = page.getByRole("region", { name: "抽選結果", exact: true });
+          await resultCard.getByText(`枠： ${outcome === "win" ? "当たり" : "はずれ"}`, { exact: true }).waitFor();
+          await resultCard.getByText("報酬： 30 pt", { exact: true }).waitFor();
+          if (process.env.NANIKA_TEST_ARTIFACTS) {
+            fs.mkdirSync(process.env.NANIKA_TEST_ARTIFACTS, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.NANIKA_TEST_ARTIFACTS, `normal-gacha-${name}-${outcome}.png`), fullPage: true });
+          }
           assert.equal(await page.getByRole("button", { name: "ガチャを引く", exact: true }).isEnabled(), true);
           if (outcome === "lose") await page.getByRole("button", { name: "📦 この商品を発送する", exact: true }).waitFor();
         }

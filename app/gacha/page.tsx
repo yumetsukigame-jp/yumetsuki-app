@@ -45,21 +45,19 @@ export default function GachaInner() {
 
   const [result, setResult] = useState<DocumentData | null>(null);
 
-  const [spinning, setSpinning] = useState(false);
-  const [stop, setStop] = useState(false);
-  const [finalFrame, setFinalFrame] = useState("");
-
   const [userPoints, setUserPoints] = useState<number>(0);
 
   const [animation, setAnimation] = useState<"win" | "lose" | null>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const finishAnimation = useCallback(() => {
-    setSpinning(false);
-    setStop(true);
     setAnimation(null);
     setIsPlaying(false);
   }, []);
+  useEffect(() => {
+    if (result && !animation) resultRef.current?.focus();
+  }, [result, animation]);
   const [isShipping, setIsShipping] = useState(false);
   const [shippingDecisionResolved, setShippingDecisionResolved] =
     useState(false);
@@ -364,7 +362,6 @@ const checkCode = async () => {
 
     setError("");
     setResult(null);
-    setStop(false);
 
     try {
       const participantUid = auth.currentUser?.uid;
@@ -378,15 +375,12 @@ const checkCode = async () => {
         ? { resultId: res.data.resultId, uid: participantUid }
         : null;
 
-      setFinalFrame(frame);
-
       const frames = gacha.frames.map((f: DocumentData) => f.label);
       const lastFrame = frames[frames.length - 1];
       const isLose = frame === lastFrame;
 
       setResult(res.data);
       setAnimation(isLose ? "lose" : "win");
-      setSpinning(true);
 
       if (uid) {
         void getDoc(doc(db, "users", uid)).then((snap) => {
@@ -394,7 +388,6 @@ const checkCode = async () => {
         }).catch(error => console.error("ポイントの更新に失敗しました", error));
       }
     } catch (e: unknown) {
-      setSpinning(false);
       setAnimation(null);
       setError(e instanceof Error ? e.message : "抽選に失敗しました");
       setIsPlaying(false);
@@ -446,76 +439,6 @@ const handleShipping = async () => {
 };
 
   /* --------------------------------------------------
-     1リール（縦3段）
-  -------------------------------------------------- */
-  const renderReel = (frames: DocumentData[]) => {
-    return (
-      <div
-        style={{
-          width: "100%",
-          height: 180,
-          overflow: "hidden",
-          borderRadius: 12,
-          border: "3px solid #4f46e5",
-          background: "#f8fafc",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            animation: spinning ? "spin 0.15s linear infinite" : "none",
-          }}
-        >
-          {frames.map((f: DocumentData, i: number) => (
-            <div
-              key={i}
-              style={{
-                height: 60,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                background: "#ffffff",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 24,
-              }}
-            >
-              {f.label}
-            </div>
-          ))}
-        </div>
-
-        {stop && (
-          <div
-            style={{
-              position: "absolute",
-              top: 60,
-              left: 0,
-              width: "100%",
-              height: 60,
-              background: "#d1fae5",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              fontWeight: "bold",
-              fontSize: 24,
-              borderBottom: "1px solid #e5e7eb",
-            }}
-          >
-            {finalFrame}
-          </div>
-        )}
-
-        <style>{`
-          @keyframes spin {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-60px); }
-          }
-        `}</style>
-      </div>
-    );
-  };
-
-  /* --------------------------------------------------
      JSX（authReady が false の間は UI を動かさない）
   -------------------------------------------------- */
   if (!authReady) {
@@ -526,7 +449,10 @@ const handleShipping = async () => {
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
       {animation && <GachaAnimation outcome={animation} onComplete={finishAnimation} />}
 
-      <h1 style={{ textAlign: "center", marginBottom: 20 }}>🎰 ガチャを引く</h1>
+      <h1 style={{ textAlign: "center", marginBottom: 12 }}>🎁 ガチャを引く</h1>
+      <p style={{ textAlign: "center", color: "#4b5563", marginBottom: 20 }}>
+        動画演出のあとに、抽選結果と受取方法をご案内します。
+      </p>
 
       {/* コード入力 */}
       <div
@@ -583,6 +509,10 @@ const handleShipping = async () => {
       {/* ガチャ情報 */}
       {gacha && (
         <>
+          <section aria-label="ガチャの企画内容" style={{
+            background: "white", padding: 20, borderRadius: 12,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          }}>
           <h2 style={{ textAlign: "center", marginBottom: 10 }}>
             {gacha.title}
           </h2>
@@ -606,6 +536,20 @@ const handleShipping = async () => {
             {renderFlags(gacha.publicFlags)}
           </p>
 
+          <h3 style={{ fontSize: 16, marginTop: 20 }}>景品枠</h3>
+          <ul aria-label="景品枠一覧" style={{
+            display: "flex", flexWrap: "wrap", gap: 8, listStyle: "none",
+            padding: 0, margin: "8px 0 20px",
+          }}>
+            {gacha.frames.map((frame: DocumentData, index: number) => (
+              <li key={index} style={{
+                padding: "8px 12px", borderRadius: 8, background: "#eef2ff",
+                color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: 600,
+                fontSize: 14, maxWidth: "100%", overflowWrap: "anywhere",
+              }}>{frame.label}</li>
+            ))}
+          </ul>
+
           <button
             onClick={play}
             disabled={isPlaying}
@@ -624,26 +568,29 @@ const handleShipping = async () => {
             {isPlaying ? "実行中…" : "ガチャを引く"}
           </button>
 
-          <div style={{ marginTop: 30 }}>
-            {renderReel(gacha.frames)}
-          </div>
+          </section>
 
           {result && !animation && (
             <div
+              ref={resultRef}
+              role="region"
+              aria-label="抽選結果"
+              tabIndex={-1}
               style={{
                 background: "white",
                 padding: 20,
                 borderRadius: 12,
+                border: "2px solid #c7d2fe",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                 marginTop: 20,
                 textAlign: "center",
               }}
             >
               <h2>🎉 結果</h2>
-              <p style={{ fontSize: 20, margin: "10px 0" }}>
+              <p style={{ fontSize: 28, fontWeight: "bold", margin: "16px 0", overflowWrap: "anywhere" }}>
                 <strong>枠：</strong> {result.frame}
               </p>
-              <p style={{ fontSize: 20 }}>
+              <p style={{ fontSize: 22, padding: 12, borderRadius: 8, background: "#eef2ff", color: "#3730a3" }}>
                 <strong>報酬：</strong> {result.reward} pt
               </p>
 
