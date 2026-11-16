@@ -13,6 +13,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import GachaAnimation from "@/components/GachaAnimation";
+import { frameAnimationLevel, resolveGachaAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 import { claimGachaShipping } from "@/app/lib/fulfillment";
 import { matchesXAccountRow } from "../../functions/src/common/normalize";
 
@@ -47,7 +48,7 @@ export default function GachaInner() {
 
   const [userPoints, setUserPoints] = useState<number>(0);
 
-  const [animation, setAnimation] = useState<"win" | "lose" | null>(null);
+  const [animation, setAnimation] = useState<GachaAnimationLevel | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -375,12 +376,13 @@ const checkCode = async () => {
         ? { resultId: res.data.resultId, uid: participantUid }
         : null;
 
-      const frames = gacha.frames.map((f: DocumentData) => f.label);
-      const lastFrame = frames[frames.length - 1];
-      const isLose = frame === lastFrame;
+      const frameIndex = gacha.frames.findIndex((f: DocumentData) => f.label === frame);
+      const fallbackLevel = frameAnimationLevel(
+        gacha.frames[frameIndex]?.animationLevel, frameIndex, gacha.frames.length
+      );
 
       setResult(res.data);
-      setAnimation(isLose ? "lose" : "win");
+      setAnimation(resolveGachaAnimationLevel(res.data.animationLevel, fallbackLevel));
 
       if (uid) {
         void getDoc(doc(db, "users", uid)).then((snap) => {
@@ -447,7 +449,7 @@ const handleShipping = async () => {
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      {animation && <GachaAnimation outcome={animation} onComplete={finishAnimation} />}
+      {animation && <GachaAnimation level={animation} onComplete={finishAnimation} />}
 
       <h1 style={{ textAlign: "center", marginBottom: 12 }}>🎁 ガチャを引く</h1>
       <p style={{ textAlign: "center", color: "#4b5563", marginBottom: 20 }}>

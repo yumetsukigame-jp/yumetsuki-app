@@ -10,6 +10,7 @@ import {
 } from "./common/archiveAnnouncements";
 import { matchesXAccountRow, normalizeX } from "./common/normalize";
 import { gachaShippingImage } from "./fulfillment";
+import { frameAnimationLevel, isGachaAnimationLevel, type GachaAnimationLevel } from "./gachaAnimation";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -19,6 +20,7 @@ const db = getFirestore();
 
 type GachaFrameInput = {
   label: string;
+  animationLevel?: GachaAnimationLevel;
   maxCount?: number | null;
   probability?: number | null;
   rewardMin: number;
@@ -50,6 +52,7 @@ type GachaData = {
 
 type GachaFrame = {
   label: string;
+  animationLevel?: GachaAnimationLevel;
   maxCount?: number | null;
   usedCount?: number;
   probability?: number | null;
@@ -240,6 +243,12 @@ export const createGachaCode = functions
 
       const gachaRef = db.collection("gachaCodes").doc(code);
 
+      if (!Array.isArray(frames) || frames.some((frame: GachaFrameInput) =>
+        frame.animationLevel !== undefined && !isGachaAnimationLevel(frame.animationLevel)
+      )) {
+        throw new functions.https.HttpsError("invalid-argument", "演出レベルが不正です");
+      }
+
       const gachaData: GachaData = {
         code,
         title,
@@ -253,8 +262,9 @@ export const createGachaCode = functions
           cost: point.cost,
           maxPerUser: point.maxPerUser,
         },
-        frames: frames.map((f: GachaFrameInput) => ({
+        frames: frames.map((f: GachaFrameInput, index: number) => ({
           label: f.label,
+          animationLevel: frameAnimationLevel(f.animationLevel, index, frames.length),
           maxCount: f.maxCount ?? null,
           usedCount: 0,
           probability: f.probability ?? null,
@@ -575,6 +585,9 @@ export const useGachaCode = functions
             Math.random() *
               (selectedFrame.rewardMax - selectedFrame.rewardMin + 1)
           ) + selectedFrame.rewardMin;
+        const animationLevel = frameAnimationLevel(
+          selectedFrame.animationLevel, freshFrames.indexOf(selectedFrame), freshFrames.length
+        );
 
         const freshUser = (await tx.get(userRef)).data()!;
         const freshPoints = Number(freshUser.points ?? 0);
@@ -702,6 +715,7 @@ export const useGachaCode = functions
           code,
           title: freshGacha.title,
           frame: selectedFrame.label,
+          animationLevel,
           reward,
           createdAt: resultCreatedAt,
         });
@@ -745,6 +759,7 @@ export const useGachaCode = functions
 
         return {
           frame: selectedFrame.label,
+          animationLevel,
           reward,
           resultId: resultRef.id,
           shippingEnabled: selectedFrame.shippingEnabled === true,

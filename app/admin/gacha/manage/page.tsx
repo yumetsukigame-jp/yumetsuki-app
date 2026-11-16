@@ -14,12 +14,15 @@ import {
   getDoc,
   setDoc,
   writeBatch,
+  runTransaction,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { finalizeArchiveWithAnnouncement } from "@/app/lib/archiveAnnouncements";
 import { formatJstDateTime, parseJstDateTime } from "@/app/lib/dateTime";
+import { GACHA_ANIMATION_LEVELS, frameAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 
 type GachaFrame = {
+  animationLevel?: GachaAnimationLevel;
   label?: string;
   name?: string;
   usedCount?: number;
@@ -201,6 +204,18 @@ export default function GachaManagePage() {
     await loadCodes();
   };
 
+  const updateAnimation = async (id: string, index: number, label: string | undefined, animationLevel: GachaAnimationLevel) => {
+    await runTransaction(db, async tx => {
+      const ref = doc(db, "gachaCodes", id), snapshot = await tx.get(ref);
+      const frames = snapshot.data()?.frames as GachaFrame[] | undefined;
+      if (!frames?.[index] || frames[index].label !== label) {
+        throw new Error("枠設定が変更されました。画面を再読み込みしてください");
+      }
+      tx.update(ref, { frames: frames.map((frame, i) => i === index ? { ...frame, animationLevel } : frame) });
+    });
+    await loadCodes();
+  };
+
   const updateDescription = async (id: string, description: string) => {
     await updateDoc(doc(db, "gachaCodes", id), {
       description: description.trim(),
@@ -323,6 +338,7 @@ export default function GachaManagePage() {
             getUserInfo={getUserInfo}
             getResultsByCode={getResultsByCode}
             updateTitle={updateTitle}
+            updateAnimation={updateAnimation}
             updateDescription={updateDescription}
             updateExpire={updateExpire}
             updatePublicFlags={updatePublicFlags}
@@ -343,6 +359,7 @@ type GachaItemProps = {
   getUserInfo: (uid: string) => Promise<UserInfo>;
   getResultsByCode: (code: string) => Promise<GachaResult[]>;
   updateTitle: (id: string, newTitle: string) => Promise<void>;
+  updateAnimation: (id: string, index: number, label: string | undefined, animationLevel: GachaAnimationLevel) => Promise<void>;
   updateDescription: (id: string, description: string) => Promise<void>;
   updateExpire: (id: string, newDate: string) => Promise<void>;
   updatePublicFlags: (id: string, newFlags: string[]) => Promise<void>;
@@ -362,6 +379,7 @@ function GachaItem({
   getUserInfo,
   getResultsByCode,
   updateTitle,
+  updateAnimation,
   updateDescription,
   updateExpire,
   updatePublicFlags,
@@ -373,6 +391,7 @@ function GachaItem({
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<GachaResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savingAnimation, setSavingAnimation] = useState(false);
 
   const [showX, setShowX] = useState(false);
 
@@ -509,6 +528,22 @@ function GachaItem({
         </p>
 
         <p>残数：{remaining}</p>
+        <fieldset disabled={savingAnimation}>
+          <legend>枠ごとの演出（変更すると保存されます）</legend>
+          {(codeData.frames ?? []).map((frame, index, frames) => <label key={index} style={{ display: "block", marginBottom: 8 }}>
+            {frame.label ?? frame.name ?? `枠${index + 1}`}：
+            <select value={frameAnimationLevel(frame.animationLevel, index, frames.length)}
+              onChange={async event => {
+                const level = event.target.value as GachaAnimationLevel;
+                setSavingAnimation(true);
+                try { await updateAnimation(codeData.id, index, frame.label, level); }
+                catch (error) { alert(error instanceof Error ? error.message : "演出を保存できませんでした"); }
+                finally { setSavingAnimation(false); }
+              }}>
+              {GACHA_ANIMATION_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
+            </select>
+          </label>)}
+        </fieldset>
 
         <p>公開設定：{renderFlags(codeData.publicFlags)}</p>
 

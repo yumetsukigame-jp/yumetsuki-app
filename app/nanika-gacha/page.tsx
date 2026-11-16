@@ -7,6 +7,7 @@ import { callNanika, NANIKA_TIERS, type NanikaReceipt, type NanikaSlot } from "@
 import { NanikaFrame, nanikaError, useNanikaAuth } from "@/components/nanika-gacha/NanikaCommon";
 import NanikaReceiptCard from "@/components/nanika-gacha/NanikaReceiptCard";
 import GachaAnimation from "@/components/GachaAnimation";
+import { resolveGachaAnimationLevel } from "@/functions/src/gachaAnimation";
 import { formatJstDateTime } from "@/app/lib/dateTime";
 import styles from "@/components/nanika-gacha/nanika.module.css";
 
@@ -82,7 +83,7 @@ export default function NanikaGachaPage() {
       <label><input type="checkbox" checked={agree} disabled={busy} onChange={e => setAgree(e.target.checked)} />参加費用・受取ポイント・72時間後の自動ポイント化と発送不可に同意します</label>
       <button type="button" className={styles.confirm} disabled={!agree || busy} onClick={() => void draw()}>{busy ? "抽選結果を確認中…" : "最終確認して抽選する"}</button>
     </section>}
-    {animating && receiptOwner === uid && <GachaAnimation outcome="win" onComplete={finishAnimation} />}
+    {animating && receipt && receiptOwner === uid && <GachaAnimation level={resolveGachaAnimationLevel(receipt.animationLevel)} onComplete={finishAnimation} />}
     {receipt && uid && receiptOwner === uid && !animating && <NanikaReceiptCard key={receipt.id} receipt={receipt} onChange={updateReceipt} serverOffset={serverOffset} />}
   </NanikaFrame>;
 }

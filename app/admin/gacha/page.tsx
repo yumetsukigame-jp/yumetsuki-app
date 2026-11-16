@@ -8,6 +8,7 @@ import { functions, db, storage } from "@/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
 import { parseJstDateTime } from "@/app/lib/dateTime";
+import { GACHA_ANIMATION_LEVELS, frameAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 import {
   GACHA_EVENT_FOLDER,
   GACHA_REGULAR_FOLDER,
@@ -29,6 +30,7 @@ type PublicFlag =
 
 type FrameInput = {
   label: string;
+  animationLevel?: GachaAnimationLevel;
   maxCount: number | "";
   probability: number | "";
   rewardMin: number | "";
@@ -277,8 +279,9 @@ export default function GachaCreatePage() {
         },
         totalCount: mode === "count" ? Number(totalCount) : null,
 
-        frames: framesForSubmission.map((f) => ({
+        frames: framesForSubmission.map((f, index) => ({
           label: f.label,
+          animationLevel: frameAnimationLevel(f.animationLevel, index, framesForSubmission.length),
           maxCount:
             mode === "count" && typeof f.maxCount === "number"
               ? f.maxCount
@@ -596,6 +599,13 @@ export default function GachaCreatePage() {
                 onChange={(e) => updateFrame(i, "label", e.target.value)}
                 style={{ ...inputStyle, flex: 2 }}
               />
+              <label>
+                演出
+                <select value={frameAnimationLevel(f.animationLevel, i, frames.length)}
+                  onChange={e => updateFrame(i, "animationLevel", e.target.value)} style={inputStyle}>
+                  {GACHA_ANIMATION_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
+                </select>
+              </label>
 
               {mode === "count" ? (
                 <input

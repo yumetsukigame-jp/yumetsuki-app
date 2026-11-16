@@ -49,6 +49,7 @@ async function run() {
       let homeStatusFails = false;
       let videoFails = false;
       let normalOutcome = "win", normalDraws = 0;
+      let nanikaAnimationLevel;
       let claims = 0, draws = 0;
       await context.route("**/*", async route => {
         const url = new URL(route.request().url());
@@ -60,7 +61,7 @@ async function run() {
             assert.ok(read, "Legacy gacha document-read fixture needs updating");
             return route.fulfill({ response, body: text.replaceAll(read[1], "window.mockGachaDocument") });
           }
-          if (videoFails && /^\/gacha\/(win|lose)\.mp4$/.test(url.pathname)) {
+          if (videoFails && /^\/gacha\/animations\/(top|atari|hazure)\/(dore|sumon)\.mp4$/.test(url.pathname)) {
             return route.fulfill({ status: 503, body: "Mock video failure" });
           }
           if (/\/chunks\/app\/admin\/layout-[^/]+\.js$/.test(url.pathname)) {
@@ -93,7 +94,8 @@ async function run() {
         else if (action === "unlockGachaCode") result = {};
         else if (action === "useGachaCode") {
           normalDraws++;
-          result = { resultId: `normal-video-${normalDraws}`, frame: normalOutcome === "win" ? "当たり" : "はずれ",
+          result = { resultId: `normal-video-${normalDraws}`, frame: normalOutcome !== "lose" ? "当たり" : "はずれ",
+            ...(normalOutcome === "top" ? { animationLevel: "top" } : {}),
             reward: 30, shippingEnabled: normalOutcome === "lose" };
         }
         else if (action === "listNanikaGachaPrizes") {
@@ -116,6 +118,7 @@ async function run() {
           assert.equal(input.consent72h, true); assert.equal(input.participantUid, uid);
           draws++; slots[0].available--; slots[0].remainingUses--;
           const receipt = { id: `nanika_gacha_${uid}_${input.requestId}`, tier: input.tier, roundId: input.roundId,
+            ...(nanikaAnimationLevel ? { animationLevel: nanikaAnimationLevel } : {}),
             imageId: "mock-image", name: "画面確認用の景品", image: "/api/nanika-gacha/images/mock-image",
             fee: input.fee, exchangePoints: input.exchangePoints, acceptedAt: Date.now(), deadline: Date.now() + 72 * 3600000,
             choice: "pending", automatic: false };
@@ -144,10 +147,17 @@ async function run() {
           slots = slots.map(slot => ({ ...slot, available: slot.available + (slot.tier === input.tier ? 1 : slot.tier === input.fromTier ? -1 : 0) }));
           result = { id: image.id, tier: image.tier };
         }
+        else if (action === "adminSetNanikaImageAnimation") {
+          const image = images.find(image => image.id === input.id);
+          assert.equal(image.state, "ready");
+          assert.ok(["top", "atari", "hazure"].includes(input.animationLevel));
+          image.animationLevel = input.animationLevel;
+          result = { id: image.id };
+        }
         else if (action === "adminUploadNanikaImage") {
           assert.ok(Buffer.from(input.base64, "base64").length <= 6 * 1024 * 1024);
           images.push({ id: input.id, name: input.name, tier: input.tier, state: "ready",
-            image: `/api/nanika-gacha/images/${input.id}`, largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
+            image: `/api/nanika-gacha/images/${input.id}`, animationLevel: "atari", largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
           result = { id: input.id };
         } else throw Error(`Unexpected callable in local test: ${action}`);
         return route.fulfill({ contentType: "application/json", headers: cors, body: JSON.stringify({ result: { ...result, serverNow: Date.now() } }) });
@@ -183,7 +193,7 @@ async function run() {
         await draw();
         await video.waitFor();
         await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
-        assert.equal(await video.getAttribute("src"), "/gacha/win.mp4");
+        assert.match(await video.getAttribute("src"), /^\/gacha\/animations\/atari\/(dore|sumon)\.mp4$/);
         assert.equal(await video.evaluate(element => element.muted && element.playsInline), true);
         assert.equal(await page.getByRole("button", { name: /スキップ/ }).count(), 0);
         await page.keyboard.press("Escape");
@@ -195,12 +205,16 @@ async function run() {
         assert.equal(await video.count(), 0, "Natural video completion reveals the committed receipt");
         assert.equal(draws, 1); assert.equal(claims, 0);
         videoFails = true;
+        nanikaAnimationLevel = "top";
         await draw();
         const retry = page.getByRole("button", { name: "動画の再生をやり直す", exact: true });
         await retry.waitFor();
+        const failedSource = await video.getAttribute("src");
+        assert.match(failedSource, /^\/gacha\/animations\/top\/(dore|sumon)\.mp4$/);
         assert.equal(await result.count(), 0, "Failed video requests must not bypass playback");
         videoFails = false;
         await retry.click();
+        assert.equal(await video.getAttribute("src"), failedSource, "Playback retries must keep the same randomly selected video");
         await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
         await result.waitFor({ timeout: 15000 });
         assert.equal(draws, 2); assert.equal(claims, 0, "Video retries must not redraw or claim the prize");
@@ -211,8 +225,10 @@ async function run() {
             return Promise.reject(new DOMException("Mock autoplay rejection", "NotAllowedError"));
           };
         });
+        nanikaAnimationLevel = "hazure";
         await draw();
         await retry.waitFor();
+        assert.match(await video.getAttribute("src"), /^\/gacha\/animations\/hazure\/(dore|sumon)\.mp4$/);
         assert.equal(await result.count(), 0, "Autoplay rejection must not reveal the receipt");
         await page.evaluate(() => {
           HTMLMediaElement.prototype.play = window.originalGachaPlay;
@@ -239,7 +255,7 @@ async function run() {
         await result.waitFor({ timeout: 15000 });
         assert.equal(draws, 4); assert.equal(claims, 0, "Playback must never trigger draws or prize claims");
         await page.emulateMedia({ reducedMotion: "no-preference" });
-        for (const outcome of ["win", "lose"]) {
+        for (const outcome of ["win", "lose", "top"]) {
           normalOutcome = outcome;
           await page.goto(`${base}/gacha?code=mock-video`);
           await page.getByRole("button", { name: "ガチャを確認", exact: true }).click();
@@ -252,7 +268,8 @@ async function run() {
           }
           await page.getByRole("button", { name: "ガチャを引く", exact: true }).click();
           await video.waitFor();
-          assert.equal(await video.getAttribute("src"), `/gacha/${outcome}.mp4`);
+          const level = outcome === "win" ? "atari" : outcome === "lose" ? "hazure" : "top";
+          assert.match(await video.getAttribute("src"), new RegExp(`^/gacha/animations/${level}/(dore|sumon)\\.mp4$`));
           assert.equal(await page.getByRole("heading", { name: "🎉 結果", exact: true }).count(), 0);
           assert.equal(await page.getByRole("button", { name: /スキップ/ }).count(), 0);
           if (outcome === "win") {
@@ -272,7 +289,7 @@ async function run() {
           await page.getByRole("heading", { name: "🎉 結果", exact: true }).waitFor({ timeout: 15000 });
           await page.waitForFunction(() => document.querySelector('[aria-label="抽選結果"]') === document.activeElement);
           const resultCard = page.getByRole("region", { name: "抽選結果", exact: true });
-          await resultCard.getByText(`枠： ${outcome === "win" ? "当たり" : "はずれ"}`, { exact: true }).waitFor();
+          await resultCard.getByText(`枠： ${outcome !== "lose" ? "当たり" : "はずれ"}`, { exact: true }).waitFor();
           await resultCard.getByText("報酬： 30 pt", { exact: true }).waitFor();
           if (process.env.NANIKA_TEST_ARTIFACTS) {
             fs.mkdirSync(process.env.NANIKA_TEST_ARTIFACTS, { recursive: true });
@@ -281,7 +298,7 @@ async function run() {
           assert.equal(await page.getByRole("button", { name: "ガチャを引く", exact: true }).isEnabled(), true);
           if (outcome === "lose") await page.getByRole("button", { name: "📦 この商品を発送する", exact: true }).waitFor();
         }
-        assert.equal(normalDraws, 2, "Finishing an animation must not repeat a normal draw");
+        assert.equal(normalDraws, 3, "Finishing an animation must not repeat a normal draw");
         assert.deepEqual(errors, [], "Uncaught browser errors");
         console.log(`${name}: both gacha flows wait for video completion; skip/Escape, failures, retries, stalls and reduced motion cannot bypass playback.`);
         continue;
@@ -366,12 +383,25 @@ async function run() {
       await page.getByRole("button", { name: "未完了の画像を一括アップロード" }).click();
       await page.getByText("一括アップロードが完了しました", { exact: true }).waitFor();
       assert.equal(images[0].name, "一括アップロード確認");
+      assert.equal(images[0].animationLevel, "atari");
+      const animationSelect = page.getByLabel("演出属性");
+      assert.equal(await animationSelect.inputValue(), "atari");
+      for (const level of ["top", "hazure", "atari"]) {
+        await Promise.all([
+          page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/adminListNanikaImages")),
+          animationSelect.selectOption(level),
+        ]);
+        await page.waitForFunction(() => !document.querySelector('input[type="file"]')?.disabled);
+        assert.equal(images[0].animationLevel, level);
+        assert.equal(await animationSelect.inputValue(), level);
+      }
       const originalImageId = images[0].id;
       images.push({ id: "reserved-only", tier: "psa", name: "選択待ちの景品", state: "reserved",
-        image: "/api/nanika-gacha/images/reserved-only", largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
+        image: "/api/nanika-gacha/images/reserved-only", animationLevel: "atari", largeBytes: 100000, thumbnailBytes: 10000, canPurge: false });
       await page.getByRole("button", { name: "画像を再取得", exact: true }).click();
       const pendingCard = page.getByRole("heading", { name: "選択待ちの景品", exact: true }).locator("..");
       await pendingCard.waitFor();
+      assert.equal(await pendingCard.getByLabel("演出属性").isDisabled(), true);
       assert.equal(await pendingCard.getByRole("button", { name: "別のカテゴリへ移動" }).count(), 0);
       const uploadedCard = page.getByRole("heading", { name: "一括アップロード確認", exact: true }).locator("..");
       await uploadedCard.getByRole("button", { name: "別のカテゴリへ移動" }).click();

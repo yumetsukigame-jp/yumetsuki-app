@@ -5,6 +5,7 @@ import { createHash, randomInt } from "node:crypto";
 import { NANIKA_HOLD_MS, NANIKA_TIERS, type NanikaTier } from "./nanikaGachaTypes";
 import { isNanikaTier, nanikaDecision, nanikaTerms, nanikaXMatches } from "./nanikaGachaPolicy";
 import { compressNanikaImage, NANIKA_IMAGE_LIMITS } from "./nanikaGachaImages";
+import { isGachaAnimationLevel, resolveGachaAnimationLevel } from "./gachaAnimation";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = getFirestore();
@@ -108,6 +109,7 @@ function receiptView(snapshot: Snap) {
     image: `/api/nanika-gacha/images/${d.imageId}`, fee: d.fee, exchangePoints: d.exchangePoints,
     acceptedAt: d.acceptedAt.toMillis(), deadline: d.deadline.toMillis(), choice: d.choice,
     automatic: d.automatic ?? false,
+    animationLevel: resolveGachaAnimationLevel(d.animationLevel),
   };
 }
 function entryRef(d: Data, id: string) {
@@ -211,6 +213,7 @@ export const drawNanikaGacha = callable("drawNanikaGacha", async (raw, context) 
     const values = {
       uid, tier: t, roundId: requestedRound, imageId: plan.selected.id, name: plan.selected.get("name"),
       fee, exchangePoints, acceptedAt, deadline, choice: "pending", automatic: false, archived: false,
+      animationLevel: resolveGachaAnimationLevel(plan.selected.get("animationLevel")),
       consent: { ...nanikaTerms(fee, exchangePoints), acceptedAt, version: 1 },
     };
     plan.apply();
@@ -348,7 +351,7 @@ export const adminUploadNanikaImage = callable("adminUploadNanikaImage", async (
     const n = count(stock), append = await appendPlan(tx, t, n);
     append(id);
     tx.set(inventory.doc(t), { available: n + 1 }, { merge: true });
-    tx.create(images.doc(id), { tier: t, name, sourceHash, state: "ready", poolIndex: n, thumbnail: encoded.thumbnail,
+    tx.create(images.doc(id), { tier: t, name, sourceHash, state: "ready", animationLevel: "atari", poolIndex: n, thumbnail: encoded.thumbnail,
       largeBytes: encoded.large.length, thumbnailBytes: encoded.thumbnail.length, createdAt: FieldValue.serverTimestamp() });
     tx.create(imageData.doc(id), { data: encoded.large });
   });
@@ -374,9 +377,25 @@ export const adminListNanikaImages = callable("adminListNanikaImages", async (ra
     return { id: image.id, tier: t, name: image.get("name"), state: image.get("state"),
       image: `/api/nanika-gacha/images/${image.id}`, largeBytes: image.get("largeBytes"),
       thumbnailBytes: image.get("thumbnailBytes"),
+      animationLevel: resolveGachaAnimationLevel(image.get("animationLevel")),
       canPurge: image.get("state") === "removed" || Boolean(!unshipped?.exists && done?.exists && (done.get("shipped") === true || done.get("status") === "done")) };
   }));
   return { items, nextCursor: snapshot.size > 50 ? snapshot.docs[49].id : null };
+});
+export const adminSetNanikaImageAnimation = callable("adminSetNanikaImageAnimation", async (raw, context) => {
+  const uid = await administrator(context), d = object(raw, ["id", "animationLevel"]);
+  const id = identifier(d.id, 100), animationLevel = d.animationLevel;
+  if (!isGachaAnimationLevel(animationLevel)) fail("演出レベルが不正です", "invalid-argument");
+  await db.runTransaction(async tx => {
+    const image = await tx.get(images.doc(id));
+    if (!image.exists) fail("画像がありません", "not-found");
+    if (image.get("state") !== "ready") fail("抽選候補の画像だけ演出を変更できます");
+    tx.update(image.ref, { animationLevel });
+    tx.create(db.collection("nanikaGachaAudit").doc(), {
+      operation: "set-image-animation", actorUid: uid, imageId: id, animationLevel, createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { id };
 });
 export const adminRemoveNanikaImage = callable("adminRemoveNanikaImage", async (raw, context) => {
   await administrator(context); const d = object(raw, ["id"]), id = identifier(d.id);

@@ -1,3 +1,5 @@
+import type { GachaAnimationLevel } from "./gachaAnimation";
+
 export const NANIKA_TIERS = [
   { id: "psa", label: "何かのPSAガチャ", thumbnail: "01-nanika-psa-yumetsuki-v2" },
   { id: "satellite", label: "何かのPSA10ガチャ（衛星級）", thumbnail: "02-satellite-psa10-yumetsuki-v2" },
@@ -32,6 +34,7 @@ export type NanikaReceipt = {
   deadline: number;
   choice: NanikaChoice;
   automatic: boolean;
+  animationLevel: GachaAnimationLevel;
 };
 export type NanikaImage = {
   id: string;
@@ -42,6 +45,7 @@ export type NanikaImage = {
   largeBytes: number;
   thumbnailBytes: number;
   canPurge: boolean;
+  animationLevel: GachaAnimationLevel;
 };
 export type NanikaPrize = Pick<NanikaImage, "id" | "tier" | "name" | "image">;
 export type NanikaRound = { id: string; tier: NanikaTier; closedAt: number; archiveComplete: boolean };

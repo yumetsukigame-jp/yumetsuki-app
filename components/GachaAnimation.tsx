@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { randomGachaAnimationVideo, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 
-export default function GachaAnimation({ outcome, onComplete }: {
-  outcome: "win" | "lose";
+export default function GachaAnimation({ level, onComplete }: {
+  level: GachaAnimationLevel;
   onComplete: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -11,6 +12,7 @@ export default function GachaAnimation({ outcome, onComplete }: {
   const finished = useRef(false);
   const [playbackError, setPlaybackError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [videoSource] = useState(() => randomGachaAnimationVideo(level));
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
@@ -43,7 +45,7 @@ export default function GachaAnimation({ outcome, onComplete }: {
       width: "100%", maxWidth: 496, maxHeight: "96dvh", overflowY: "auto", padding: 12,
       background: "white", borderRadius: 12 }}>
       <h2>抽選結果の演出</h2>
-      <video ref={videoRef} src={`/gacha/${outcome}.mp4`} autoPlay muted playsInline preload="auto"
+      <video ref={videoRef} src={videoSource} autoPlay muted playsInline preload="auto"
         width={496} height={864} aria-label="ガチャの抽選結果の演出"
         onEnded={finish} onError={() => setPlaybackError(true)} onStalled={() => setPlaybackError(true)}
         style={{ display: "block", width: "100%", height: "auto", maxHeight: "72dvh", objectFit: "contain" }}>

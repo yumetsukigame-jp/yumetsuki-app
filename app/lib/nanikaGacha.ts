@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase";
+import type { GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 import type { NanikaImage, NanikaPage, NanikaPrize, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier } from "@/functions/src/nanikaGachaTypes";
 export { NANIKA_TIERS, NANIKA_HOLD_MS } from "@/functions/src/nanikaGachaTypes";
 export type { NanikaImage, NanikaPrize, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier };
@@ -16,6 +17,7 @@ type Api = {
   adminUploadNanikaImage: [{ tier: NanikaTier; id: string; name: string; base64: string }, { id: string }];
   adminListNanikaImages: [{ tier: NanikaTier; past: boolean; cursor?: string }, NanikaPage<NanikaImage>];
   adminRemoveNanikaImage: [{ id: string }, { id: string }];
+  adminSetNanikaImageAnimation: [{ id: string; animationLevel: GachaAnimationLevel }, { id: string }];
   adminMoveNanikaImage: [{ id: string; fromTier: NanikaTier; tier: NanikaTier; confirmed: true }, { id: string; tier: NanikaTier }];
   adminPurgeNanikaImages: [{ ids: string[]; confirmed: true }, { count: number }];
   adminEndNanikaGacha: [{ tier: NanikaTier; roundId: string; version: number; confirmed: true }, { items: NanikaSlot[] }];

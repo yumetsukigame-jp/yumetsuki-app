@@ -6,6 +6,7 @@ import Image from "next/image";
 import { callNanika, NANIKA_TIERS, type NanikaImage, type NanikaTier } from "@/app/lib/nanikaGacha";
 import { useNanikaAuth, nanikaError } from "@/components/nanika-gacha/NanikaCommon";
 import styles from "@/components/nanika-gacha/nanika.module.css";
+import { GACHA_ANIMATION_LEVELS, resolveGachaAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 
 type UploadItem = { id: string; file: File; name: string; tier: NanikaTier; done: boolean };
 async function base64(file: File): Promise<string> {
@@ -67,6 +68,13 @@ export default function NanikaImageManager() {
     catch (error) { setError(nanikaError(error)); }
     finally { guard.current = false; setBusy(false); }
   }
+  async function changeAnimation(item: NanikaImage, animationLevel: GachaAnimationLevel) {
+    if (guard.current) return;
+    guard.current = true; setBusy(true); setError("");
+    try { await callNanika("adminSetNanikaImageAnimation", { id: item.id, animationLevel }); await load(); }
+    catch (error) { setError(nanikaError(error)); }
+    finally { guard.current = false; setBusy(false); }
+  }
   async function move(item: NanikaImage) {
     if (guard.current || !moveTier || moveTier === item.tier) return;
     const target = moveTier, label = NANIKA_TIERS.find(tier => tier.id === target)!.label;
@@ -95,6 +103,7 @@ export default function NanikaImageManager() {
       <button type="button" disabled={busy} onClick={() => void load()}>画像を再取得</button>
       {authorized && <section className={styles.card}><h2>画像・景品名・カテゴリを指定して一括アップロード</h2>
         <p>静止画JPEG・PNG・WebP、1ファイル6MB以下。大きい画像は240KB以下、履歴用画像は20KB以下に圧縮します。画像1枚を景品1点として登録するため、同じ実物を重複登録しないでください。</p>
+        <p>読み込み時の演出はすべて「当たり」です。登録後、下の画像一覧から景品ごとに演出を変更できます。抽選済みの景品は変更できません。</p>
         <input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} aria-label="景品画像を複数選択"
           onChange={e => { setProgress(""); setUploads(Array.from(e.target.files ?? []).map(file => ({ id: crypto.randomUUID(), file, name: file.name.replace(/\.[^.]+$/, ""), tier: t, done: false }))); }} />
         {uploads.map(item => <section className={styles.card} key={item.id}>
@@ -119,6 +128,10 @@ export default function NanikaImageManager() {
       <div className={styles.grid}>{items.map(item => <section key={item.id} className={styles.card}>
         <Image src={item.image} alt={item.name} width={320} height={320} unoptimized className={styles.prize} />
         <h2>{item.name}</h2><p>状態：{({ ready: "抽選候補", reserved: "当選者の選択待ち", shipping: "発送物", removed: "候補削除済み" })[item.state]}</p>
+        <label>演出属性<select value={resolveGachaAnimationLevel(item.animationLevel)} disabled={busy || item.state !== "ready"}
+          onChange={e => void changeAnimation(item, e.target.value as GachaAnimationLevel)}>
+          {GACHA_ANIMATION_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
+        </select></label>
         <p>大きい画像：{Math.ceil(item.largeBytes / 1024)}KB／履歴用：{Math.ceil(item.thumbnailBytes / 1024)}KB</p>
         <a href={`${item.image}?size=full`} target="_blank" rel="noopener noreferrer">画像を別画面で確認</a>
         {item.state === "ready" && <>

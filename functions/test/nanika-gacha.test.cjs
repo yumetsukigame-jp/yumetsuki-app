@@ -5,6 +5,7 @@ const { randomBytes } = require("node:crypto");
 const sharp = require("sharp");
 const { nanikaDecision, nanikaXMatches } = require("../lib/nanikaGachaPolicy");
 const { compressNanikaImage, NANIKA_IMAGE_LIMITS } = require("../lib/nanikaGachaImages");
+const { frameAnimationLevel, randomGachaAnimationVideo } = require("../lib/gachaAnimation");
 
 let now = 1000000;
 const originalNow = Date.now;
@@ -28,6 +29,7 @@ class Ref {
   constructor(path) { this.path = path; this.id = path.split("/").at(-1); }
   collection(name) { return new Query(`${this.path}/${name}`); }
   async get() { return new Snapshot(this); }
+  async set(value) { data.set(this.path, copy(value)); }
 }
 class Snapshot {
   constructor(ref) { this.ref = ref; this.id = ref.id; this.value = copy(data.get(ref.path)); this.exists = this.value !== undefined; }
@@ -213,6 +215,96 @@ async function legacyDraw(shippingEnabled = true) {
   });
   return legacyGacha.useGachaCode.run({ code: "code" }, ctx("alice"));
 }
+test("animation selection stays within its level and includes both supplied videos", () => {
+  const originalRandom = Math.random;
+  try {
+    for (const level of ["top", "atari", "hazure"]) {
+      Math.random = () => 0;
+      assert.equal(randomGachaAnimationVideo(level), `/gacha/animations/${level}/dore.mp4`);
+      Math.random = () => 0.999999;
+      assert.equal(randomGachaAnimationVideo(level), `/gacha/animations/${level}/sumon.mp4`);
+      assert.equal(frameAnimationLevel(level, 1, 2), level);
+    }
+    assert.equal(frameAnimationLevel(undefined, 0, 3), "atari");
+    assert.equal(frameAnimationLevel(undefined, 1, 3), "atari");
+    assert.equal(frameAnimationLevel(undefined, 2, 3), "hazure");
+    assert.equal(frameAnimationLevel(undefined, 0, 1), "hazure");
+  } finally { Math.random = originalRandom; }
+});
+test("ordinary creation persists explicit animation levels and legacy defaults, rejecting invalid levels", async () => {
+  await fixture(0);
+  const input = {
+    title: "演出設定", mode: "count", resetType: "none", publicFlags: [],
+    point: { cost: 0, maxPerUser: 10 },
+    frames: [
+      { label: "A", rewardMin: 0, rewardMax: 0, animationLevel: "top" },
+      { label: "B", rewardMin: 0, rewardMax: 0 },
+      { label: "C", rewardMin: 0, rewardMax: 0 },
+    ],
+  };
+  const result = await legacyGacha.createGachaCode.run(input, ctx("admin"));
+  assert.deepEqual(data.get(`gachaCodes/${result.code}`).frames.map(frame => frame.animationLevel), ["top", "atari", "hazure"]);
+  await assert.rejects(legacyGacha.createGachaCode.run({
+    ...input, frames: [{ ...input.frames[0], animationLevel: "invalid" }],
+  }, ctx("admin")), error => error.code === "invalid-argument");
+});
+test("ordinary draws use server-side animation settings, falling back only when unset", async () => {
+  const first = await legacyDraw();
+  assert.equal(first.animationLevel, "atari");
+  const config = data.get("gachaCodes/code");
+  config.frames[0].maxCount = 0;
+  config.frames[1].maxCount = 10;
+  for (const level of [undefined, "top", "atari"]) {
+    if (level) config.frames[1].animationLevel = level;
+    data.set("gachaCodes/code", copy(config));
+    const result = await legacyGacha.useGachaCode.run({ code: "code" }, ctx("alice"));
+    assert.equal(result.animationLevel, level ?? "hazure");
+    assert.equal(data.get(`gachaResults/code/results/${result.resultId}`).animationLevel, result.animationLevel);
+  }
+  config.frames[0].maxCount = 10;
+  config.frames[0].animationLevel = "hazure";
+  config.frames[1].maxCount = 0;
+  data.set("gachaCodes/code", config);
+  assert.equal((await legacyGacha.useGachaCode.run({ code: "code" }, ctx("alice"))).animationLevel, "hazure");
+});
+test("Nanika images default to atari and draw receipts snapshot the selected image animation", async () => {
+  for (const level of ["atari", "top", "hazure"]) {
+    const round = await fixture();
+    assert.equal(data.get("nanikaGachaImages/image0").animationLevel, "atari");
+    if (level !== "atari") await call("adminSetNanikaImageAnimation", { id: "image0", animationLevel: level });
+    const result = await draw(round, "animation");
+    assert.equal(result.receipt.animationLevel, level);
+    const id = result.receipt.id;
+    for (const path of [`nanikaGachaReceipts/${id}`, `nanikaGachaRounds/${round}/entries/${id}`, `nanikaGachaHistory/alice/entries/${id}`]) {
+      assert.equal(data.get(path).animationLevel, level);
+    }
+    await call("claimNanikaGacha", { id, choice: "points", confirmed: true }, "alice");
+    await call("adminSetNanikaImageAnimation", { id: "image0", animationLevel: level === "top" ? "hazure" : "top" });
+    assert.equal((await draw(round, "animation")).receipt.animationLevel, level, "Retries must preserve the original draw's animation");
+    assert.equal((await call("getNanikaGachaHistory", {}, "alice")).items[0].animationLevel, level);
+  }
+});
+test("legacy Nanika images and receipts without an animation level remain atari", async () => {
+  const round = await fixture();
+  delete data.get("nanikaGachaImages/image0").animationLevel;
+  assert.equal((await call("adminListNanikaImages", { tier: "psa", past: false })).items[0].animationLevel, "atari");
+  const result = await draw(round, "legacy-animation");
+  assert.equal(result.receipt.animationLevel, "atari");
+  delete data.get(`nanikaGachaReceipts/${result.receipt.id}`).animationLevel;
+  assert.equal((await call("getNanikaGachaReceipt", { id: result.receipt.id }, "alice")).receipt.animationLevel, "atari");
+});
+test("Nanika animation changes require an administrator, valid level and drawable image", async () => {
+  const round = await fixture();
+  const request = { id: "image0", animationLevel: "top" };
+  await assert.rejects(call("adminSetNanikaImageAnimation", request, "alice"), error => error.code === "permission-denied");
+  await assert.rejects(api.adminSetNanikaImageAnimation.run(request, {}), error => error.code === "unauthenticated");
+  await assert.rejects(call("adminSetNanikaImageAnimation", { ...request, animationLevel: "invalid" }), error => error.code === "invalid-argument");
+  await assert.rejects(call("adminSetNanikaImageAnimation", { ...request, state: "ready" }), error => error.code === "invalid-argument");
+  await assert.rejects(call("adminSetNanikaImageAnimation", { ...request, id: "missing" }), error => error.code === "not-found");
+  await draw(round, "reserved");
+  await assert.rejects(call("adminSetNanikaImageAnimation", request), error => error.code === "failed-precondition");
+  assert.equal(data.get("nanikaGachaImages/image0").animationLevel, "atari");
+});
 test("ordinary draw issues an immutable shipping entitlement; shipping spends its reward exactly once", async () => {
   const result = await legacyDraw();
   assert.equal(result.reward, 20);
