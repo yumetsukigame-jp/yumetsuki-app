@@ -14,7 +14,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import GachaAnimation from "@/components/GachaAnimation";
 import { frameAnimationLevel, resolveGachaAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
-import { claimGachaShipping } from "@/app/lib/fulfillment";
+import { claimGachaShipping, fulfillmentCompletePath } from "@/app/lib/fulfillment";
+import { NANIKA_TIERS } from "@/functions/src/nanikaGachaTypes";
 import { matchesXAccountRow } from "../../functions/src/common/normalize";
 
 /* --------------------------------------------------
@@ -69,7 +70,9 @@ export default function GachaInner() {
     Boolean(result?.shippingEnabled) &&
     !shippingDecisionResolved;
   const shippingWarningMessage =
-    "この画面を遷移すると賞品はポイントとして確定し、今回の景品の発送は出来なくなります。移動してよろしいですか？";
+    result?.nanikaTier
+      ? "この画面を遷移すると当選報酬はポイントとして確定し、今回の景品ガチャの権利は取得できなくなります。移動してよろしいですか？"
+      : "この画面を遷移すると賞品はポイントとして確定し、今回の景品の発送は出来なくなります。移動してよろしいですか？";
 
   const confirmAbandonShipping = () => {
     if (!shippingGuardActiveRef.current) return true;
@@ -138,7 +141,7 @@ export default function GachaInner() {
       document.removeEventListener("click", handleNavigationClick, true);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [shouldWarnBeforeLeaving]);
+  }, [shouldWarnBeforeLeaving, shippingWarningMessage]);
 
   /* --------------------------------------------------
      Auth 状態
@@ -416,7 +419,9 @@ const handleShipping = async () => {
   const shippingItemName = `${frameName}（ガチャ）`;
 
   if (
-    !confirm(`${shippingItemName}を発送します。確定してよろしいですか？`)
+    !confirm(result.nanikaTier
+      ? `当選報酬の${result.reward}ポイントを差し引き、${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の権利を1回分取得します。何かの景品ガチャで追加費用なしで抽選して景品を確定してください。確定しますか？`
+      : `${shippingItemName}を発送します。確定してよろしいですか？`)
   ) {
     return;
   }
@@ -426,16 +431,18 @@ const handleShipping = async () => {
     const response = await claimGachaShipping({
       resultId: result.resultId, choice: "shipping", participantUid: uid, confirmed: true,
     });
+    if (auth.currentUser?.uid !== uid) return;
     setUserPoints(response.data.points);
     shippingReceiptRef.current = null;
 
     shippingGuardActiveRef.current = false;
     setShippingDecisionResolved(true);
-    alert("発送依頼を受け付けました！");
-    router.push("/reward/complete");
+    if (!response.data.nanikaTier) alert("発送依頼を受け付けました！");
+    router.push(fulfillmentCompletePath(response.data));
   } catch (error) {
     console.error("発送依頼の保存に失敗しました", error);
-    alert("発送依頼を保存できませんでした。時間をおいてもう一度お試しください。");
+    alert(error instanceof Error ? error.message : "受取内容を保存できませんでした。同じ操作を再試行してください。");
+  } finally {
     setIsShipping(false);
   }
 };
@@ -612,9 +619,9 @@ const handleShipping = async () => {
                           textAlign: "left",
                         }}
                       >
-                        発送を希望する場合は、この結果画面で今すぐ選択してください。
-                        画面を離れた後や次のガチャを引いた後は、発送を選択できません。
-                        発送を選択しない場合は、当選報酬がポイントとして付与されます。
+                        {result.nanikaTier
+                          ? `${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の権利を希望する場合は、この画面で今すぐ取得してください。当選報酬分のポイントを差し引きます。取得後は何かの景品ガチャで抽選して景品を確定してください。画面を離れると権利は取得できず、当選報酬がポイントとして確定します。`
+                          : "発送を希望する場合は、この結果画面で今すぐ選択してください。画面を離れた後や次のガチャを引いた後は、発送を選択できません。発送を選択しない場合は、当選報酬がポイントとして付与されます。"}
                       </p>
                       <button
                         onClick={handleShipping}
@@ -631,7 +638,9 @@ const handleShipping = async () => {
                           fontSize: 16,
                         }}
                       >
-                        {isShipping ? "発送依頼を保存中…" : "📦 この商品を発送する"}
+                        {result.nanikaTier
+                          ? isShipping ? "権利を取得中…" : "景品ガチャの権利を取得する"
+                          : isShipping ? "発送依頼を保存中…" : "📦 この商品を発送する"}
                       </button>
                     </>
                   );

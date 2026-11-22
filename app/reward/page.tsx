@@ -10,7 +10,8 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { redeemReward } from "@/app/lib/fulfillment";
+import { redeemReward, fulfillmentCompletePath } from "@/app/lib/fulfillment";
+import { NANIKA_TIERS, type NanikaTier } from "@/functions/src/nanikaGachaTypes";
 
 type RewardItem = {
   id: string;
@@ -18,6 +19,7 @@ type RewardItem = {
   cost: number;
   stock: number;
   image?: string | null;
+  nanikaTier?: NanikaTier | null;
 };
 
 export default function RewardPage() {
@@ -60,6 +62,7 @@ export default function RewardPage() {
           cost: data.cost ?? 0,
           stock: data.stock ?? 0,
           image: data.image ?? null,
+          nanikaTier: data.nanikaTier ?? null,
         });
       });
       setRewards(list);
@@ -86,7 +89,9 @@ export default function RewardPage() {
     }
 
     if (
-      !confirm(`${reward.name}を発送します。確定してよろしいですか？`)
+      !confirm(reward.nanikaTier
+        ? `${reward.cost}ポイントで${NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利を1回分取得します。取得後、何かの景品ガチャで追加費用なしで抽選して景品を確定してください。確定しますか？`
+        : `${reward.name}を発送します。確定してよろしいですか？`)
     ) {
       return;
     }
@@ -102,11 +107,12 @@ export default function RewardPage() {
       localStorage.setItem(key, requestId);
       const response = await redeemReward({
         rewardId: reward.id, requestId, cost: reward.cost, participantUid: user.uid, confirmed: true,
+        nanikaTier: reward.nanikaTier ?? null,
       });
       localStorage.removeItem(key);
       if (auth.currentUser?.uid !== user.uid) return;
       setPoints(response.data.points);
-      router.push("/reward/complete");
+      router.push(fulfillmentCompletePath(response.data));
     } catch (error) {
       console.error("ポイント交換の発送依頼に失敗しました", error);
       alert(error instanceof Error ? error.message : "発送依頼を保存できませんでした。同じ操作を再試行してください。");
@@ -150,6 +156,7 @@ export default function RewardPage() {
             <h3>{reward.name}</h3>
             <p>必要ポイント: {reward.cost}</p>
             <p>在庫: {reward.stock}</p>
+            {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利（1回分）。交換後に何かの景品ガチャで景品を確定してください。</p>}
 
             {/* ★ 改善したボタン（①のデザイン） */}
             <button

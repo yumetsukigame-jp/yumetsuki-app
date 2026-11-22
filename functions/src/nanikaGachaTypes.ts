@@ -19,6 +19,7 @@ export type NanikaSlot = {
   roundId: string | null;
   available: number;
   remainingUses: number;
+  remainingRights: number;
   xAccounts?: string[];
 };
 export type NanikaReceipt = {
@@ -34,6 +35,7 @@ export type NanikaReceipt = {
   deadline: number;
   choice: NanikaChoice;
   automatic: boolean;
+  usedRight?: boolean;
   animationLevel: GachaAnimationLevel;
 };
 export type NanikaImage = {
@@ -50,3 +52,9 @@ export type NanikaImage = {
 export type NanikaPrize = Pick<NanikaImage, "id" | "tier" | "name" | "image">;
 export type NanikaRound = { id: string; tier: NanikaTier; closedAt: number; archiveComplete: boolean };
 export type NanikaPage<T> = { items: T[]; nextCursor: string | null };
+export type NanikaRightHolder = {
+  uid: string;
+  name: string;
+  xAccount: string;
+  remainingRights: number;
+};

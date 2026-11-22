@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { withRetry } from "@/app/lib/retry";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import { NANIKA_TIERS, type NanikaTier } from "@/functions/src/nanikaGachaTypes";
 import {
   finalizeArchiveWithAnnouncement,
   finalizeRestoreAndRemoveAnnouncement,
@@ -27,6 +28,7 @@ type GachaFrame = {
   rewardMin?: number;
   rewardMax?: number;
   shippingEnabled?: boolean;
+  nanikaTier?: NanikaTier | null;
 };
 
 type GachaCode = {
@@ -702,7 +704,7 @@ function GachaCard({
             報酬：{f.rewardMin} ～ {f.rewardMax}
           </div>
 
-          <div>発送：{f.shippingEnabled ? "📦 あり" : "なし"}</div>
+          <div>受取内容：{f.nanikaTier ? `${NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の権利（1回分）` : f.shippingEnabled ? "📦 発送あり" : "ポイントのみ"}</div>
         </div>
       ))}
 

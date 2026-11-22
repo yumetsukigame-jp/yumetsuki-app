@@ -60,6 +60,7 @@ class Query {
         const v = scalar(s.get(key));
         if (op === "==") return v === scalar(value);
         if (op === "<=") return v <= scalar(value);
+        if (op === ">") return v > scalar(value);
         if (op === "in") return value.includes(v);
         throw Error("Unsupported query");
       })).sort((a, b) => this.compare(a, b)).filter(s => !this.after || this.compare(s, this.after) > 0).slice(0, this.maximum);
@@ -338,6 +339,146 @@ test("ordinary shipping requires a real eligible draw and sufficient reward poin
   data.get("users/alice").points = 0;
   await assert.rejects(callFulfillment("claimGachaShipping", { ...request, resultId: result.resultId }));
   assert.equal(data.get(`gachaShippingClaims/${result.resultId}`).choice, "pending");
+});
+test("reward exchanges grant one personal right atomically without shipping and replays preserve the original tier", async () => {
+  await fixture(0);
+  data.set("rewards/right", { name: "権利", cost: 30, stock: 2, nanikaTier: "planet" });
+  const request = { rewardId: "right", requestId: "right-once", cost: 30, participantUid: "alice", confirmed: true, nanikaTier: "planet" };
+  retryOnce = true;
+  const first = await callFulfillment("redeemReward", request);
+  assert.equal(first.nanikaTier, "planet");
+  assert.equal(data.get("nanikaGachaRights/alice").planet, 1);
+  assert.equal(data.get("users/alice").points, 70);
+  assert.equal(data.get("rewards/right").stock, 1);
+  data.get("rewards/right").nanikaTier = "star";
+  assert.equal((await callFulfillment("redeemReward", request)).nanikaTier, "planet");
+  assert.equal(data.get("nanikaGachaRights/alice").planet, 1);
+  assert.equal(data.get("nanikaGachaRights/alice").star, undefined);
+  assert.equal([...data.keys()].some(key => key.startsWith("shippingPending/") || key.startsWith("selectedRewards/")), false);
+  await assert.rejects(callFulfillment("redeemReward", { ...request, requestId: "stale-tier" }));
+  assert.equal(data.get("nanikaGachaRights/alice").star, undefined);
+  data.get("rewards/right").nanikaTier = "forged";
+  await assert.rejects(callFulfillment("redeemReward", { ...request, requestId: "invalid-tier" }));
+  assert.equal(data.get("users/alice").points, 70);
+  assert.equal(data.get("rewards/right").stock, 1);
+});
+test("ordinary right prizes snapshot their tier and only shipping choice converts awarded points into a right", async () => {
+  await fixture(0);
+  const { code } = await legacyGacha.createGachaCode.run({
+    title: "権利ガチャ", mode: "count", resetType: "none", publicFlags: [],
+    point: { cost: 10, maxPerUser: 10 }, totalCount: 2,
+    frames: [
+      { label: "WIN", rewardMin: 20, rewardMax: 20, maxCount: 2, shippingEnabled: false, nanikaTier: "satellite" },
+      { label: "LOSE", rewardMin: 0, rewardMax: 0, maxCount: 0 },
+    ],
+  }, ctx("admin"));
+  const result = await legacyGacha.useGachaCode.run({ code }, ctx("alice"));
+  assert.equal(result.shippingEnabled, true);
+  assert.equal(result.nanikaTier, "satellite");
+  data.get(`gachaCodes/${code}`).frames[0].nanikaTier = "star";
+  const request = { resultId: result.resultId, participantUid: "alice", choice: "shipping", confirmed: true };
+  await assert.rejects(callFulfillment("claimGachaShipping", { ...request, participantUid: "bob" }, "bob"));
+  retryOnce = true;
+  assert.equal((await callFulfillment("claimGachaShipping", request)).nanikaTier, "satellite");
+  await callFulfillment("claimGachaShipping", request);
+  assert.equal(data.get("nanikaGachaRights/alice").satellite, 1);
+  assert.equal(data.get("nanikaGachaRights/alice").star, undefined);
+  assert.equal(data.get("users/alice").points, 90);
+  assert.equal([...data.keys()].some(key => key.startsWith("shippingPending/") || key.startsWith("selectedRewards/")), false);
+  await assert.rejects(callFulfillment("claimGachaShipping", { ...request, choice: "points" }));
+  const second = await legacyGacha.useGachaCode.run({ code }, ctx("alice"));
+  await callFulfillment("claimGachaShipping", { ...request, resultId: second.resultId, choice: "points" });
+  await assert.rejects(callFulfillment("claimGachaShipping", { ...request, resultId: second.resultId }));
+  assert.equal(data.get("nanikaGachaRights/alice").satellite, 1);
+  assert.equal(data.get("users/alice").points, 100);
+});
+async function grantPsaRight(cost = 0) {
+  data.set("rewards/right", { name: "PSA権利", cost, stock: 1, nanikaTier: "psa" });
+  return callFulfillment("redeemReward", { rewardId: "right", requestId: "grant", cost, participantUid: "alice", confirmed: true, nanikaTier: "psa" });
+}
+test("right draws are free, require the correct personal right, and cannot consume a sole right twice", async () => {
+  const round = await fixture(2);
+  await grantPsaRight();
+  data.get("users/alice").points = 0;
+  data.get("users/alice").xAccount = "";
+  data.get("nanikaGachaSlots/psa").xAccounts = ["@bob"];
+  data.get(`nanikaGachaRounds/${round}`).xAccounts = ["@bob"];
+  await assert.rejects(draw(round, "bad-fee", "alice", { useRight: true }), error => error.code === "failed-precondition");
+  await assert.rejects(draw(round, "bob-forged", "bob", { useRight: true, fee: 0 }), error => error.code === "permission-denied");
+  await assert.rejects(draw(round, "bad-mode", "alice", { useRight: "true", fee: 0 }), error => error.code === "invalid-argument");
+  const outcomes = await Promise.allSettled(["first", "second"].map(requestId => draw(round, requestId, "alice", { useRight: true, fee: 0 })));
+  assert.equal(outcomes.filter(outcome => outcome.status === "fulfilled").length, 1);
+  const index = outcomes.findIndex(outcome => outcome.status === "fulfilled");
+  const receipt = outcomes[index].value.receipt;
+  const replay = await draw(round, ["first", "second"][index], "alice", { useRight: true, fee: 0 });
+  assert.equal(replay.receipt.id, receipt.id);
+  assert.equal(receipt.fee, 0);
+  assert.equal(receipt.usedRight, true);
+  assert.equal(receipt.deadline - receipt.acceptedAt, 72 * 3600000);
+  assert.equal(data.get("users/alice").points, 0);
+  assert.equal(data.get("users/alice").xAccountConfirmed, undefined);
+  assert.equal(data.get("nanikaGachaRights/alice").psa, 0);
+  await callFulfillment("redeemReward", { rewardId: "right", requestId: "grant", cost: 0, participantUid: "alice", confirmed: true, nanikaTier: "psa" });
+  assert.equal(data.get("nanikaGachaRights/alice").psa, 0, "Replaying a grant must not restore a consumed right");
+  assert.equal(data.get("nanikaGachaInventory/psa").available, 1);
+  assert.deepEqual(data.get("nanikaGachaSlots/psa").xAccounts, ["@bob"]);
+  await assert.rejects(draw(round, ["first", "second"][index]), error => error.code === "already-exists");
+  now = receipt.deadline;
+  const claimed = await call("claimNanikaGacha", { id: receipt.id, choice: "shipping", confirmed: true }, "alice");
+  assert.equal(claimed.receipt.choice, "points");
+  assert.equal(claimed.receipt.automatic, true);
+  assert.equal(data.get("users/alice").points, 30);
+  assert.equal(data.get("nanikaGachaRights/alice").psa, 0);
+});
+test("rights survive stopped rounds and failed out-of-stock draws and remain visible when unpublished", async () => {
+  let round = await fixture(0);
+  await grantPsaRight();
+  await assert.rejects(draw(round, "no-stock", "alice", { useRight: true, fee: 0 }));
+  let slot = data.get("nanikaGachaSlots/psa");
+  await call("adminEndNanikaGacha", { tier: "psa", roundId: round, version: slot.version, confirmed: true });
+  const view = (await call("listNanikaGacha", {}, "alice")).items.find(item => item.tier === "psa");
+  assert.equal(view.visible, false);
+  assert.equal(view.remainingUses, 0);
+  assert.equal(view.remainingRights, 1);
+  await assert.rejects(draw(round, "stopped", "alice", { useRight: true, fee: 0 }));
+  assert.equal(data.get("nanikaGachaRights/alice").psa, 1);
+  slot = data.get("nanikaGachaSlots/psa");
+  const input = await sharp({ create: { width: 600, height: 900, channels: 3, background: "#1c638a" } }).png().toBuffer();
+  await call("adminUploadNanikaImage", { tier: "psa", id: "new-prize", name: "景品", base64: input.toString("base64") });
+  await call("adminSaveNanikaGacha", { tier: "psa", version: slot.version, fee: 50, exchangePoints: 40, visible: true, xAccounts: [] });
+  round = data.get("nanikaGachaSlots/psa").roundId;
+  const result = await draw(round, "next-round", "alice", { useRight: true, fee: 0, exchangePoints: 40 });
+  assert.equal(result.receipt.roundId, round);
+  assert.equal(result.receipt.fee, 0);
+  await call("claimNanikaGacha", { id: result.receipt.id, choice: "shipping", confirmed: true }, "alice");
+  assert.equal(data.get("nanikaGachaRights/alice").psa, 0);
+  assert.equal([...data.keys()].filter(key => key.startsWith("shippingPending/")).length, 1);
+});
+test("administrators can page current right holders by tier, while ordinary users only see their own counts", async () => {
+  await fixture(0);
+  for (let i = 0; i < 51; i++) {
+    const uid = `holder${String(i).padStart(2, "0")}`;
+    data.set(`nanikaGachaRights/${uid}`, { uid, psa: 1 });
+    data.set(`users/${uid}`, { displayName: uid, xAccount: `@${uid}`, points: 0 });
+  }
+  data.set("nanikaGachaRights/alice", { uid: "alice", planet: 2, psa: 0 });
+  await assert.rejects(call("adminListNanikaRights", { tier: "psa" }, "alice"), error => error.code === "permission-denied");
+  const first = await call("adminListNanikaRights", { tier: "psa" });
+  assert.equal(first.items.length, 50);
+  assert.ok(first.nextCursor);
+  const second = await call("adminListNanikaRights", { tier: "psa", cursor: first.nextCursor });
+  assert.equal(second.items.length, 1);
+  assert.equal(new Set([...first.items, ...second.items].map(item => item.uid)).size, 51);
+  assert.equal(first.items[0].xAccount, "@holder00");
+  assert.equal(first.items[0].remainingRights, 1);
+  assert.equal(second.nextCursor, null);
+  assert.deepEqual((await call("adminListNanikaRights", { tier: "planet" })).items, [
+    { uid: "alice", name: "alice", xAccount: "@alice", remainingRights: 2 },
+  ]);
+  const view = (await call("listNanikaGacha", {}, "alice")).items;
+  assert.equal(view.find(item => item.tier === "psa").remainingRights, 0);
+  assert.equal(view.find(item => item.tier === "planet").remainingRights, 2);
+  assert.ok((await api.listNanikaGacha.run({}, {})).items.every(item => item.remainingRights === 0));
 });
 test("ordinary X eligibility cannot be borrowed from a longer handle", async () => {
   await legacyDraw();

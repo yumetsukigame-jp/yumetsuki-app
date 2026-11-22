@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
+import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
 
 // 日本語を含む名前から英数字だけのIDを生成する関数
 function generateIdFromName(name: string) {
@@ -32,6 +34,7 @@ export default function AddRewardForm() {
   const [cost, setCost] = useState(0);   // ← 修正済み（the → const）
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
+  const [nanikaTier, setNanikaTier] = useState<NanikaTier | null>(null);
   const [images, setImages] = useState<DocumentData[]>([]);
 
   // Firestore から rewards フォルダの画像一覧を取得
@@ -70,6 +73,7 @@ export default function AddRewardForm() {
       cost: Number(cost),
       stock: Number(stock),
       image,
+      nanikaTier,
     });
 
     alert("追加しました！");
@@ -86,6 +90,8 @@ export default function AddRewardForm() {
         onSubmit={handleSave}
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
+        <RewardDeliverySelect value={nanikaTier ?? "shipping"} onChange={value => setNanikaTier(value === "shipping" || value === "points" ? null : value)} />
+        {nanikaTier && <p>交換時に1回分の権利を付与します。実物の発送依頼は作成せず、権利による抽選は追加費用なしです。</p>}
         <div>
           <label>名前（日本語OK）</label>
           <input

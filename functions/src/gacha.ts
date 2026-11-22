@@ -11,6 +11,8 @@ import {
 import { matchesXAccountRow, normalizeX } from "./common/normalize";
 import { gachaShippingImage } from "./fulfillment";
 import { frameAnimationLevel, isGachaAnimationLevel, type GachaAnimationLevel } from "./gachaAnimation";
+import { rewardNanikaTier } from "./nanikaGachaRights";
+import type { NanikaTier } from "./nanikaGachaTypes";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -26,6 +28,7 @@ type GachaFrameInput = {
   rewardMin: number;
   rewardMax: number;
   shippingEnabled?: boolean;
+  nanikaTier?: NanikaTier | null;
 };
 
 type GachaPoint = {
@@ -59,6 +62,7 @@ type GachaFrame = {
   rewardMin: number;
   rewardMax: number;
   shippingEnabled?: boolean;
+  nanikaTier?: NanikaTier | null;
 };
 
 type GachaDocument = {
@@ -270,7 +274,8 @@ export const createGachaCode = functions
           probability: f.probability ?? null,
           rewardMin: f.rewardMin,
           rewardMax: f.rewardMax,
-          shippingEnabled: f.shippingEnabled ?? false,
+          shippingEnabled: rewardNanikaTier(f.nanikaTier) !== null || (f.shippingEnabled ?? false),
+          nanikaTier: rewardNanikaTier(f.nanikaTier),
         })),
         totalCount: totalCount ?? null,
         createdAt: Timestamp.now(),
@@ -677,6 +682,8 @@ export const useGachaCode = functions
           ? await tx.get(announcementRef)
           : null;
         const resultCreatedAt = Timestamp.now();
+        const nanikaTier = rewardNanikaTier(selectedFrame.nanikaTier);
+        const shippingEnabled = nanikaTier !== null || selectedFrame.shippingEnabled === true;
 
         tx.update(userRef, {
           points: freshPoints - cost + reward,
@@ -721,7 +728,7 @@ export const useGachaCode = functions
         });
         tx.create(db.collection("gachaShippingClaims").doc(resultRef.id), {
           uid, code, frame: selectedFrame.label, reward,
-          shippingEnabled: selectedFrame.shippingEnabled === true,
+          shippingEnabled, nanikaTier,
           image: gachaShippingImage(freshGacha.thumbnail),
           choice: "pending", createdAt: resultCreatedAt,
         });
@@ -762,7 +769,7 @@ export const useGachaCode = functions
           animationLevel,
           reward,
           resultId: resultRef.id,
-          shippingEnabled: selectedFrame.shippingEnabled === true,
+          shippingEnabled, nanikaTier,
         };
       });
     } catch (err: unknown) {

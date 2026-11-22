@@ -6,6 +6,7 @@ import { NANIKA_HOLD_MS, NANIKA_TIERS, type NanikaTier } from "./nanikaGachaType
 import { isNanikaTier, nanikaDecision, nanikaTerms, nanikaXMatches } from "./nanikaGachaPolicy";
 import { compressNanikaImage, NANIKA_IMAGE_LIMITS } from "./nanikaGachaImages";
 import { isGachaAnimationLevel, resolveGachaAnimationLevel } from "./gachaAnimation";
+import { nanikaRightCount } from "./nanikaGachaRights";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = getFirestore();
@@ -18,6 +19,7 @@ const pending = db.collection("nanikaGachaPending");
 const inventory = db.collection("nanikaGachaInventory");
 const imageData = db.collection("nanikaGachaImageData");
 const history = db.collection("nanikaGachaHistory");
+const rights = db.collection("nanikaGachaRights");
 const POOL_SIZE = 100;
 type Tx = FirebaseFirestore.Transaction;
 type Snap = FirebaseFirestore.DocumentSnapshot;
@@ -109,6 +111,7 @@ function receiptView(snapshot: Snap) {
     image: `/api/nanika-gacha/images/${d.imageId}`, fee: d.fee, exchangePoints: d.exchangePoints,
     acceptedAt: d.acceptedAt.toMillis(), deadline: d.deadline.toMillis(), choice: d.choice,
     automatic: d.automatic ?? false,
+    usedRight: d.usedRight ?? false,
     animationLevel: resolveGachaAnimationLevel(d.animationLevel),
   };
 }
@@ -116,10 +119,13 @@ function entryRef(d: Data, id: string) {
   return (d.archived ? archives : rounds).doc(d.roundId).collection("entries").doc(id);
 }
 async function slotViews(adminMode: boolean, uid?: string) {
+  const [account, userRights] = await Promise.all([
+    uid ? db.collection("users").doc(uid).get() : Promise.resolve(null),
+    uid ? rights.doc(uid).get() : Promise.resolve(null),
+  ]);
   return Promise.all(NANIKA_TIERS.map(async t => {
-    const [slot, stock, account] = await Promise.all([
+    const [slot, stock] = await Promise.all([
       slots.doc(t.id).get(), inventory.doc(t.id).get(),
-      uid ? db.collection("users").doc(uid).get() : Promise.resolve(null),
     ]);
     const d = slot.data();
     const xAccounts: string[] = d?.xAccounts ?? [];
@@ -128,6 +134,7 @@ async function slotViews(adminMode: boolean, uid?: string) {
       visible: d?.visible ?? false, version: d?.version ?? 0, roundId: d?.roundId ?? null,
       publishedAt: d?.publishedAt instanceof Timestamp ? d.publishedAt.toMillis() : null,
       available: count(stock), remainingUses: uid ? xAccounts.filter(line => nanikaXMatches(line, account?.get("xAccount") ?? "")).length : 0,
+      remainingRights: nanikaRightCount(userRights, t.id),
       ...(adminMode ? { xAccounts } : {}),
     };
   }));
@@ -160,6 +167,23 @@ export const adminGetNanikaGacha = callable("adminGetNanikaGacha", async (raw, c
   await administrator(context); object(raw, []);
   return { items: await slotViews(true), serverNow: Date.now() };
 });
+export const adminListNanikaRights = callable("adminListNanikaRights", async (raw, context) => {
+  await administrator(context);
+  const d = object(raw, ["tier", "cursor"]), t = tier(d.tier);
+  let query = rights.where(t, ">", 0).orderBy(t).orderBy(FieldPath.documentId());
+  if (d.cursor !== undefined) {
+    const previous = await rights.doc(identifier(d.cursor)).get();
+    if (!previous.exists || nanikaRightCount(previous, t) < 1) fail("一覧が変更されました。最初から再取得してください");
+    query = query.startAfter(previous);
+  }
+  const snapshot = await query.limit(51).get();
+  const items = await Promise.all(snapshot.docs.slice(0, 50).map(async holder => {
+    const account = await db.collection("users").doc(holder.id).get();
+    return { uid: holder.id, name: account.get("displayName") ?? account.get("name") ?? "",
+      xAccount: account.get("xAccount") ?? "", remainingRights: nanikaRightCount(holder, t) };
+  }));
+  return { items, nextCursor: snapshot.size > 50 ? snapshot.docs[49].id : null };
+});
 export const adminSaveNanikaGacha = callable("adminSaveNanikaGacha", async (raw, context) => {
   const uid = await administrator(context), d = object(raw, ["tier", "version", "fee", "exchangePoints", "visible", "xAccounts"]);
   const t = tier(d.tier), version = integer(d.version, "更新番号", Number.MAX_SAFE_INTEGER);
@@ -184,28 +208,32 @@ export const adminSaveNanikaGacha = callable("adminSaveNanikaGacha", async (raw,
 });
 
 export const drawNanikaGacha = callable("drawNanikaGacha", async (raw, context) => {
-  const uid = user(context), d = object(raw, ["tier", "requestId", "fee", "exchangePoints", "roundId", "consent72h", "participantUid"]);
+  const uid = user(context), d = object(raw, ["tier", "requestId", "fee", "exchangePoints", "roundId", "consent72h", "participantUid", "useRight"]);
+  if (d.useRight !== undefined && typeof d.useRight !== "boolean") fail("権利の使用方法が不正です", "invalid-argument");
+  const useRight = d.useRight === true;
   if (d.participantUid !== uid) fail("ログインアカウントが変更されました。参加条件を確認し直してください", "aborted");
   const t = tier(d.tier), requestId = identifier(d.requestId, 100), requestedRound = identifier(d.roundId);
   if (d.consent72h !== true) fail("72時間後の自動ポイント化に明示的な同意が必要です", "invalid-argument");
   const receiptRef = receipts.doc(`nanika_gacha_${createHash("sha256").update(`${uid}\0${requestId}`).digest("hex")}`);
   await db.runTransaction(async tx => {
-    const [existing, slot, account, stock] = await Promise.all([
+    const [existing, slot, account, stock, userRights] = await Promise.all([
       tx.get(receiptRef), tx.get(slots.doc(t)), tx.get(db.collection("users").doc(uid)), tx.get(inventory.doc(t)),
+      useRight ? tx.get(rights.doc(uid)) : Promise.resolve(null),
     ]);
     if (existing.exists) {
-      if (existing.get("uid") !== uid || existing.get("tier") !== t) fail("リクエストIDが使用済みです", "already-exists");
+      if (existing.get("uid") !== uid || existing.get("tier") !== t || (existing.get("usedRight") === true) !== useRight) fail("リクエストIDが使用済みです", "already-exists");
       return;
     }
     if (!slot.exists || !slot.get("visible") || slot.get("roundId") !== requestedRound) fail("受付停止中、または開催回が変更されています");
-    const fee = integer(slot.get("fee"), "参加費用"), exchangePoints = integer(slot.get("exchangePoints"), "受取ポイント");
+    const fee = useRight ? 0 : integer(slot.get("fee"), "参加費用"), exchangePoints = integer(slot.get("exchangePoints"), "受取ポイント");
     if (d.fee !== fee || d.exchangePoints !== exchangePoints) fail("金額設定が変更されました。最新の条件を再確認してください");
     if (!account.exists) fail("アカウント情報が見つかりません");
     const balance = integer(account.get("points"), "残高", Number.MAX_SAFE_INTEGER);
     if (balance < fee || !Number.isSafeInteger(balance - fee + exchangePoints)) fail("ポイント残高を確認してください");
     const xAccounts: string[] = slot.get("xAccounts");
     const match = xAccounts.findIndex(line => nanikaXMatches(line, account.get("xAccount") ?? ""));
-    if (match < 0) fail("対象Xアカウントの参加枠がありません", "permission-denied");
+    const remainingRights = nanikaRightCount(userRights, t);
+    if (useRight ? remainingRights < 1 : match < 0) fail(useRight ? "この景品ガチャの権利がありません" : "対象Xアカウントの参加枠がありません", "permission-denied");
     const n = count(stock);
     if (!n) fail("抽選できる景品がありません");
     const plan = await removePlan(tx, t, n, randomInt(n));
@@ -214,12 +242,14 @@ export const drawNanikaGacha = callable("drawNanikaGacha", async (raw, context) 
       uid, tier: t, roundId: requestedRound, imageId: plan.selected.id, name: plan.selected.get("name"),
       fee, exchangePoints, acceptedAt, deadline, choice: "pending", automatic: false, archived: false,
       animationLevel: resolveGachaAnimationLevel(plan.selected.get("animationLevel")),
+      usedRight: useRight,
       consent: { ...nanikaTerms(fee, exchangePoints), acceptedAt, version: 1 },
     };
     plan.apply();
     tx.update(plan.selected.ref, { state: "reserved", reservedBy: receiptRef.id, poolIndex: FieldValue.delete() });
-    tx.update(account.ref, { points: balance - fee, xAccountConfirmed: true });
-    const remaining = xAccounts.filter((_, index) => index !== match);
+    tx.update(account.ref, { points: balance - fee, ...(!useRight ? { xAccountConfirmed: true } : {}) });
+    if (useRight && userRights) tx.update(userRights.ref, { [t]: remainingRights - 1, updatedAt: acceptedAt });
+    const remaining = useRight ? xAccounts : xAccounts.filter((_, index) => index !== match);
     tx.update(slot.ref, { xAccounts: remaining, version: slot.get("version") + 1 });
     tx.update(rounds.doc(requestedRound), { xAccounts: remaining, version: slot.get("version") + 1 });
     tx.create(receiptRef, values);

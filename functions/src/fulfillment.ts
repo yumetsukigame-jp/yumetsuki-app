@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { createHash } from "node:crypto";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { grantNanikaRightPlan, rewardNanikaTier } from "./nanikaGachaRights";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = getFirestore();
@@ -49,7 +50,7 @@ export function gachaShippingImage(thumbnail: unknown): string {
 }
 
 export const redeemReward = callable("redeemReward", async (raw, uid) => {
-  const data = input(raw, ["rewardId", "requestId", "cost", "participantUid", "confirmed"]);
+  const data = input(raw, ["rewardId", "requestId", "cost", "participantUid", "confirmed", "nanikaTier"]);
   if (data.participantUid !== uid) fail("ログインアカウントが変更されました", "aborted");
   if (data.confirmed !== true) fail("発送の確認が必要です", "invalid-argument");
   const rewardId = id(data.rewardId), requestId = id(data.requestId);
@@ -63,13 +64,16 @@ export const redeemReward = callable("redeemReward", async (raw, uid) => {
     const balance = amount(user.get("points"), "残高");
     if (previous.exists) {
       if (previous.get("uid") !== uid || previous.get("rewardId") !== rewardId) fail("リクエストIDが使用済みです", "already-exists");
-      return { requestId: receiptId, points: balance };
+      return { requestId: receiptId, points: balance, nanikaTier: previous.get("nanikaTier") ?? null };
     }
     if (!reward.exists) fail("商品が見つかりません", "not-found");
     const cost = amount(reward.get("cost"), "商品価格"), stock = amount(reward.get("stock"), "商品在庫");
     if (cost !== expectedCost) fail("商品価格が変更されました。一覧を再読込して確認してください");
     if (stock < 1) fail("在庫がありません");
     if (balance < cost) fail("ポイントが足りません");
+    const nanikaTier = rewardNanikaTier(reward.get("nanikaTier"));
+    if (nanikaTier !== rewardNanikaTier(data.nanikaTier)) fail("受取内容が変更されました。一覧を再読込して確認してください");
+    const grantRight = nanikaTier ? await grantNanikaRightPlan(tx, uid, nanikaTier) : null;
     const now = Timestamp.now();
     const record = {
       requestId: receiptId, uid, rewardId, name: reward.get("name"), cost, image: reward.get("image") ?? null,
@@ -77,10 +81,13 @@ export const redeemReward = callable("redeemReward", async (raw, uid) => {
     };
     tx.update(userRef, { points: balance - cost });
     tx.update(rewardRef, { stock: stock - 1 });
-    tx.create(db.collection("shippingPending").doc(receiptId), record);
-    tx.create(db.collection("selectedRewards").doc(receiptId), record);
-    tx.create(receiptRef, { uid, rewardId, cost, createdAt: now });
-    return { requestId: receiptId, points: balance - cost };
+    if (grantRight) grantRight();
+    else {
+      tx.create(db.collection("shippingPending").doc(receiptId), record);
+      tx.create(db.collection("selectedRewards").doc(receiptId), record);
+    }
+    tx.create(receiptRef, { uid, rewardId, cost, nanikaTier, createdAt: now });
+    return { requestId: receiptId, points: balance - cost, nanikaTier };
   });
 });
 
@@ -96,25 +103,31 @@ export const claimGachaShipping = callable("claimGachaShipping", async (raw, uid
     if (claim.get("uid") !== uid) fail("本人の抽選結果のみ選択できます", "permission-denied");
     if (!user.exists) fail("アカウント情報がありません");
     const balance = amount(user.get("points"), "残高"), requestId = `gacha_${resultId}`;
+    const nanikaTier = rewardNanikaTier(claim.get("nanikaTier"));
     if (claim.get("choice") !== "pending") {
       if (claim.get("choice") !== choice) fail("別の方法で確定済みです", "already-exists");
-      return { requestId, points: balance };
+      return { requestId, points: balance, nanikaTier: choice === "shipping" ? nanikaTier : null };
     }
     const now = Timestamp.now();
     if (choice === "shipping") {
       if (claim.get("shippingEnabled") !== true) fail("発送を選択できない当選結果です");
       const cost = amount(claim.get("reward"), "当選報酬");
       if (balance < cost) fail("当選報酬分のポイントが不足しています");
+      const grantRight = nanikaTier ? await grantNanikaRightPlan(tx, uid, nanikaTier) : null;
       const record = {
         requestId, uid, rewardId: requestId, name: `${claim.get("frame")}（ガチャ）`,
         cost, image: claim.get("image"), timestamp: now, requestedAt: now,
         status: "pending", shipped: false, ...recipient(user),
       };
       tx.update(userRef, { points: balance - cost });
-      tx.create(db.collection("shippingPending").doc(requestId), record);
-      tx.create(db.collection("selectedRewards").doc(requestId), record);
+      if (grantRight) grantRight();
+      else {
+        tx.create(db.collection("shippingPending").doc(requestId), record);
+        tx.create(db.collection("selectedRewards").doc(requestId), record);
+      }
     }
     tx.update(claimRef, { choice, decidedAt: now });
-    return { requestId, points: choice === "shipping" ? balance - amount(claim.get("reward"), "当選報酬") : balance };
+    return { requestId, points: choice === "shipping" ? balance - amount(claim.get("reward"), "当選報酬") : balance,
+      nanikaTier: choice === "shipping" ? nanikaTier : null };
   });
 });

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { db } from "../../../firebase";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import Link from "next/link";
+import { NANIKA_TIERS } from "@/functions/src/nanikaGachaTypes";
 
 export default function AdminRewardsPage() {
   const [rewards, setRewards] = useState<DocumentData[]>([]);
@@ -82,6 +83,7 @@ export default function AdminRewardsPage() {
               <h2 style={{ fontSize: "20px" }}>{reward.name}</h2>
               <p>{reward.cost} pt</p>
               <p>在庫：{reward.stock} 個</p>
+              {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利（1回分）</p>}
             </div>
 
             <Link

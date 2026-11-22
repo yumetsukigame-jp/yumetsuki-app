@@ -9,6 +9,8 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
 import { parseJstDateTime } from "@/app/lib/dateTime";
 import { GACHA_ANIMATION_LEVELS, frameAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
+import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
+import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
 import {
   GACHA_EVENT_FOLDER,
   GACHA_REGULAR_FOLDER,
@@ -36,6 +38,7 @@ type FrameInput = {
   rewardMin: number | "";
   rewardMax: number | "";
   shippingEnabled: boolean;
+  nanikaTier?: NanikaTier | null;
 };
 
 type GachaImage = {
@@ -293,6 +296,7 @@ export default function GachaCreatePage() {
           rewardMin: Number(f.rewardMin),
           rewardMax: Number(f.rewardMax),
           shippingEnabled: f.shippingEnabled,
+          nanikaTier: f.nanikaTier ?? null,
         })),
 
         expiresAt: expiresAt ? parseJstDateTime(expiresAt).toISOString() : "",
@@ -643,17 +647,13 @@ export default function GachaCreatePage() {
                 style={{ ...inputStyle, flex: 1 }}
               />
 
-              {/* 発送ON/OFF */}
-              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={f.shippingEnabled}
-                  onChange={(e) =>
-                    updateFrame(i, "shippingEnabled", e.target.checked)
-                  }
-                />
-                発送
-              </label>
+              <RewardDeliverySelect
+                includePoints
+                value={f.nanikaTier ?? (f.shippingEnabled ? "shipping" : "points")}
+                onChange={value => setFrames(current => current.map((frame, index) => index === i
+                  ? { ...frame, shippingEnabled: value !== "points", nanikaTier: value === "points" || value === "shipping" ? null : value }
+                  : frame))}
+              />
             </div>
           ))}
 

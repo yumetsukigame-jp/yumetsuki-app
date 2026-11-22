@@ -6,6 +6,7 @@ import { callNanika, NANIKA_TIERS, type NanikaSlot } from "@/app/lib/nanikaGacha
 import { useNanikaAuth, nanikaError } from "@/components/nanika-gacha/NanikaCommon";
 import styles from "@/components/nanika-gacha/nanika.module.css";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import NanikaRightHolders from "@/components/nanika-gacha/NanikaRightHolders";
 
 function SlotForm({ slot, onSaved }: { slot: NanikaSlot; onSaved: (items: NanikaSlot[]) => void }) {
   const [fee, setFee] = useState(slot.fee === null ? "" : String(slot.fee));
@@ -75,6 +76,7 @@ export default function AdminNanikaGacha() {
       <button type="button" onClick={() => void load()}>最新設定を再取得（未保存の編集は破棄）</button>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       {items.map(slot => <SlotForm key={`${slot.tier}:${slot.version}`} slot={slot} onSaved={setItems} />)}
+      {!error && <NanikaRightHolders key={uid} />}
     </>}
   </div>;
 }

@@ -49,6 +49,7 @@ export default function NanikaReceiptCard({ receipt, onChange, serverOffset = 0,
       onError={() => setImageError(true)} />
     {imageError && <p role="alert">画像を取得できませんでした。ページを再読み込みしてください。</p>}
     <p>参加費用：{receipt.fee}ポイント／ポイント化：{receipt.exchangePoints}ポイント</p>
+    {receipt.usedRight && <p>景品ガチャの権利を1回分使用した抽選です（追加参加費なし）。</p>}
     <p>抽選日時：{formatJstDateTime(new Date(receipt.acceptedAt))}</p>
     {receipt.choice === "pending" ? <>
       <div className={styles.warning}>

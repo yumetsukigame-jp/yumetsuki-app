@@ -14,7 +14,7 @@ service cloud.firestore {
         'neraiuchiSecrets', 'neraiuchiCounters', 'neraiuchiUserHistory', 'neraiuchiAudit',
         'nanikaGachaSlots', 'nanikaGachaRounds', 'nanikaGachaArchives',
         'nanikaGachaImages', 'nanikaGachaImageData', 'nanikaGachaInventory',
-        'nanikaGachaReceipts', 'nanikaGachaPending', 'nanikaGachaHistory', 'nanikaGachaAudit'
+        'nanikaGachaReceipts', 'nanikaGachaPending', 'nanikaGachaHistory', 'nanikaGachaAudit', 'nanikaGachaRights'
       ];
     }
     // Keep legacy public reads; financial/eligibility writes require an admin or server.
@@ -25,7 +25,7 @@ service cloud.firestore {
         'xAccountClaims', 'validCodes', 'usedCodes', 'gachaShippingClaims', 'rewardRedemptions',
         'nanikaGachaSlots', 'nanikaGachaRounds', 'nanikaGachaArchives',
         'nanikaGachaImages', 'nanikaGachaImageData', 'nanikaGachaInventory',
-        'nanikaGachaReceipts', 'nanikaGachaPending', 'nanikaGachaHistory', 'nanikaGachaAudit'
+        'nanikaGachaReceipts', 'nanikaGachaPending', 'nanikaGachaHistory', 'nanikaGachaAudit', 'nanikaGachaRights'
       ]);
       allow write: if !serverOnly(collection) && collection != 'quizzes' && isAdmin();
     }

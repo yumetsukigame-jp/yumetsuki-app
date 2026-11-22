@@ -9,6 +9,9 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
+import { isNanikaTier } from "@/functions/src/nanikaGachaPolicy";
+import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
 
 type RewardImage = {
   url: string;
@@ -31,6 +34,7 @@ export default function EditRewardForm({ id }: { id: string }) {
   const [name, setName] = useState("");
   const [cost, setCost] = useState(0);
   const [image, setImage] = useState("");
+  const [nanikaTier, setNanikaTier] = useState<NanikaTier | null>(null);
   const [stock, setStock] = useState(0);
   const [loading, setLoading] = useState(true);
   const [images, setImages] = useState<RewardImage[]>([]);
@@ -77,6 +81,7 @@ export default function EditRewardForm({ id }: { id: string }) {
         setCost(target.cost ?? 0);
         setImage(target.image ?? "");
         setStock(target.stock ?? 0);
+        setNanikaTier(isNanikaTier(target.nanikaTier) ? target.nanikaTier : null);
       }
 
       setLoading(false);
@@ -93,6 +98,7 @@ export default function EditRewardForm({ id }: { id: string }) {
       cost,
       stock,
       image,
+      nanikaTier,
     });
 
     alert("更新しました！");
@@ -111,6 +117,8 @@ export default function EditRewardForm({ id }: { id: string }) {
         onSubmit={handleUpdate}
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
+        <RewardDeliverySelect value={nanikaTier ?? "shipping"} onChange={value => setNanikaTier(value === "shipping" || value === "points" ? null : value)} />
+        {nanikaTier && <p>交換時に1回分の権利を付与します。実物の発送依頼は作成せず、権利による抽選は追加費用なしです。</p>}
         <div>
           <label>名前</label>
           <input
