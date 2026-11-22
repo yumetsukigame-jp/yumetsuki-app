@@ -4,10 +4,10 @@ import { NANIKA_TIERS, type NanikaTier } from "@/functions/src/nanikaGachaTypes"
 
 export type RewardDelivery = "points" | "shipping" | NanikaTier;
 
-export default function RewardDeliverySelect({ value, onChange, includePoints = false }: {
-  value: RewardDelivery; onChange: (value: RewardDelivery) => void; includePoints?: boolean;
+export default function RewardDeliverySelect({ value, onChange, includePoints = false, className }: {
+  value: RewardDelivery; onChange: (value: RewardDelivery) => void; includePoints?: boolean; className?: string;
 }) {
-  return <label>
+  return <label className={className}>
     景品の受取内容
     <select value={value} onChange={event => onChange(event.target.value as RewardDelivery)}>
       {includePoints && <option value="points">ポイントのみ（発送なし）</option>}

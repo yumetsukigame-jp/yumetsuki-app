@@ -10,7 +10,8 @@ import { getDownloadURL, ref } from "firebase/storage";
 import { parseJstDateTime } from "@/app/lib/dateTime";
 import { GACHA_ANIMATION_LEVELS, frameAnimationLevel, type GachaAnimationLevel } from "@/functions/src/gachaAnimation";
 import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
-import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
+import { NANIKA_TIERS, type NanikaTier } from "@/functions/src/nanikaGachaTypes";
+import styles from "./gacha-create.module.css";
 import {
   GACHA_EVENT_FOLDER,
   GACHA_REGULAR_FOLDER,
@@ -314,176 +315,114 @@ export default function GachaCreatePage() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 640, margin: "0 auto" }}>
-      <h1 style={{ marginBottom: 20 }}>🎰 ガチャ作成</h1>
+    <div className={styles.page}>
+      <h1 className={styles.title}>🎰 ガチャ作成</h1>
 
-      <div
-        style={{
-          background: "white",
-          padding: 20,
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <input
-          type="text"
-          placeholder="ガチャタイトル"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          style={inputStyle}
-        />
+      <div className={styles.form}>
+        <label className={styles.field}>
+          ガチャタイトル
+          <input
+            type="text"
+            placeholder="ガチャタイトル"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
 
-        <textarea
-          placeholder="ガチャの説明文（任意）"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          style={{
-            ...inputStyle,
-            minHeight: 120,
-            resize: "vertical",
-            whiteSpace: "pre-wrap",
-          }}
-        />
+        <label className={styles.field}>
+          ガチャの説明文（任意）
+          <textarea
+            placeholder="ガチャの説明文（任意）"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={5}
+          />
+        </label>
 
-        {/* 公開設定 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>公開設定（複数選択可）</div>
+        <section className={styles.panel} aria-labelledby="public-flags-heading">
+          <h2 id="public-flags-heading">公開設定（複数選択可）</h2>
+          <div className={styles.choices}>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("public")} onChange={() => toggleFlag("public")} />
+              全体公開
+            </label>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("limited")} onChange={() => toggleFlag("limited")} />
+              限定公開
+            </label>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("subscriber")} onChange={() => toggleFlag("subscriber")} />
+              サブスク限定
+            </label>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("nibuichi_winner")} onChange={() => toggleFlag("nibuichi_winner")} />
+              前日のニブイチ的中者限定
+            </label>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("x_account_match")} disabled={resetType === "x_account"} onChange={() => toggleFlag("x_account_match")} />
+              Xアカウント一致
+            </label>
+            <label className={styles.choice}>
+              <input type="checkbox" checked={publicFlags.includes("featured")} onChange={() => toggleFlag("featured")} />
+              強調表示（一覧で上位表示）
+            </label>
+          </div>
+        </section>
 
-          <label>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("public")}
-              onChange={() => toggleFlag("public")}
-            />{" "}
-            全体公開
-          </label>
-
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("limited")}
-              onChange={() => toggleFlag("limited")}
-            />{" "}
-            限定公開
-          </label>
-
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("subscriber")}
-              onChange={() => toggleFlag("subscriber")}
-            />{" "}
-            サブスク限定
-          </label>
-
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("nibuichi_winner")}
-              onChange={() => toggleFlag("nibuichi_winner")}
-            />{" "}
-            前日のニブイチ的中者限定
-          </label>
-
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("x_account_match")}
-              disabled={resetType === "x_account"}
-              onChange={() => toggleFlag("x_account_match")}
-            />{" "}
-            Xアカウント一致
-          </label>
-
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="checkbox"
-              checked={publicFlags.includes("featured")}
-              onChange={() => toggleFlag("featured")}
-            />{" "}
-            強調表示（一覧で上位表示）
-          </label>
-        </div>
-
-        {/* Xアカウント貼り付け欄 */}
         {publicFlags.includes("x_account_match") && (
-          <div style={boxStyle}>
-            <div style={labelStyle}>Xアカウント一覧（長文貼り付けOK）</div>
+          <label className={styles.field}>
+            Xアカウント一覧（長文貼り付けOK）
             <textarea
-              placeholder={`長文貼り付けOK`}
+              placeholder="長文貼り付けOK"
               value={xAccountText}
               onChange={(e) => setXAccountText(e.target.value)}
-              style={{ ...inputStyle, height: 160, whiteSpace: "pre-wrap" }}
+              rows={6}
             />
-          </div>
+          </label>
         )}
 
-        {/* 抽選方式 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>抽選方式</div>
-          <label>
-            <input
-              type="radio"
-              checked={mode === "count"}
-              onChange={() => setMode("count")}
-            />{" "}
-            枠数方式
-          </label>
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="radio"
-              checked={mode === "prob"}
-              onChange={() => setMode("prob")}
-            />{" "}
-            確率方式
-          </label>
-        </div>
+        <section className={styles.panel} aria-labelledby="draw-mode-heading">
+          <h2 id="draw-mode-heading">抽選方式</h2>
+          <div className={styles.choices}>
+            <label className={styles.choice}>
+              <input type="radio" name="draw-mode" checked={mode === "count"} onChange={() => setMode("count")} />
+              枠数方式
+            </label>
+            <label className={styles.choice}>
+              <input type="radio" name="draw-mode" checked={mode === "prob"} onChange={() => setMode("prob")} />
+              確率方式
+            </label>
+          </div>
+        </section>
 
-        {/* リセット方式 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>リセット方式</div>
-          <label>
-            <input
-              type="radio"
-              checked={resetType === "none"}
-              onChange={() => changeResetType("none")}
-            />{" "}
-            リセットなし
-          </label>
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="radio"
-              checked={resetType === "daily"}
-              onChange={() => changeResetType("daily")}
-            />{" "}
-            デイリー（毎日6時）
-          </label>
-          <label style={{ marginLeft: 16 }}>
-            <input
-              type="radio"
-              checked={resetType === "x_account"}
-              onChange={() => changeResetType("x_account")}
-            />{" "}
-            Xアカウント使用型
-          </label>
+        <section className={styles.panel} aria-labelledby="reset-type-heading">
+          <h2 id="reset-type-heading">リセット方式</h2>
+          <div className={styles.choices}>
+            <label className={styles.choice}>
+              <input type="radio" name="reset-type" checked={resetType === "none"} onChange={() => changeResetType("none")} />
+              リセットなし
+            </label>
+            <label className={styles.choice}>
+              <input type="radio" name="reset-type" checked={resetType === "daily"} onChange={() => changeResetType("daily")} />
+              デイリー（毎日6時）
+            </label>
+            <label className={styles.choice}>
+              <input type="radio" name="reset-type" checked={resetType === "x_account"} onChange={() => changeResetType("x_account")} />
+              Xアカウント使用型
+            </label>
+          </div>
           {resetType === "x_account" && (
-            <p style={{ margin: "10px 0 0", color: "#92400e" }}>
+            <p className={styles.hint}>
               一致したXアカウントの行を抽選後に1行削除します。登録行数が利用可能回数になります。
             </p>
           )}
-        </div>
+        </section>
 
-        {/* サムネイル画像 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>サムネイル画像</div>
+        <section className={styles.panel} aria-labelledby="thumbnail-heading">
+          <h2 id="thumbnail-heading">サムネイル画像</h2>
 
-          <div style={{ marginTop: 12 }}>
-            <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-              レギュラー
-            </div>
+          <div className={styles.imageGroup} role="group" aria-label="レギュラーのサムネイル画像">
+            <h3>レギュラー</h3>
             <ImageChoices
               images={gachaImages.filter((image) =>
                 isRegularGachaFolder(image.folder)
@@ -493,23 +432,14 @@ export default function GachaCreatePage() {
             />
           </div>
 
-          <div style={{ marginTop: 16 }}>
-            <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-              イベント
-            </div>
+          <div className={styles.imageGroup} role="group" aria-label="イベントのサムネイル画像">
+            <h3>イベント</h3>
             {!eventImagesLoaded ? (
               <button
                 type="button"
                 onClick={() => void loadEventImages()}
                 disabled={eventImagesLoading}
-                style={{
-                  padding: "8px 14px",
-                  border: "none",
-                  borderRadius: 6,
-                  background: "#7c3aed",
-                  color: "white",
-                  cursor: eventImagesLoading ? "not-allowed" : "pointer",
-                }}
+                className={styles.secondaryButton}
               >
                 {eventImagesLoading
                   ? "イベント画像を読み込み中…"
@@ -527,170 +457,165 @@ export default function GachaCreatePage() {
           </div>
 
           {thumbnail && (
-            <p style={{ marginTop: 8 }}>
+            <p className={styles.selectedImage}>
               選択中：<strong>{thumbnail}</strong>
             </p>
           )}
-        </div>
+        </section>
 
-        {/* 総数（count のみ） */}
         {mode === "count" && (
-          <input
-            type="number"
-            placeholder="総数"
-            value={totalCount}
-            onChange={(e) =>
-              setTotalCount(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            style={inputStyle}
-          />
+          <label className={styles.field}>
+            総数
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="総数"
+              value={totalCount}
+              onChange={(e) =>
+                setTotalCount(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            />
+          </label>
         )}
 
-        {/* ポイント設定 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>ポイント設定</div>
-          <input
-            type="number"
-            placeholder="消費ポイント"
-            value={cost}
-            onChange={(e) =>
-              setCost(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            style={inputStyle}
-          />
-          <input
-            type="number"
-            placeholder="上限回数"
-            value={maxPerUser}
-            onChange={(e) =>
-              setMaxPerUser(
-                e.target.value === "" ? "" : Number(e.target.value)
-              )
-            }
-            style={inputStyle}
-          />
-        </div>
+        <section className={styles.panel} aria-labelledby="points-heading">
+          <h2 id="points-heading">ポイント設定</h2>
+          <div className={styles.fields}>
+            <label className={styles.field}>
+              消費ポイント
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="消費ポイント"
+                value={cost}
+                onChange={(e) =>
+                  setCost(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              />
+            </label>
+            <label className={styles.field}>
+              上限回数
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="上限回数"
+                value={maxPerUser}
+                onChange={(e) =>
+                  setMaxPerUser(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              />
+            </label>
+          </div>
+        </section>
 
-        {/* 期限 */}
-        <div>
-          <div style={labelStyle}>締切日時（日本時間・JST）</div>
+        <label className={styles.field}>
+          締切日時（日本時間・JST）
           <input
             type="datetime-local"
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.target.value)}
-            style={inputStyle}
           />
-        </div>
+        </label>
 
-        {/* 枠設定 */}
-        <div style={boxStyle}>
-          <div style={labelStyle}>枠設定</div>
+        <section className={styles.panel} aria-labelledby="frames-heading">
+          <h2 id="frames-heading">枠設定</h2>
+          <p className={styles.hint}>最後の枠の上限数・確率は、作成時に残りの分を自動計算します。</p>
 
           {frames.map((f, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                gap: 8,
-                marginBottom: 8,
-                alignItems: "center",
-              }}
-            >
-              <input
-                type="text"
-                placeholder="枠名"
-                value={f.label}
-                onChange={(e) => updateFrame(i, "label", e.target.value)}
-                style={{ ...inputStyle, flex: 2 }}
-              />
-              <label>
-                演出
-                <select value={frameAnimationLevel(f.animationLevel, i, frames.length)}
-                  onChange={e => updateFrame(i, "animationLevel", e.target.value)} style={inputStyle}>
-                  {GACHA_ANIMATION_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
-                </select>
-              </label>
-
-              {mode === "count" ? (
-                <input
-                  type="number"
-                  placeholder={i === frames.length - 1 ? "自動" : "上限数"}
-                  value={f.maxCount}
-                  onChange={(e) => updateFrame(i, "maxCount", e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
+            <section key={i} className={styles.frameCard} aria-labelledby={`frame-heading-${i}`}>
+              <h3 id={`frame-heading-${i}`}>枠 {i + 1}{i === frames.length - 1 ? "（最後の枠）" : ""}</h3>
+              <div className={styles.fields}>
+                <label className={`${styles.field} ${styles.fullWidth}`}>
+                  枠名
+                  <input
+                    type="text"
+                    placeholder="枠名"
+                    value={f.label}
+                    onChange={(e) => updateFrame(i, "label", e.target.value)}
+                  />
+                </label>
+                <label className={styles.field}>
+                  演出
+                  <select value={frameAnimationLevel(f.animationLevel, i, frames.length)}
+                    onChange={e => updateFrame(i, "animationLevel", e.target.value)}>
+                    {GACHA_ANIMATION_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  {mode === "count" ? "上限数" : "確率（%）"}{i === frames.length - 1 ? "（自動計算）" : ""}
+                  {mode === "count" ? (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder={i === frames.length - 1 ? "自動" : "上限数"}
+                      value={f.maxCount}
+                      onChange={(e) => updateFrame(i, "maxCount", e.target.value)}
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder={i === frames.length - 1 ? "自動" : "確率%"}
+                      value={f.probability}
+                      onChange={(e) => updateFrame(i, "probability", e.target.value)}
+                    />
+                  )}
+                </label>
+                <div className={`${styles.numberPair} ${styles.fullWidth}`}>
+                  <label className={styles.field}>
+                    最小報酬（pt）
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder="最小"
+                      value={f.rewardMin}
+                      onChange={(e) => updateFrame(i, "rewardMin", e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    最大報酬（pt）
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder="最大"
+                      value={f.rewardMax}
+                      onChange={(e) => updateFrame(i, "rewardMax", e.target.value)}
+                    />
+                  </label>
+                </div>
+                <RewardDeliverySelect
+                  className={`${styles.field} ${styles.fullWidth}`}
+                  includePoints
+                  value={f.nanikaTier ?? (f.shippingEnabled ? "shipping" : "points")}
+                  onChange={value => setFrames(current => current.map((frame, index) => index === i
+                    ? { ...frame, shippingEnabled: value !== "points", nanikaTier: value === "points" || value === "shipping" ? null : value }
+                    : frame))}
                 />
-              ) : (
-                <input
-                  type="number"
-                  placeholder={i === frames.length - 1 ? "自動" : "確率%"}
-                  value={f.probability}
-                  onChange={(e) =>
-                    updateFrame(i, "probability", e.target.value)
-                  }
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-              )}
-
-              <input
-                type="number"
-                placeholder="最小"
-                value={f.rewardMin}
-                onChange={(e) => updateFrame(i, "rewardMin", e.target.value)}
-                style={{ ...inputStyle, flex: 1 }}
-              />
-
-              <input
-                type="number"
-                placeholder="最大"
-                value={f.rewardMax}
-                onChange={(e) => updateFrame(i, "rewardMax", e.target.value)}
-                style={{ ...inputStyle, flex: 1 }}
-              />
-
-              <RewardDeliverySelect
-                includePoints
-                value={f.nanikaTier ?? (f.shippingEnabled ? "shipping" : "points")}
-                onChange={value => setFrames(current => current.map((frame, index) => index === i
-                  ? { ...frame, shippingEnabled: value !== "points", nanikaTier: value === "points" || value === "shipping" ? null : value }
-                  : frame))}
-              />
-            </div>
+                {f.nanikaTier && (
+                  <p className={`${styles.hint} ${styles.fullWidth}`}>
+                    {NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の権利（1回分）
+                  </p>
+                )}
+              </div>
+            </section>
           ))}
 
-          <button
-            onClick={addFrame}
-            style={{
-              padding: "8px 12px",
-              background: "#2563eb",
-              color: "white",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
+          <button type="button" onClick={addFrame} className={styles.secondaryButton}>
             ＋ 枠を追加
           </button>
-        </div>
+        </section>
 
-        {/* 作成ボタン */}
         <button
+          type="button"
           onClick={handleCreate}
           disabled={loading}
-          style={{
-            padding: "12px",
-            background: "#4f46e5",
-            color: "white",
-            borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 16,
-          }}
+          className={styles.primaryButton}
         >
           {loading ? "作成中…" : "ガチャを作成する"}
         </button>
 
         {createdCode && (
-          <p style={{ marginTop: 12 }}>
+          <p className={styles.selectedImage}>
             作成されたコード：<strong>{createdCode}</strong>
           </p>
         )}
@@ -698,7 +623,6 @@ export default function GachaCreatePage() {
     </div>
   );
 }
-
 type ImageChoicesProps = {
   images: GachaImage[];
   thumbnail: string;
@@ -719,44 +643,19 @@ function ImageChoices({
   }
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-      {images.map((image) => (
-        <img
+    <div className={styles.imageGrid}>
+      {images.map((image, index) => (
+        <button
+          type="button"
           key={image.url}
-          src={image.url}
-          alt=""
           onClick={() => onSelect(image.url)}
-          style={{
-            width: 80,
-            height: 80,
-            objectFit: "cover",
-            borderRadius: 8,
-            cursor: "pointer",
-            border:
-              thumbnail === image.url
-                ? "3px solid #2563eb"
-                : "1px solid #ccc",
-          }}
-        />
+          className={styles.imageChoice}
+          aria-label={`サムネイル ${index + 1} を選択`}
+          aria-pressed={thumbnail === image.url}
+        >
+          <img src={image.url} alt="" />
+        </button>
       ))}
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #ccc",
-};
-
-const boxStyle: React.CSSProperties = {
-  border: "1px solid #ddd",
-  padding: 12,
-  borderRadius: 8,
-};
-
-const labelStyle: React.CSSProperties = {
-  fontWeight: "bold",
-  marginBottom: 8,
-};
