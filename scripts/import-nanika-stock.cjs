@@ -142,6 +142,18 @@ print('Ledger verified')
 async function main() {
   const batch = loadBatch(process.argv[2]);
   const tool = ledgerCheck(batch);
+  const { loadApproval, checkApprovedLedger, verifiedLegacyRecords, reconcileApproved, recordAcknowledgedLedger } = require("./reconcile-nanika-stock.cjs");
+  const option = name => {
+    const index = process.argv.indexOf(name);
+    if (index === -1) return undefined;
+    assert.ok(process.argv[index + 1] && !process.argv[index + 1].startsWith("--"), `Missing ${name} value`);
+    return process.argv[index + 1];
+  };
+  const approvalFile = option("--approved");
+  const update = approvalFile ? loadApproval(approvalFile, batch) : undefined;
+  if (update) checkApprovedLedger(update, batch);
+  const legacyFile = option("--verified-legacy");
+  const verified = legacyFile ? readJson(legacyFile) : [];
   const { initializeApp, cert } = require("firebase-admin/app");
   const { getFirestore } = require("firebase-admin/firestore");
   const { getAuth } = require("firebase-admin/auth");
@@ -152,7 +164,7 @@ async function main() {
   }) });
   const db = getFirestore(app);
   const backend = {
-    list: async () => (await db.collection("nanikaGachaImages").select("tier", "name", "state", "sourceHash", "cert").get()).docs.map(doc => ({ ...doc.data(), id: doc.id })),
+    list: async () => verifiedLegacyRecords((await db.collection("nanikaGachaImages").select("tier", "name", "state", "sourceHash", "cert").get()).docs.map(doc => ({ ...doc.data(), id: doc.id })), verified),
     get: async id => (await db.collection("nanikaGachaImages").doc(id).get()).data(),
   };
   checkDuplicates(batch.manifest.items, await backend.list());
@@ -177,7 +189,7 @@ async function main() {
     if (!response.ok || body.error) throw Error("Authenticated request failed");
     return body;
   }
-  backend.upload = async data => {
+  backend.call = async (action, data) => {
     if (Date.now() > session.expires - 120000) {
       const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
         method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -188,8 +200,9 @@ async function main() {
       const value = await response.json();
       session = { token: value.id_token, refreshToken: value.refresh_token, expires: Date.now() + Number(value.expires_in) * 1000 };
     }
-    return (await jsonPost(`https://us-east1-${project}.cloudfunctions.net/adminUploadNanikaImage`, { data }, session.token)).result;
+    return (await jsonPost(`https://us-east1-${project}.cloudfunctions.net/${action}`, { data }, session.token)).result;
   };
+  backend.upload = data => backend.call("adminUploadNanikaImage", data);
   const server = http.createServer(async (request, response) => {
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
@@ -214,13 +227,17 @@ async function main() {
         const user = await getAuth(app).verifyIdToken(value.idToken, true);
         assert.ok((await db.collection("admins").doc(user.uid).get()).exists, "Not an administrator");
         session = { token: value.idToken, refreshToken: value.refreshToken, expires: Date.now() + Number(value.expiresIn) * 1000 };
-        return reply(200, `<h1>Administrator authenticated</h1><form method="post" action="/import"><input type="hidden" name="nonce" value="${nonce}"><button>Register ${batch.manifest.items.length} prizes and acknowledge successful entries</button></form>`);
+        return reply(200, `<h1>Administrator authenticated</h1><form method="post" action="/import"><input type="hidden" name="nonce" value="${nonce}"><button>${update ? `Remove ${update.approval.removals.length}, move ${update.approval.moves.length}, then register` : "Register"} ${batch.manifest.items.length} prizes and acknowledge successful entries</button></form>`);
       }
       if (!session || running) return reply(409, "Login required or import running");
       running = true;
       let error;
       try {
         ledgerCheck(batch);
+        if (update) {
+          checkApprovedLedger(update, batch);
+          await reconcileApproved(update, backend);
+        }
         await importBatch(batch, backend);
       } catch (failure) { error = failure; }
       // Acknowledge only durable, server-confirmed successes, including a partial import.
@@ -233,10 +250,18 @@ async function main() {
         assert.equal(ack.status, 0, ack.stderr || "Acknowledgment failed");
         console.log(ack.stdout.trim());
         ledgerCheck(batch, true);
+        if (update && batch.receipt.results.every(result => ["imported", "already_exists"].includes(result.status))) {
+          recordAcknowledgedLedger(update, batch);
+        }
       }
       if (error) throw error;
       console.log("COMPLETE: all prizes verified and ledger acknowledged.");
-      reply(200, "Import complete. Server records and successful ledger marks verified.");
+      if (update) {
+        const counts = {};
+        for (const entry of update.receipt.results) counts[entry.result] = (counts[entry.result] || 0) + 1;
+        console.log(`Existing updates: ${JSON.stringify(counts)}`);
+      }
+      reply(200, "Processing finished. Check receipts for existing updates requiring review. Registered prizes and successful ledger marks verified.");
       session = undefined;
       server.close();
     } catch {
