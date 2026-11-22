@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { NanikaFrame } from "@/components/nanika-gacha/NanikaCommon";
 import styles from "@/components/nanika-gacha/nanika.module.css";
 
@@ -6,6 +7,8 @@ export default function NanikaGuide() {
     <section className={styles.card}><h2>4種類の専用ガチャ</h2>
       <p>何かのPSAガチャ、PSA10ガチャの衛星級・惑星級・恒星級から公開中の企画を選びます。各種類の抽選可能な画像から均等に選ばれ、表示された画像そのものが景品になります。</p>
       <p>参加費用とポイント化の値は企画ごとに異なります。管理者の対象Xアカウント一覧の1行を1回の抽選で消費します。残高と参加枠が必要です。</p>
+      <p>景品の画像と名称は、ログインせずにカテゴリーごとにご覧いただけます。</p>
+      <Link href="/nanika-gacha/prizes" className={styles.prizeListLink}>4カテゴリーの景品一覧を見る（ログイン不要）</Link>
     </section>
     <section className={styles.warning}><h2>72時間以内に受取方法を選んでください</h2>
       <p>当選後は「発送」か「ポイント化」を選びます。ポイント化の確定後は発送に変更できません。発送を依頼すると、この景品は次の抽選には出ません。ポイント化した景品は抽選候補に戻ります。</p>

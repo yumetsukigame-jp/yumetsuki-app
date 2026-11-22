@@ -23,3 +23,8 @@
 .prizeDialog { width: min(90vw, 800px); max-height: 90dvh; padding: 20px; margin: auto; border: 1px solid #dbe2ec; border-radius: 12px; color: #17243b; overflow: auto; overflow-wrap: anywhere; }
 .prizeDialog::backdrop { background: rgb(15 23 42 / 75%); }
 .prizeFullImage { display: block; width: 100%; height: auto; max-height: 65dvh; object-fit: contain; }
+.publicPrizeGrid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
+.publicPrizeGrid li { min-width: 0; }
+.page .publicPrizeGrid .prizeThumbnailButton { display: flex; flex-direction: column; gap: 10px; height: 100%; color: #17243b; text-align: left; }
+.publicPrizeGrid .prizeThumbnail { height: 190px; }
+.prizeName { display: block; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }

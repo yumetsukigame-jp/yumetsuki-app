@@ -1,5 +1,4 @@
-import { getApps, initializeApp, cert, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getNanikaImageDb } from "@/app/lib/nanikaGachaServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,21 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return new Response("Invalid image ID", { status: 400 });
   }
   try {
-    const appName = "nanika-gacha-images";
-    let imageApp = getApps().find((app) => app.name === appName);
-    if (!imageApp) {
-      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-      imageApp = initializeApp({
-        projectId: process.env.FIREBASE_PROJECT_ID ?? process.env.GCLOUD_PROJECT,
-        credential: clientEmail || privateKey ? cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail,
-          privateKey: privateKey?.replace(/\\n/g, "\n"),
-        }) : applicationDefault(),
-      }, appName);
-    }
-    const db = getFirestore(imageApp);
+    const db = getNanikaImageDb();
     const image = await db.collection("nanikaGachaImages").doc(id).get();
     if (!image.exists) return new Response("Image not found", { status: 404 });
     let buffer: unknown = image.get("thumbnail");
