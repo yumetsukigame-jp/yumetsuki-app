@@ -20,15 +20,6 @@ export type HomeMenuSection = {
 
 export const homeMenu: HomeMenuSection[] = [
   {
-    id: "quest", title: "ゆめつきクエスト", color: "#354e86", accent: "#d6b766",
-    cards: [{ label: "ゆめつきクエスト", href: "/quest", imageSrc: "/quest/menu-thumbnail-v2.jpg", imageWidth: 1024, imageHeight: 576, description: "星のサイコロで、４つの舞台を巡る旅へ。" }],
-    guides: [{ label: "クエストの遊び方", href: "/quest/guide", icon: "book" }],
-    details: [
-      { label: "星務進捗ランキング", href: "/quest/ranking", icon: "ranking" },
-      { label: "過去の星務報告書", href: "/quest/archive", icon: "history" },
-    ],
-  },
-  {
     id: "nibuichi", title: "今日のニブイチ", color: "#854d0e", accent: "#eab308",
     cards: [{ label: "今日のニブイチに参加する", href: "/nibuichi", image: "nibuichi", description: "今日の結果を予想しよう。" }],
     guides: [{ label: "ニブイチの遊び方を見る", href: "/nibuichi/guide", icon: "book" }],
@@ -45,6 +36,15 @@ export const homeMenu: HomeMenuSection[] = [
       { label: "ガチャを引く", href: "/gacha", icon: "gacha" },
       { label: "ガチャ結果を見る", href: "/gacha/results", icon: "history" },
       { label: "ガチャアーカイブを見る", href: "/gacha/archive", icon: "book" },
+    ],
+  },
+  {
+    id: "quest", title: "ゆめつきクエスト", color: "#354e86", accent: "#d6b766",
+    cards: [{ label: "ゆめつきクエスト", href: "/quest", imageSrc: "/quest/menu-thumbnail-v2.jpg", imageWidth: 1024, imageHeight: 576, description: "星のサイコロで、４つの舞台を巡る旅へ。" }],
+    guides: [{ label: "クエストの遊び方", href: "/quest/guide", icon: "book" }],
+    details: [
+      { label: "星務進捗ランキング", href: "/quest/ranking", icon: "ranking" },
+      { label: "過去の星務報告書", href: "/quest/archive", icon: "history" },
     ],
   },
   {
@@ -79,7 +79,7 @@ export const homeMenu: HomeMenuSection[] = [
   },
   {
     id: "account", title: "アカウント", color: "#166534", accent: "#16a34a",
-    cards: [{ label: "書庫を見る", href: "/archive", image: "archive", description: "オリカや、企画の思い出を。" }],
+    cards: [{ label: "書庫を見る", href: "/archive", image: "archive", imageSrc: "/menu/thumbnails/archive.webp?v=414dccbc1b0f", description: "オリカや、企画の思い出を。" }],
     guides: [],
     details: [{ label: "プロフィールを編集する", href: "/profile", image: "profile", description: "登録内容を確認・編集。" }],
   },

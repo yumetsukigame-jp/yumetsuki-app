@@ -43,6 +43,7 @@ yarn-error.log*
 next-env.d.ts
 source_images/
 /temp_info/nanika-stock/
+/local-data/completed-handoffs/
 
 serviceAccountKey.json
 

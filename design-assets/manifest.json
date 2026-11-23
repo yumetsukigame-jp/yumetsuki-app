@@ -58,10 +58,23 @@
       "url": "/menu/thumbnails/archive.png",
       "width": 1672,
       "height": 941,
-      "bytes": 2741190,
+      "bytes": 2693690,
       "hasTransparency": false,
-      "sha256": "a6ca9415664de95f4cf083acce7b9953f43b5f82d08f75488d339ba4745746d4",
-      "source": "image_gen"
+      "sha256": "f690fa111f8e2b57d3191e24770b48b60fef6dfcb97aafffac293b1eae2ab6c7",
+      "source": "image_gen, corrected to two hands",
+      "status": "implemented"
+    },
+    {
+      "id": "thumbnails/archive-webp",
+      "file": "../public/menu/thumbnails/archive.webp",
+      "sourceArtwork": "../public/menu/thumbnails/archive.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 388790,
+      "sha256": "414dccbc1b0feae0f476706c8617ede147f6ae311a120cbefcc485a9ce332dfc",
+      "source": "WebP conversion of corrected artwork",
+      "cacheVersion": "414dccbc1b0f",
+      "status": "implemented"
     },
     {
       "id": "thumbnails/code",

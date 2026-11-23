@@ -199,19 +199,32 @@ async function main() {
       await menuSelect.selectOption("admin");
       await page.getByRole("button", { name: "メニューの表示設定を保存", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "トップメニューの表示設定を保存しました。" }).waitFor();
-      assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "");
+      const fields = ["１歩あたりの星ポイント", "１レベル上がる星ポイント", "レベル上昇ごとの評価加点", "達成率100%に相当する評価点",
+        "達成率の小数桁（０〜２）", "中間の下限評価点", "上位の下限評価点", "最上位の塔進捗点（59〜66）", "最上位の必要レベル"];
+      for (let index = 0; index < fields.length; index++) assert.equal(
+        await page.getByLabel(fields[index], { exact: true }).inputValue(), String([1, 12, 2, 80, 1, 52, 63, 61, 6][index]));
+      assert.equal(await page.getByLabel("配布方式").inputValue(), "");
+      assert.equal(await page.getByLabel("この開催での救済").inputValue(), "");
       assert.equal(await page.getByRole("button", { name: "確定した設定で開催を公開する" }).count(), 0);
       await page.getByLabel("開催名", { exact: true }).fill("ローカル検証のみ");
       await page.getByLabel("開始日時（日本時間）").fill("2026-11-23T12:00");
       await page.getByLabel("終了日時（日本時間）").fill("2026-12-10T12:00");
       await page.getByLabel("配布方式").selectOption("admin");
-      const fields = ["１歩あたりの星ポイント", "１レベル上がる星ポイント", "レベル上昇ごとの評価加点", "達成率100%に相当する評価点",
-        "達成率の小数桁（０〜２）", "中間の下限評価点", "上位の下限評価点", "最上位の塔進捗点（59〜66）", "最上位の必要レベル"];
-      for (let index = 0; index < fields.length; index++) await page.getByLabel(fields[index], { exact: true }).fill(String([1, 12, 2, 80, 1, 52, 64, 61, 6][index]));
+      await page.getByLabel("上位の下限評価点", { exact: true }).fill("64");
+      await page.getByLabel("１レベル上がる星ポイント", { exact: true }).fill("15");
       await page.getByLabel("この開催での救済").selectOption("no");
       await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
       const publish = page.getByRole("button", { name: "確定した設定で開催を公開する", exact: true });
       await publish.waitFor();
+      await page.getByRole("button", { name: "新しい開催を作る", exact: true }).click();
+      assert.equal(await page.getByLabel("開催名", { exact: true }).inputValue(), "");
+      assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "12");
+      assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "63");
+      assert.equal(await publish.count(), 0);
+      await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
+      await publish.waitFor();
+      assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "15");
+      assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "64");
       assert.equal(await publish.isEnabled(), false);
       await page.getByRole("button", { name: "保存した設定で14回を試算する" }).click();
       await page.getByText("各２万件、６条件の試算を保存しました。", { exact: false }).waitFor();
@@ -237,11 +250,15 @@ async function main() {
         await page.setViewportSize({ width, height: 950 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: admin overflow at ${width}`);
       }
+      await page.setViewportSize({ width: 390, height: 950 });
       await page.goto(`${base}/`);
       const menu = page.getByRole("link", { name: /^ゆめつきクエスト/ });
       await menu.waitFor();
       assert.equal(await menu.getAttribute("href"), "/quest");
       assert.ok(decodeURIComponent(await menu.locator("img").getAttribute("src")).includes("/quest/menu-thumbnail-v2.jpg"));
+      assert.deepEqual(await page.getByRole("region").filter({ has: page.locator("h3") }).locator("h3").allTextContents(),
+        ["今日のニブイチ", "ガチャ", "ゆめつきクエスト", "何かの景品ガチャ", "クイズ", "ゆめつきの狙い撃ち", "ポイント関連", "アカウント"]);
+      assert.ok(decodeURIComponent(await page.locator('a[href="/archive"] img').getAttribute("src")).includes("archive.webp?v=414dccbc1b0f"));
       for (const [mode, allowed] of [["admin", false], ["subscriber", false], ["subscriber", true], ["public", true], ["admin", true]]) {
         menuAccess = { ...menuAccess, mode, allowed };
         await page.reload();
@@ -256,6 +273,15 @@ async function main() {
           assert.equal(await disabledCard.evaluate(element => getComputedStyle(element).filter), "grayscale(1)");
           await disabledCard.evaluate(element => element.click());
           assert.equal(new URL(page.url()).pathname, "/");
+          if (name === "chromium" && mode === "admin" && process.env.GUIDE_SCREENSHOT_DIR) {
+            for (const [file, title] of [["home-menu", "ガチャ"], ["quest-menu", "ゆめつきクエスト"],
+              ["nanika-menu", "何かの景品ガチャ"], ["neraiuchi-menu", "ゆめつきの狙い撃ち"]]) {
+              const region = page.getByRole("region", { name: title, exact: true });
+              await region.scrollIntoViewIfNeeded();
+              await region.locator("img:visible").evaluateAll(images => Promise.all(images.map(image => image.decode())));
+              await region.screenshot({ path: path.join(process.env.GUIDE_SCREENSHOT_DIR, `${file}.png`) });
+            }
+          }
         } else {
           await section.locator('a[href="/quest"]').waitFor();
           assert.equal(await section.locator('a[href="/quest"]').count(), 1);

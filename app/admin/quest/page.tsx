@@ -20,6 +20,10 @@ const numericFields = {
   upperMin: "上位の下限評価点", topMinProgress: "最上位の塔進捗点（59〜66）", topMinLevel: "最上位の必要レベル",
 } as const;
 type Numeric = keyof typeof numericFields;
+const recommendedNumbers: Record<Numeric, number> = {
+  stepStarPoints: 1, levelPoints: 12, levelScore: 2, percentMax: 80, percentDecimals: 1,
+  middleMin: 52, upperMin: 63, topMinProgress: 61, topMinLevel: 6,
+};
 type AdminRun = QuestPublicRun & { xAccountList: string[]; simulation: QuestSimulation[] | null; simulatedVersion: number | null };
 type Listing = { items: AdminRun[]; nextCursor: string | null };
 const localJst = (ms: number) => new Date(ms + 9 * 3600000).toISOString().slice(0, 16);
@@ -30,7 +34,7 @@ function numberValue(value: string, label: string) {
 function newForm() {
   return { title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
     flags: ["public"] as QuestFlag[], xText: "", accessCode: "",
-    numbers: Object.fromEntries(Object.keys(numericFields).map(key => [key, ""])) as Record<Numeric, string>,
+    numbers: Object.fromEntries(Object.entries(recommendedNumbers).map(([key, value]) => [key, String(value)])) as Record<Numeric, string>,
     distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(14).fill(""), dailyHour: "",
     rescue: "" as "" | "yes" | "no", adminRescue: false, eventSources: [] as QuestRules["rescue"]["eventSources"],
     rescueFrom: "", rescueBelow: "", rescueMax: "", rescueRate: "", rescueTurn: "" };
@@ -198,6 +202,7 @@ export default function QuestAdminPage() {
           <input type="datetime-local" required value={value} onChange={event => change("releaseAt", form.releaseAt.map((at, i) => i === index ? event.target.value : at))} /></label>)}</div>}
         <h3>星ポイント・評価境界</h3>
         <p className={styles.small}>評価点＝現在地の進捗点＋レベル加点×（Lv.−１）。最上位は塔の指定進捗点とレベルの両方を満たす方です。盤面の金の星・星咲き・出口の効果はboard-v2に固定されています。</p>
+        {!selected && <p className={styles.notice}>新規開催には試算用の推奨初期値を入力しています。配布・救済条件によって分布は変わるため、そのまま確定値とはせず、条件を設定して14回の分布を試算してから公開してください。</p>}
         <div className={styles.fields}>{Object.entries(numericFields).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "stepStarPoints" || key === "levelScore" || key === "percentDecimals" ? 0 : 1}
           step={1} value={form.numbers[key as Numeric]} onChange={event => change("numbers", { ...form.numbers, [key]: event.target.value })} /></label>)}</div>
         <h3>イベント勝利・管理者付与による救済</h3>

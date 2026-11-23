@@ -5,7 +5,10 @@ import styles from "./guide.module.css";
 import heroImage from "./images/IMG_8173.jpeg";
 import signupImage from "./images/IMG_8174.jpeg";
 import searchImage from "./images/IMG_8177.jpeg";
-import homeImage from "./images/IMG_8178.jpeg";
+import homeImage from "./images/home-menu.webp";
+import nanikaMenuImage from "./images/nanika-menu.webp";
+import neraiuchiMenuImage from "./images/neraiuchi-menu.webp";
+import questMenuImage from "./images/quest-menu.webp";
 import addToHomeImage from "./images/IMG_8179.jpeg";
 import gachaCodeImage from "./images/IMG_8180.jpeg";
 import gachaListImage from "./images/IMG_8181.jpeg";
@@ -14,19 +17,19 @@ import addToHomeMenuImage from "./images/IMG_8183.jpeg";
 import addToHomeConfirmImage from "./images/IMG_8184.jpeg";
 import gachaResultsImage from "./images/IMG_8185.jpeg";
 import quizImage from "./images/IMG_8187.jpeg";
-import menuImage from "./images/IMG_8188.jpeg";
-import topImage from "./images/IMG_8189.jpeg";
 
 const gallery = [
   { image: searchImage, alt: "yumetsuki.jpを検索する画面", caption: "01｜yumetsuki.jpで検索" },
   { image: addToHomeImage, alt: "ホーム画面に追加する操作例", caption: "02｜ホーム画面に追加" },
   { image: signupImage, alt: "新規登録画面", caption: "03｜新規登録" },
-  { image: homeImage, alt: "トップページ", caption: "04｜トップページ" },
+  { image: homeImage, alt: "画像カードと遊び方、詳細ボタンがあるガチャメニューの画面例", caption: "04｜新しい画像メニュー" },
   { image: gachaCodeImage, alt: "ガチャコード入力画面", caption: "05｜ガチャを楽しむ" },
   { image: gachaListImage, alt: "ガチャ一覧画面", caption: "06｜ガチャ一覧" },
   { image: quizImage, alt: "クイズメニュー", caption: "07｜クイズに挑戦" },
-  { image: menuImage, alt: "ニブイチとガチャのメニュー", caption: "08｜各機能を利用" },
+  { image: nanikaMenuImage, alt: "何かの景品ガチャのトップメニューの画面例", caption: "08｜何かの景品ガチャ" },
   { image: gachaResultsImage, alt: "ガチャの結果一覧", caption: "09｜ガチャ結果を確認" },
+  { image: questMenuImage, alt: "リンクが無効なときのゆめつきクエストメニューの画面例", caption: "公開対象外のメニュー表示例" },
+  { image: neraiuchiMenuImage, alt: "ゆめつきの狙い撃ちのトップメニューの画面例", caption: "狙い撃ちの企画・遊び方・履歴" },
   { image: addToHomeMenuImage, alt: "iPhoneの共有メニュー", caption: "ホーム画面へ追加する操作" },
   { image: addToHomeConfirmImage, alt: "ホーム画面に追加する確認画面", caption: "ホーム画面への追加確認" },
   { image: noticeImage, alt: "ご容赦くださいの案内", caption: "アプリについてのお知らせ" },
@@ -112,11 +115,12 @@ export default function GuidePage() {
       <section className={`${styles.section} ${styles.featureBand}`}>
         <div className={styles.container}>
           <SectionHeading eyebrow="FEATURES" title="「ゆめつきの書斎」でできること">
-            主な機能を、実際の画面と一緒に紹介します。
+            トップはカテゴリー別の画像メニューです。大きなカードから各機能へ、遊び方から説明へ進めます。「詳細を表示」で履歴などの関連リンクも開きます。通常ガチャの次は、ゆめつきクエストです。
           </SectionHeading>
+          <p className={styles.note}>メニュー画像は説明用のログイン状態で撮影した画面例です。開催・公開範囲は実際の案内をご確認ください。グレーの項目はトップから開けません。</p>
           <div className={styles.features}>
-            <Feature image={homeImage} number="04" title="ニブイチ企画">
-              ガチャ結果を予想する参加型コンテンツ。リアルタイムの参加状況も楽しめます。
+            <Feature image={homeImage} number="04" title="画像メニューから選ぶ">
+              今日のニブイチ、ガチャ、クイズなどをカテゴリー別に表示。履歴やランキングは、それぞれの「詳細を表示」から確認できます。
             </Feature>
             <Feature image={gachaCodeImage} number="05" title="ガチャを引く【重要】">
               週間のお裾分け企画では、メインの当たり「ゆめつき賞」の当選決定にガチャを使用します。企画に参加したら、忘れずにガチャを引きましょう。
@@ -127,11 +131,14 @@ export default function GuidePage() {
             <Feature image={quizImage} number="07" title="クイズでポイントGET">
               「ゆめつきクイズ」で問題に挑戦。正解や参加を通じてポイントを獲得できます。
             </Feature>
-            <Feature image={menuImage} number="08" title="ポイントを活用">
-              貯めたポイントを使って、景品選択などの楽しみに繋げられます。
+            <Feature image={nanikaMenuImage} number="08" title="何かの景品ガチャ" badges={["当選権利", "挑戦権利"]}>
+              企画や購入で得た権利を使い、候補を見ながら商品の中身を抽選で決めます。当選権利は追加ポイント不要、挑戦権利は設定された消費ポイントも必要です。消費ポイントと受取ポイントは別です。<Link href="/nanika-gacha/guide">詳しい遊び方を見る</Link>。
             </Feature>
-            <Feature image={topImage} number="09" title="機能をまとめて利用">
-              クイズ、ガチャ、ミッション、ランキング、アカウント関連などをひとまとめに。
+            <Feature image={questMenuImage} number="09" title="ゆめつきクエスト" badges={["最大14回", "開催回別に保存"]}>
+              星のサイコロで４つの舞台を巡るイベント。星ポイントはクエスト内の経験値で、通常ポイントとは別です。項目は全員に表示されますが、公開対象外の間はグレー表示・リンクなしになります。<Link href="/quest/guide">クエストの遊び方を見る</Link>。
+            </Feature>
+            <Feature image={neraiuchiMenuImage} number="10" title="ゆめつきの狙い撃ち" badges={["参加無料", "１企画１回"]}>
+              受付期間に参加すると、サーバーで成立した順に参加番号が決まります。当選番号と一致すれば当選。押す速さで当選が保証される仕組みではなく、番号・当落・参加人数は企画終了後に公開します。<Link href="/neraiuchi/guide">詳しい遊び方を見る</Link>。
             </Feature>
           </div>
         </div>
@@ -178,7 +185,7 @@ export default function GuidePage() {
       <section className={`${styles.section} ${styles.featureBand}`}>
         <div className={styles.container}>
           <SectionHeading eyebrow="SCREEN GALLERY" title="実際の画面をチェック">
-            検索から登録、ホーム、ガチャ、クイズ、ポイント関連まで、操作イメージをまとめています。
+            トップメニューは現在の画面例に更新しています。登録・ホーム画面への追加などは旧画面を含む操作例です。端末や更新によって表示が異なる場合があります。
           </SectionHeading>
           <div className={styles.gallery}>
             {gallery.map((item) => (
@@ -258,11 +265,13 @@ function Feature({
   image,
   number,
   title,
+  badges = ["ゆめつき企画", "ポイント"],
   children,
 }: {
   image: typeof heroImage;
   number: string;
   title: string;
+  badges?: string[];
   children: React.ReactNode;
 }) {
   return (
@@ -273,8 +282,7 @@ function Feature({
         <h3>{title}</h3>
         <p>{children}</p>
         <div className={styles.badges}>
-          <span>ゆめつき企画</span>
-          <span>ポイント</span>
+          {badges.map(badge => <span key={badge}>{badge}</span>)}
         </div>
       </div>
     </article>
