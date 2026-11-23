@@ -39,7 +39,7 @@ export const homeMenu: HomeMenuSection[] = [
   },
   {
     id: "nanika-gacha", title: "何かの景品ガチャ", color: "#4338ca", accent: "#818cf8",
-    cards: [{ label: "何かの景品ガチャを見る", href: "/nanika-gacha", image: "nanika-gacha", imageWidth: 1536, imageHeight: 1024, description: "画像の景品を、発送またはポイントで。" }],
+    cards: [{ label: "何かの景品ガチャを見る", href: "/nanika-gacha", image: "nanika-gacha", imageWidth: 1536, imageHeight: 1024, description: "候補を見ながら、権利で商品の中身を抽選。" }],
     guides: [{ label: "何かの景品ガチャの遊び方", href: "/nanika-gacha/guide", icon: "book" }],
     details: [{ label: "自分の当選・受取履歴を見る", href: "/nanika-gacha/history", icon: "history" }],
   },
@@ -62,7 +62,7 @@ export const homeMenu: HomeMenuSection[] = [
     id: "points", title: "ポイント関連", color: "#1d4ed8", accent: "#2563eb",
     cards: [
       { label: "コード入力でポイント獲得", href: "/code", image: "code", description: "受け取ったコードを入力。" },
-      { label: "発送物を選ぶ", href: "/reward", image: "reward", description: "ポイントで選べる発送物を確認。" },
+      { label: "発送物を選ぶ", href: "/reward", image: "reward", description: "ポイントで選べる発送物・当選権利を確認。" },
     ],
     guides: [],
     details: [{ label: "発送履歴を見る", href: "/history", icon: "history" }],

@@ -11,7 +11,7 @@ const image = fs.readFileSync(path.join(__dirname, "..", "public/menu/thumbnails
 async function run() {
   const browser = await chromium.launch();
   try {
-    for (const width of [390, 1280]) {
+    for (const width of [360, 390, 1280]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       let satelliteFails = true;
       const catalogueRequests = [], imageRequests = [], errors = [];
@@ -51,7 +51,7 @@ async function run() {
       const page = await context.newPage();
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${base}/nanika-gacha/guide`);
-      await page.getByRole("link", { name: "4カテゴリーの景品一覧を見る（ログイン不要）" }).click();
+      await page.getByRole("link", { name: "景品候補を見る（ログイン不要）" }).click();
       await page.getByRole("heading", { name: "何かの景品ガチャ：景品一覧", exact: true }).waitFor();
       assert.equal(await page.locator('section[id^="prizes-"]').count(), 4);
       const psa = page.locator("#prizes-psa"), satellite = page.locator("#prizes-satellite");
@@ -60,7 +60,7 @@ async function run() {
       assert.deepEqual([...new Set(catalogueRequests.map(url => url.searchParams.get("tier")))].sort(), ["planet", "psa", "satellite", "star"]);
       assert.equal(await psa.locator("li").count(), 50);
       await satellite.getByRole("alert").waitFor();
-      await star.getByText("現在抽選できる景品はありません。").waitFor();
+      await star.getByText("ただいま景品を準備しています。").waitFor();
       assert.equal(await planet.locator("li").count(), 1, "One category failure must not hide the others");
       assert.ok(imageRequests.every(url => !url.searchParams.has("size")), "Full images must be fetched only after selection");
       await psa.getByRole("button", { name: "psa景品0を拡大", exact: true }).click();
@@ -86,9 +86,9 @@ async function run() {
       const publicRequestCount = catalogueRequests.length;
       await page.goto(`${base}/nanika-gacha/prizes/planet`);
       await page.getByRole("heading", { name: "何かのPSA10ガチャ（惑星級）の景品一覧", exact: true }).waitFor();
-      await page.getByRole("button", { name: "景品1を拡大", exact: true }).click();
-      await page.getByRole("dialog").getByRole("heading", { name: "既存ページの景品", exact: true }).waitFor();
-      assert.equal(catalogueRequests.length, publicRequestCount, "Existing single-category pages retain their original callable");
+      await page.getByRole("button", { name: /ROSA'S ENCOURAGEMENT.*を拡大/ }).click();
+      await page.getByRole("dialog").getByRole("heading", { name: /ROSA'S ENCOURAGEMENT/ }).waitFor();
+      assert.ok(catalogueRequests.length > publicRequestCount, "Single-category pages also expose candidates without campaign publication");
       await page.getByRole("dialog").getByRole("button", { name: "閉じる", exact: true }).click();
       assert.deepEqual(errors, []);
       await context.close();

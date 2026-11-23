@@ -454,6 +454,33 @@ test("rights survive stopped rounds and failed out-of-stock draws and remain vis
   assert.equal(data.get("nanikaGachaRights/alice").psa, 0);
   assert.equal([...data.keys()].filter(key => key.startsWith("shippingPending/")).length, 1);
 });
+test("challenge draws charge only the configured fee, preserve winning rights, and reject insufficient points without consuming either", async () => {
+  for (const fee of [0, 35]) {
+    const round = await fixture(2);
+    await grantPsaRight();
+    data.get("nanikaGachaSlots/psa").fee = fee;
+    data.get(`nanikaGachaRounds/${round}`).fee = fee;
+    data.get("users/alice").points = fee;
+    const view = await call("listNanikaGacha", {}, "alice");
+    assert.equal(view.points, fee);
+    assert.equal((await api.listNanikaGacha.run({}, {})).points, null);
+    if (fee > 0) {
+      data.get("users/alice").points = fee - 1;
+      await assert.rejects(draw(round, "insufficient", "alice", { fee }));
+      assert.equal(data.get("nanikaGachaSlots/psa").xAccounts.length, 3);
+      assert.equal(data.get("nanikaGachaRights/alice").psa, 1);
+      assert.equal(data.get("nanikaGachaInventory/psa").available, 2);
+      data.get("users/alice").points = fee;
+    }
+    const result = await draw(round, "challenge", "alice", { fee });
+    assert.equal(result.receipt.fee, fee);
+    assert.equal(result.receipt.exchangePoints, 30);
+    assert.equal(result.receipt.usedRight, false);
+    assert.equal(data.get("users/alice").points, 0);
+    assert.equal(data.get("nanikaGachaSlots/psa").xAccounts.length, 2);
+    assert.equal(data.get("nanikaGachaRights/alice").psa, 1);
+  }
+});
 test("administrators can page current right holders by tier, while ordinary users only see their own counts", async () => {
   await fixture(0);
   for (let i = 0; i < 51; i++) {

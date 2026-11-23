@@ -91,7 +91,7 @@ export default function AddRewardForm() {
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
         <RewardDeliverySelect value={nanikaTier ?? "shipping"} onChange={value => setNanikaTier(value === "shipping" || value === "points" ? null : value)} />
-        {nanikaTier && <p>交換時に1回分の権利を付与します。実物の発送依頼は作成せず、権利による抽選は追加費用なしです。</p>}
+        {nanikaTier && <p>設定の交換ポイントで当選権利を1回分付与します。実物の発送依頼は作成せず、取得後の抽選は追加消費0 ptです。挑戦権利ではありません。</p>}
         <div>
           <label>名前（日本語OK）</label>
           <input

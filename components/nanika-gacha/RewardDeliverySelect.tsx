@@ -12,7 +12,7 @@ export default function RewardDeliverySelect({ value, onChange, includePoints = 
     <select value={value} onChange={event => onChange(event.target.value as RewardDelivery)}>
       {includePoints && <option value="points">ポイントのみ（発送なし）</option>}
       <option value="shipping">通常の景品（発送）</option>
-      {NANIKA_TIERS.map(tier => <option key={tier.id} value={tier.id}>{tier.label}の権利（1回分）</option>)}
+      {NANIKA_TIERS.map(tier => <option key={tier.id} value={tier.id}>{tier.label}の当選権利（1回分・抽選時0 pt）</option>)}
     </select>
   </label>;
 }

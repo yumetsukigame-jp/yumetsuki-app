@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import ShippingPoints from "@/components/nanika-gacha/ShippingPoints";
 import {
   collection,
   getDocs,
@@ -20,6 +21,7 @@ type HistoryItem = {
   shipped?: boolean;
   shippedAt?: { toDate: () => Date } | Date | string | null;
   cost?: number;
+  nanikaImageId?: string;
   userNickname?: string;
   userX?: string;
   rewardName?: string;
@@ -224,7 +226,7 @@ export default function ShippingHistoryPage() {
                   <p><strong>ユーザー名：</strong> {item.userName}</p>
                   <p><strong>メール：</strong> {item.userEmail}</p>
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
-                  <p><strong>ポイント：</strong> {item.cost} pt</p>
+                  <ShippingPoints record={item} label="ポイント" admin />
 
                   <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
                     {!item.shipped && (

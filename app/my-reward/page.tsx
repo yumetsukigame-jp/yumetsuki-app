@@ -14,12 +14,14 @@ import { useRouter } from "next/navigation";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import ShippingPoints from "@/components/nanika-gacha/ShippingPoints";
 
 type RewardRecord = {
   id: string;
   requestId?: string;
   name?: string;
   cost?: number;
+  nanikaImageId?: string;
   image?: string | null;
   requestedAt?: { toDate: () => Date } | Date | null;
   timestamp?: { toDate: () => Date } | Date | null;
@@ -181,9 +183,7 @@ export default function MyRewardPage() {
         <p>
           <strong>発送物：</strong> {reward.name}
         </p>
-        <p>
-          <strong>必要ポイント：</strong> {reward.cost} pt
-        </p>
+        <ShippingPoints record={reward} label="必要ポイント" />
         <p>
           <strong>選択日時：</strong>{" "}
           {formatTimestamp(reward.timestamp)}

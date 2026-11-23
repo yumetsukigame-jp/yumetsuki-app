@@ -23,8 +23,8 @@ export default function NanikaRightHolders() {
   }, [tier]);
   useEffect(() => { void Promise.resolve().then(() => load()); }, [load]);
   return <section className={styles.card}>
-    <h2>景品ガチャの権利保有者</h2>
-    <p>通常ガチャ・ポイント交換で付与した未使用の権利です。X参加枠とは別に管理され、開催回を終了しても残ります。</p>
+    <h2>当選権利の保有者</h2>
+    <p>通常ガチャ・ポイント交換で付与した未使用の当選権利です。挑戦権利（対象X一覧）とは別に管理され、開催回を終了しても残ります。抽選時の追加消費は0 ptです。</p>
     <label>種類<select value={tier} disabled={busy} onChange={event => setTier(event.target.value as NanikaTier)}>
       {NANIKA_TIERS.map(tier => <option key={tier.id} value={tier.id}>{tier.label}</option>)}
     </select></label>

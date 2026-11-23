@@ -17,6 +17,7 @@ import {
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import ShippingPoints from "@/components/nanika-gacha/ShippingPoints";
 
 type UserData = {
   name?: string;
@@ -34,6 +35,7 @@ type PendingItem = {
   rewardId?: string;
   name?: string;
   cost?: number;
+  nanikaImageId?: string;
   image?: string | null;
   requestedAt?: { toDate: () => Date } | Date | number | string | null;
   timestamp?: { toDate: () => Date } | Date | number | string | null;
@@ -492,7 +494,7 @@ export default function ShippingAdminPage() {
                   </p>
 
                   <p><strong>ユーザーID：</strong> {item.uid}</p>
-                  <p><strong>ポイント：</strong> {item.cost} pt</p>
+                  <ShippingPoints record={item} label="ポイント" admin />
                   <p><strong>選択日時：</strong> {formatDate(item.timestamp)}</p>
 
                   {item.source !== "history" && (

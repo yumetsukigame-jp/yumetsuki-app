@@ -28,7 +28,7 @@ function SlotForm({ slot, onSaved }: { slot: NanikaSlot; onSaved: (items: Nanika
     finally { setBusy(false); }
   }
   async function end() {
-    if (!slot.roundId || busy || !window.confirm("この開催回を終了してアーカイブします。対象Xの残り参加枠は引き継がれません。未受取の当選品は72時間の期限内で引き続き受け取れます。終了しますか？")) return;
+    if (!slot.roundId || busy || !window.confirm("この開催回を終了してアーカイブします。挑戦権利（対象X一覧）の残り回数は引き継がれません。当選権利は残ります。未受取の当選品は72時間の期限内で引き続き受け取れます。終了しますか？")) return;
     setBusy(true); setError("");
     try {
       onSaved((await callNanika("adminEndNanikaGacha", { tier: slot.tier, roundId: slot.roundId, version: slot.version, confirmed: true })).items);
@@ -40,11 +40,13 @@ function SlotForm({ slot, onSaved }: { slot: NanikaSlot; onSaved: (items: Nanika
     <p>抽選可能な画像：{slot.available}点／開催回：{slot.roundId ?? "未作成"}</p>
     <p>公開日時：{slot.publishedAt == null ? "未記録" : formatJstDateTime(new Date(slot.publishedAt))}</p>
     <form onSubmit={save}>
-      <label>参加費用（ポイント）<input type="number" required min={0} max={1000000} step={1} value={fee} disabled={busy} onChange={e => setFee(e.target.value)} /></label>
-      <label>ポイント化の受取ポイント<input type="number" required min={0} max={1000000} step={1} value={points} disabled={busy} onChange={e => setPoints(e.target.value)} /></label>
+      <label>挑戦権利で引く際の消費ポイント<input type="number" required min={0} max={1000000} step={1} value={fee} disabled={busy} onChange={e => setFee(e.target.value)} /></label>
+      <p>0 ptなら消費しません。当選権利で引く場合は、この設定にかかわらず0 ptです。</p>
+      <label>ポイントで受け取る場合の受取ポイント<input type="number" required min={0} max={1000000} step={1} value={points} disabled={busy} onChange={e => setPoints(e.target.value)} /></label>
       <label><input type="checkbox" checked={visible} disabled={busy} onChange={e => setVisible(e.target.checked)} />全体に表示・受付する（外すと受付停止のみ）</label>
       <p>非公開から公開へ切り替えると、公開日時を更新します。公開中の設定変更では日時は変わりません。</p>
-      <label>残り対象X一覧（1行1回・最大5000行）<textarea rows={6} value={accounts} disabled={busy} placeholder="@account" onChange={e => setAccounts(e.target.value)} /></label>
+      <label>挑戦権利の残り対象X一覧（1行1回・最大5000行）<textarea rows={6} value={accounts} disabled={busy} placeholder="@account" onChange={e => setAccounts(e.target.value)} /></label>
+      <p>この一覧は挑戦権利です。当選権利の付与・保有数とは別で、開催回終了後は持ち越しません。</p>
       <p>抽選で消費済みの行は一覧から減ります。追加する際は最新の残り一覧を再取得してから編集してください。金額変更は新しい抽選だけに適用されます。</p>
       <button type="submit" disabled={busy}>設定を保存</button>
     </form>

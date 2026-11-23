@@ -593,7 +593,7 @@ export default function GachaCreatePage() {
                 />
                 {f.nanikaTier && (
                   <p className={`${styles.hint} ${styles.fullWidth}`}>
-                    {NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の権利（1回分）
+                    {NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の当選権利（1回分・取得後の抽選は0 pt）
                   </p>
                 )}
               </div>

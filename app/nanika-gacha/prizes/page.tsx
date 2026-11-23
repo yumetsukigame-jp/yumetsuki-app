@@ -15,7 +15,7 @@ export default function NanikaPrizeCatalogPage() {
     <div className={styles.intro}>
       <p className={styles.eyebrow}>4つのカテゴリー、気になる景品を探してみよう。</p>
       <p>ログインせずに景品の画像と名称をご覧いただけます。画像を押すと拡大できます。</p>
-      <p>開催状況にかかわらず現在の景品在庫を掲載しています。抽選への参加は、受付中の企画でログイン後に行ってください。受取保留中・発送対象・除外済みの景品は表示されません。</p>
+      <p>開催前でも景品候補を見られます。引くときは、受付中のガチャで当選権利または挑戦権利を使ってください。ほかの方が受取方法を選んでいる景品や、発送が決まった景品は候補に含まれません。</p>
     </div>
     <nav className={styles.categories} aria-label="景品のカテゴリー">
       {NANIKA_TIERS.map(tier => <a key={tier.id} href={`#prizes-${tier.id}`}>{tier.label}</a>)}

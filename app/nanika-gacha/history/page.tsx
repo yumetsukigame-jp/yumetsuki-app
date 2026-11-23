@@ -28,11 +28,12 @@ export default function NanikaHistoryPage() {
   }, [uid]);
   const refresh = useCallback(() => { void load(); }, [load]);
   useEffect(() => { void Promise.resolve().then(() => load()); }, [load]);
-  return <NanikaFrame title="何かの景品ガチャ：自分の当選・受取履歴">
+  return <NanikaFrame title="何かの景品ガチャ：当選・受取">
     {!ready ? <p>読み込み中…</p> : !uid ? <p><Link href="/login">ログインしてください</Link></p> : <>
-      <button type="button" disabled={loading} onClick={refresh}>履歴を再取得</button>
+      <p>期限内の景品は、ここから受取方法の選択を再開できます。</p>
+      <button type="button" disabled={loading} onClick={refresh}>更新</button>
       {error && <p role="alert" className={styles.error}>{error}</p>}
-      {!loading && !error && items.length === 0 && <p>当選記録はありません。</p>}
+      {!loading && !error && items.length === 0 && <p>当選履歴はまだありません。景品が当たると、ここに表示されます。</p>}
       {(loadedUid === uid ? items : []).map(item => <NanikaReceiptCard key={item.id} receipt={item} serverOffset={offset}
         onChange={next => setItems(current => current.map(item => item.id === next.id ? next : item))} />)}
       {loading && <p>読み込み中…</p>}

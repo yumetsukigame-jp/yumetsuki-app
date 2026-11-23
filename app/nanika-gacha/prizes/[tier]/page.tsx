@@ -6,5 +6,5 @@ export default async function NanikaPrizePage({ params }: { params: Promise<{ ti
   const { tier } = await params;
   const selected = NANIKA_TIERS.find(item => item.id === tier);
   if (!selected) notFound();
-  return <NanikaPrizeGallery key={selected.id} tier={selected.id} />;
+  return <NanikaPrizeGallery key={selected.id} tier={selected.id} publicCatalog />;
 }

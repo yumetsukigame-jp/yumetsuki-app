@@ -142,7 +142,12 @@ async function slotViews(adminMode: boolean, uid?: string) {
 
 export const listNanikaGacha = callable("listNanikaGacha", async (raw, context) => {
   object(raw, []);
-  return { items: await slotViews(false, context.auth?.uid), serverNow: Date.now() };
+  const uid = context.auth?.uid;
+  const [items, account] = await Promise.all([
+    slotViews(false, uid),
+    uid ? db.collection("users").doc(uid).get() : Promise.resolve(null),
+  ]);
+  return { items, points: account?.exists ? integer(account.get("points"), "残高", Number.MAX_SAFE_INTEGER) : null, serverNow: Date.now() };
 });
 export const listNanikaGachaPrizes = callable("listNanikaGachaPrizes", async raw => {
   const d = object(raw, ["tier", "cursor"]), t = tier(d.tier);

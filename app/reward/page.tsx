@@ -12,6 +12,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { redeemReward, fulfillmentCompletePath } from "@/app/lib/fulfillment";
 import { NANIKA_TIERS, type NanikaTier } from "@/functions/src/nanikaGachaTypes";
+import Link from "next/link";
 
 type RewardItem = {
   id: string;
@@ -90,7 +91,7 @@ export default function RewardPage() {
 
     if (
       !confirm(reward.nanikaTier
-        ? `${reward.cost}ポイントで${NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利を1回分取得します。取得後、何かの景品ガチャで追加費用なしで抽選して景品を確定してください。確定しますか？`
+        ? `${reward.cost}ポイントで${NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の当選権利を1回分取得します。これは取得時の交換ポイントです。取得後の抽選は追加消費0 ptで、候補から商品の中身を決められます。確定しますか？`
         : `${reward.name}を発送します。確定してよろしいですか？`)
     ) {
       return;
@@ -126,6 +127,8 @@ export default function RewardPage() {
     <div style={{ padding: "20px" }}>
       <h1>発送物を選ぶ</h1>
 
+      <p>登録されている発送物や、景品ガチャの当選権利をポイントで選べます。</p>
+      <p>当選権利を選んでも、その時点では発送されません。<Link href="/nanika-gacha/prizes">景品候補</Link>を見ながら、取得した権利で商品の中身を抽選で決められます。</p>
       <p>現在のポイント: {points ?? "読み込み中..."}</p>
 
       <div style={{ marginTop: "20px" }}>
@@ -156,7 +159,7 @@ export default function RewardPage() {
             <h3>{reward.name}</h3>
             <p>必要ポイント: {reward.cost}</p>
             <p>在庫: {reward.stock}</p>
-            {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利（1回分）。交換後に何かの景品ガチャで景品を確定してください。</p>}
+            {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の当選権利（1回分）。表示のポイントは権利の交換に使います。取得後の抽選は追加消費0 ptです。</p>}
 
             {/* ★ 改善したボタン（①のデザイン） */}
             <button
@@ -176,7 +179,7 @@ export default function RewardPage() {
                 boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
               }}
             >
-              この商品を選ぶ
+              {reward.nanikaTier ? "当選権利を取得する" : "この商品を選ぶ"}
             </button>
           </div>
         ))}

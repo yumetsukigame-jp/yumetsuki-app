@@ -71,7 +71,7 @@ export default function GachaInner() {
     !shippingDecisionResolved;
   const shippingWarningMessage =
     result?.nanikaTier
-      ? "この画面を遷移すると当選報酬はポイントとして確定し、今回の景品ガチャの権利は取得できなくなります。移動してよろしいですか？"
+      ? "この画面を遷移すると当選報酬はポイントとして確定し、今回の当選権利は取得できなくなります。移動してよろしいですか？"
       : "この画面を遷移すると賞品はポイントとして確定し、今回の景品の発送は出来なくなります。移動してよろしいですか？";
 
   const confirmAbandonShipping = () => {
@@ -420,7 +420,7 @@ const handleShipping = async () => {
 
   if (
     !confirm(result.nanikaTier
-      ? `当選報酬の${result.reward}ポイントを差し引き、${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の権利を1回分取得します。何かの景品ガチャで追加費用なしで抽選して景品を確定してください。確定しますか？`
+      ? `当選報酬の${result.reward}ポイントを差し引き、${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の当選権利を1回分取得します。取得後は追加ポイント消費0 ptで、候補から商品の中身を抽選で決められます。確定しますか？`
       : `${shippingItemName}を発送します。確定してよろしいですか？`)
   ) {
     return;
@@ -620,7 +620,7 @@ const handleShipping = async () => {
                         }}
                       >
                         {result.nanikaTier
-                          ? `${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の権利を希望する場合は、この画面で今すぐ取得してください。当選報酬分のポイントを差し引きます。取得後は何かの景品ガチャで抽選して景品を確定してください。画面を離れると権利は取得できず、当選報酬がポイントとして確定します。`
+                          ? `${NANIKA_TIERS.find(tier => tier.id === result.nanikaTier)?.label}の当選権利を希望する場合は、この画面で今すぐ取得してください。当選報酬分のポイントを差し引きます。取得後の抽選は追加消費0 ptです。画面を離れると当選権利は取得できず、当選報酬がポイントとして確定します。`
                           : "発送を希望する場合は、この結果画面で今すぐ選択してください。画面を離れた後や次のガチャを引いた後は、発送を選択できません。発送を選択しない場合は、当選報酬がポイントとして付与されます。"}
                       </p>
                       <button
@@ -639,7 +639,7 @@ const handleShipping = async () => {
                         }}
                       >
                         {result.nanikaTier
-                          ? isShipping ? "権利を取得中…" : "景品ガチャの権利を取得する"
+                          ? isShipping ? "当選権利を取得中…" : "当選権利を取得する"
                           : isShipping ? "発送依頼を保存中…" : "📦 この商品を発送する"}
                       </button>
                     </>

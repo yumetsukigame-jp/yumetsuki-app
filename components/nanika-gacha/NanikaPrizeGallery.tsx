@@ -54,12 +54,12 @@ export default function NanikaPrizeGallery({ tier, embedded = false, publicCatal
   const label = NANIKA_TIERS.find(item => item.id === tier)!.label;
   const nameId = `nanika-prize-name-${tier}`;
   const gallery = <>
-    {!embedded && <p>現在抽選できる景品の縮小画像です。画像を押すと、拡大画像と名称を表示します。在庫は抽選・受取状況により変わります。</p>}
+    {!embedded && <p>気になる景品候補を見てみましょう。画像を押すと拡大できます。掲載は当選・確保の保証ではなく、候補は抽選や受取状況により変わります。引けるかどうかはガチャ一覧でご確認ください。</p>}
     <button type="button" disabled={loading} aria-label={embedded ? `${label}の景品一覧を再取得` : undefined}
-      onClick={() => void load()}>景品一覧を再取得</button>
+      onClick={() => void load()}>景品候補を更新</button>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {loading && <p role="status">景品を読み込み中…</p>}
-    {!loading && !error && items.length === 0 && <p>現在抽選できる景品はありません。</p>}
+    {!loading && !error && items.length === 0 && <p>ただいま景品を準備しています。</p>}
     <ul className={`${styles.prizeGrid} ${publicCatalog ? styles.publicPrizeGrid : ""}`}
       aria-label={embedded ? `${label}の景品一覧` : "景品の縮小画像一覧"}>
       {items.map((item, index) => <li key={item.id}>

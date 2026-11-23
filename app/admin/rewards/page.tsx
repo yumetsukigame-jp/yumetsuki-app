@@ -83,7 +83,7 @@ export default function AdminRewardsPage() {
               <h2 style={{ fontSize: "20px" }}>{reward.name}</h2>
               <p>{reward.cost} pt</p>
               <p>在庫：{reward.stock} 個</p>
-              {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の権利（1回分）</p>}
+              {reward.nanikaTier && <p>{NANIKA_TIERS.find(tier => tier.id === reward.nanikaTier)?.label}の当選権利（1回分・抽選時0 pt）</p>}
             </div>
 
             <Link

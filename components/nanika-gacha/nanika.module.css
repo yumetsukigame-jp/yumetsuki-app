@@ -1,13 +1,14 @@
-.page { max-width: 1000px; margin: auto; padding: 20px 16px; color: #17243b; overflow-wrap: anywhere; }
+.page { max-width: 1000px; margin: auto; padding: 20px 16px; color: #17243b; overflow-wrap: anywhere; font-size: 16px; line-height: 1.8; }
+.page p + p { margin-top: 8px; }
 .page h1 { font-size: 24px; font-weight: 700; margin-bottom: 16px; }
 .page h2 { font-size: 19px; font-weight: 700; margin: 12px 0; }
 .nav, .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
-.nav a { color: #1d4ed8; min-height: 44px; padding: 10px 0; }
+.nav a { display: inline-flex; align-items: center; gap: 6px; color: #1d4ed8; min-height: 48px; padding: 10px 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; }
 .card { padding: 16px; margin: 16px 0; border: 1px solid #dbe2ec; border-radius: 12px; background: #fff; }
 .thumbnail { width: 100%; height: auto; display: block; border-radius: 8px; }
 .prize { width: 100%; max-width: 500px; height: 320px; object-fit: contain; display: block; margin: 12px auto; }
-.page button { min-height: 44px; padding: 10px 16px; border-radius: 8px; background: #075985; color: #fff; cursor: pointer; }
+.page button { min-height: 48px; max-width: 100%; padding: 10px 16px; border-radius: 8px; background: #075985; color: #fff; cursor: pointer; }
 .page button:disabled { background: #e2e8f0; color: #475569; cursor: not-allowed; }
 .page .danger { background: #b91c1c; }
 .page label { display: block; margin: 12px 0; line-height: 1.7; }
@@ -16,7 +17,7 @@
 .warning { padding: 14px; border: 2px solid #b45309; border-radius: 10px; background: #fffbeb; margin: 12px 0; }
 .error { padding: 12px; background: #fff1f2; color: #9f1239; border-radius: 8px; margin: 12px 0; }
 .confirm { width: 100%; min-height: 56px !important; }
-.prizeListLink { display: block; width: fit-content; min-height: 44px; padding: 10px 16px; margin: 12px 0; border-radius: 8px; background: #075985; color: #fff; text-decoration: none; }
+.prizeListLink { display: block; width: fit-content; min-height: 48px; padding: 10px 16px; margin: 12px 0; border-radius: 8px; background: #075985; color: #fff; text-decoration: none; }
 .prizeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr)); gap: 12px; margin: 20px 0; padding: 0; list-style: none; }
 .page .prizeThumbnailButton { width: 100%; padding: 8px; border: 1px solid #dbe2ec; background: #fff; }
 .prizeThumbnail { display: block; width: 100%; height: 160px; object-fit: contain; }
@@ -27,4 +28,14 @@
 .publicPrizeGrid li { min-width: 0; }
 .page .publicPrizeGrid .prizeThumbnailButton { display: flex; flex-direction: column; gap: 10px; height: 100%; color: #17243b; text-align: left; }
 .publicPrizeGrid .prizeThumbnail { height: 190px; }
-.prizeName { display: block; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.prizeName { display: block; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.hero { padding: 24px; margin: 16px 0; border-radius: 16px; background: linear-gradient(rgb(8 21 46 / 85%), rgb(21 57 102 / 85%)), url("/backgrounds/yumetsuki-stars.webp") center / cover; color: #fff; }
+.hero h2 { color: #fde7a7; }
+.rightOption { padding: 12px; margin-top: 12px; border: 1px solid #dbe2ec; border-radius: 10px; background: #f8fafc; }
+.rightOption button { width: 100%; margin-top: 8px; }
+.note { font-size: 14px; color: #475569; }
+.steps { padding-left: 24px; list-style: decimal; }
+.steps li { margin: 12px 0; }
+.page summary { min-height: 48px; padding: 12px 0; cursor: pointer; font-weight: 700; }
+.laterLink { display: inline-flex; align-items: center; min-height: 48px; padding: 10px 16px; color: #1d4ed8; }
+.page :is(button, a, input, summary):focus-visible { outline: 3px solid #b45309; outline-offset: 3px; }

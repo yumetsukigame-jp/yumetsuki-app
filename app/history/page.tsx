@@ -12,6 +12,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import LoadingState from "@/app/components/LoadingState";
 import { withRetry } from "@/app/lib/retry";
 import { formatJstDateTime } from "@/app/lib/dateTime";
+import ShippingPoints from "@/components/nanika-gacha/ShippingPoints";
 
 type FirestoreDateLike =
   | { toDate?: () => Date; _seconds?: number; seconds?: number }
@@ -204,7 +205,7 @@ export default function HistoryPage() {
 
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: "18px" }}>{item.name}</h2>
-            <p>消費ポイント：{item.cost} pt</p>
+            <ShippingPoints record={item} label="消費ポイント" />
 
             <p>
               依頼日時：{" "}

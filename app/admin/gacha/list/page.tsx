@@ -704,7 +704,7 @@ function GachaCard({
             報酬：{f.rewardMin} ～ {f.rewardMax}
           </div>
 
-          <div>受取内容：{f.nanikaTier ? `${NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の権利（1回分）` : f.shippingEnabled ? "📦 発送あり" : "ポイントのみ"}</div>
+          <div>受取内容：{f.nanikaTier ? `${NANIKA_TIERS.find(tier => tier.id === f.nanikaTier)?.label}の当選権利（1回分・抽選時0 pt）` : f.shippingEnabled ? "📦 発送あり" : "ポイントのみ"}</div>
         </div>
       ))}
 

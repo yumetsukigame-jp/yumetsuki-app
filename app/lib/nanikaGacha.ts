@@ -6,7 +6,7 @@ export { NANIKA_TIERS, NANIKA_HOLD_MS } from "@/functions/src/nanikaGachaTypes";
 export type { NanikaImage, NanikaPrize, NanikaReceipt, NanikaRound, NanikaSlot, NanikaTier, NanikaRightHolder };
 
 type Api = {
-  listNanikaGacha: [Record<string, never>, { items: NanikaSlot[]; serverNow: number }];
+  listNanikaGacha: [Record<string, never>, { items: NanikaSlot[]; serverNow: number; points?: number | null }];
   listNanikaGachaPrizes: [{ tier: NanikaTier; cursor?: string }, NanikaPage<NanikaPrize>];
   adminGetNanikaGacha: [Record<string, never>, { items: NanikaSlot[] }];
   adminListNanikaRights: [{ tier: NanikaTier; cursor?: string }, NanikaPage<NanikaRightHolder>];
