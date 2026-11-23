@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ShippingPoints from "../../components/nanika-gacha/ShippingPoints";
+import RewardImageSelect from "../../components/nanika-gacha/RewardImageSelect";
 import type { NanikaSlot } from "../../functions/src/nanikaGachaTypes";
 import { isNanikaShipping, nanikaDrawBlockReason, nanikaDrawCost } from "./nanikaGachaDisplay";
 
@@ -25,6 +26,21 @@ test("identifies Nanika shipping even in old history records without a preserved
   assert.equal(isNanikaShipping({ image: "/api/nanika-gacha/images/prize" }), true);
   assert.equal(isNanikaShipping({ image: "/rewards/item.webp" }), false);
   assert.equal(isNanikaShipping({ image: null }), false);
+});
+
+test("reward image choices include four existing Nanika thumbnails, retain ordinary images and deduplicate metadata", () => {
+  const thumbnail = "/nanika-gacha/thumbnails/01-nanika-psa-yumetsuki-v2.webp";
+  const markup = renderToStaticMarkup(createElement(RewardImageSelect, {
+    images: [{ url: "/rewards/item.webp", prefix: "通常商品" }, { url: thumbnail, prefix: "重複" }],
+    value: thumbnail, onChange: () => {},
+  }));
+  assert.equal((markup.match(/<button /g) || []).length, 5);
+  assert.match(markup, /通常商品を選択/);
+  for (const name of ["何かのPSAガチャ", "衛星級", "惑星級", "恒星級"]) assert.ok(markup.includes(name));
+  assert.equal((markup.match(/aria-pressed="true"/g) || []).length, 1);
+  assert.ok(markup.includes(`src="${thumbnail}"`));
+  const empty = renderToStaticMarkup(createElement(RewardImageSelect, { images: [], value: "", onChange: () => {} }));
+  assert.equal((empty.match(/<button /g) || []).length, 4);
 });
 
 test("shipping displays no extra charge rather than mislabeling the prize's receive-points value as a cost", () => {

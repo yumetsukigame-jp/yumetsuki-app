@@ -10,14 +10,9 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
+import RewardImageSelect, { type RewardImage } from "@/components/nanika-gacha/RewardImageSelect";
 import { isNanikaTier } from "@/functions/src/nanikaGachaPolicy";
 import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
-
-type RewardImage = {
-  url: string;
-  prefix?: string;
-  folder?: string;
-};
 
 type RewardRecord = RewardImage & {
   id: string;
@@ -149,40 +144,7 @@ export default function EditRewardForm({ id }: { id: string }) {
           />
         </div>
 
-        <div>
-          <label>画像を選択</label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "10px",
-              marginTop: "10px",
-            }}
-          >
-            {images.map((img) => (
-              <div
-                key={img.url}
-                onClick={() => setImage(img.url)}
-                style={{
-                  border:
-                    image === img.url
-                      ? "3px solid #4f46e5"
-                      : "1px solid #ccc",
-                  padding: "5px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                <img
-                  src={img.url}
-                  alt={img.prefix}
-                  width={100}
-                  style={{ borderRadius: "6px" }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <RewardImageSelect images={images} value={image} onChange={setImage} />
 
         <button
           type="submit"

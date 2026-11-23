@@ -1,12 +1,11 @@
 "use client";
 
-import type { DocumentData } from "firebase/firestore";
-
 import { useEffect, useState } from "react";
 import { db } from "../../../../firebase";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import RewardDeliverySelect from "@/components/nanika-gacha/RewardDeliverySelect";
+import RewardImageSelect, { type RewardImage } from "@/components/nanika-gacha/RewardImageSelect";
 import type { NanikaTier } from "@/functions/src/nanikaGachaTypes";
 
 // 日本語を含む名前から英数字だけのIDを生成する関数
@@ -35,15 +34,15 @@ export default function AddRewardForm() {
   const [stock, setStock] = useState(0);
   const [image, setImage] = useState("");
   const [nanikaTier, setNanikaTier] = useState<NanikaTier | null>(null);
-  const [images, setImages] = useState<DocumentData[]>([]);
+  const [images, setImages] = useState<RewardImage[]>([]);
 
   // Firestore から rewards フォルダの画像一覧を取得
   useEffect(() => {
     const load = async () => {
       const snap = await getDocs(collection(db, "imageMeta"));
       const list = snap.docs
-        .map((d) => d.data())
-        .filter((d) => d.folder === "rewards");
+        .map((d) => d.data() as Partial<RewardImage>)
+        .filter((d): d is RewardImage => !!d.url && d.folder === "rewards");
 
       setImages(list);
     };
@@ -122,40 +121,7 @@ export default function AddRewardForm() {
           />
         </div>
 
-        <div>
-          <label>画像を選択</label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "10px",
-              marginTop: "10px",
-            }}
-          >
-            {images.map((img) => (
-              <div
-                key={img.url}
-                onClick={() => setImage(img.url)}
-                style={{
-                  border:
-                    image === img.url
-                      ? "3px solid #4f46e5"
-                      : "1px solid #ccc",
-                  padding: "5px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                <img
-                  src={img.url}
-                  alt={img.prefix}
-                  width={100}
-                  style={{ borderRadius: "6px" }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <RewardImageSelect images={images} value={image} onChange={setImage} />
 
         <button
           type="submit"

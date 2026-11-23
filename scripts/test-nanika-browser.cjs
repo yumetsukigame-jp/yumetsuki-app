@@ -51,6 +51,20 @@ async function run() {
           });
         });
       }
+      if (process.env.ADMIN_REWARD_IMAGE_TEST_ONLY === "1") {
+        await context.addInitScript(() => {
+          window.adminRewardWrites = [];
+          window.mockAdminRewardDocs = async ref => ({
+            docs: ref.path === "imageMeta" ? [
+              { id: "ordinary-image", data: () => ({ url: "/rewards/nanikaPSA.webp", prefix: "既存画像", folder: "rewards" }) },
+              { id: "duplicate-image", data: () => ({ url: "/nanika-gacha/thumbnails/01-nanika-psa-yumetsuki-v2.webp", prefix: "重複", folder: "rewards" }) },
+            ] : [{ id: "mock-right", data: () => ({
+              name: "編集確認用の権利", cost: 85, stock: 7, image: "/rewards/nanikaPSA.webp", nanikaTier: "planet",
+            }) }],
+          });
+          window.mockAdminRewardWrite = async (ref, data) => { window.adminRewardWrites.push({ id: ref.id, data }); };
+        });
+      }
       let slots = ["psa", "satellite", "planet", "star"].map(tier => ({
         tier, fee: 10, exchangePoints: 30, visible: true, version: 1, roundId: "mock-round",
         publishedAt: Date.parse("2026-11-01T11:56:00.000Z"),
@@ -70,6 +84,16 @@ async function run() {
       await context.route("**/*", async route => {
         const url = new URL(route.request().url());
         if (url.origin === base) {
+          if (process.env.ADMIN_REWARD_IMAGE_TEST_ONLY === "1" && /\/chunks\/app\/admin\/rewards\/(?:add\/|edit\/[^/]+\/)?page-[^/]+\.js$/.test(url.pathname)) {
+            const response = await route.fetch(), text = await response.text();
+            const read = text.match(/await (\(0,[\w$]+\.[\w$]+\))\(\(0,[\w$]+\.[\w$]+\)\([\w$.]+,"(?:imageMeta|rewards)"\)\)/)
+              || text.match(/await (\(0,[\w$]+\.[\w$]+\))\([\w$]+\)\)\.docs/);
+            assert.ok(read, `Admin reward document-read fixture needs updating: ${url.pathname}`);
+            const write = text.match(/await (\(0,[\w$]+\.[\w$]+\))\(\(0,[\w$]+\.[\w$]+\)\([\w$.]+,"rewards",/);
+            let body = text.replaceAll(read[1], "window.mockAdminRewardDocs");
+            if (write) body = body.replaceAll(write[1], "window.mockAdminRewardWrite");
+            return route.fulfill({ response, body });
+          }
           if (process.env.REWARD_UI_TEST_ONLY === "1" && /\/chunks\/app\/reward\/page-[^/]+\.js$/.test(url.pathname)) {
             const response = await route.fetch(), text = await response.text();
             const list = text.match(/await (\(0,[\w$]+\.[\w$]+\))\(\(0,[\w$]+\.[\w$]+\)\([\w$.]+,"rewards"\)\)/);
@@ -221,6 +245,57 @@ async function run() {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", error => errors.push(error.message));
+      if (process.env.ADMIN_REWARD_IMAGE_TEST_ONLY === "1") {
+        page.on("dialog", dialog => dialog.accept());
+        const names = ["何かのPSAガチャ", "何かのPSA10ガチャ（衛星級）", "何かのPSA10ガチャ（惑星級）", "何かのPSA10ガチャ（恒星級）"];
+        for (const width of [360, 390, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const screen of ["add", "edit/mock-right"]) {
+            await page.goto(`${base}/admin/rewards/${screen}`);
+            const group = page.getByRole("group", { name: "画像を選択", exact: true });
+            await group.getByRole("button", { name: "既存画像を選択", exact: true }).waitFor();
+            assert.equal(await group.getByRole("button").count(), 5);
+            for (const name of names) {
+              const button = group.getByRole("button", { name: `${name}を選択`, exact: true });
+              await button.focus(); await page.keyboard.press("Space");
+              assert.equal(await button.getAttribute("aria-pressed"), "true");
+              assert.equal(await page.getByRole("button", { pressed: true }).count(), 1);
+            }
+            await page.waitForFunction(() => [...document.querySelectorAll("fieldset img")].every(img => img.complete && img.naturalWidth > 0));
+            const overflow = await page.evaluate(() => ({
+              width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+              elements: [...document.querySelectorAll("select, fieldset, button")].filter(element =>
+                element.getBoundingClientRect().right > innerWidth).map(element => ({ tag: element.tagName, width: element.getBoundingClientRect().width })),
+            }));
+            assert.ok(overflow.scrollWidth <= overflow.width, `${screen}: ${JSON.stringify(overflow)}`);
+            assert.equal(await page.evaluate(() => window.adminRewardWrites.length), 0, "Image selection must not submit the form");
+          }
+        }
+        await page.getByRole("button", { name: "更新する", exact: true }).click();
+        await page.waitForFunction(() => window.adminRewardWrites.length === 1);
+        await page.getByRole("heading", { name: "発送物一覧（管理者）", exact: true }).waitFor();
+        const edit = await page.evaluate(() => window.adminRewardWrites[0]);
+        assert.equal(edit.id, "mock-right");
+        assert.equal(edit.data.image, "/nanika-gacha/thumbnails/04-star-psa10-yumetsuki-v2.webp");
+        assert.equal(edit.data.cost, 85); assert.equal(edit.data.stock, 7);
+        assert.equal(edit.data.nanikaTier, "planet", "Image selection must not change the right type");
+        await page.goto(`${base}/admin/rewards/add`);
+        await page.getByRole("button", { name: `${names[1]}を選択`, exact: true }).click();
+        await page.locator('input[type="text"]').fill("追加確認用の権利");
+        await page.locator('input[type="number"]').nth(0).fill("30");
+        await page.locator('input[type="number"]').nth(1).fill("2");
+        await page.getByRole("combobox").selectOption("satellite");
+        await page.getByRole("button", { name: "追加する", exact: true }).click();
+        await page.waitForFunction(() => window.adminRewardWrites.length === 1);
+        await page.getByRole("heading", { name: "発送物一覧（管理者）", exact: true }).waitFor();
+        const added = await page.evaluate(() => window.adminRewardWrites[0]);
+        assert.equal(added.data.image, "/nanika-gacha/thumbnails/02-satellite-psa10-yumetsuki-v2.webp");
+        assert.equal(added.data.nanikaTier, "satellite");
+        assert.equal(added.data.cost, 30); assert.equal(added.data.stock, 2);
+        assert.deepEqual(errors, []);
+        console.log(`${name}: add/edit show all four thumbnails at 360/390/1280px; keyboard selection preserves right type and mock writes save the chosen image.`);
+        continue;
+      }
       if (process.env.REWARD_UI_TEST_ONLY === "1") {
         page.on("dialog", dialog => dialog.accept());
         for (const width of [360, 390, 1280]) {
