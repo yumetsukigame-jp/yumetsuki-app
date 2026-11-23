@@ -85,6 +85,12 @@ export default function QuestAdminPage() {
   const [menuAccess, setMenuAccess] = useState<QuestMenuAccess | null>(null);
   const [menuMode, setMenuMode] = useState<QuestMenuMode>("admin");
   const editable = !selected || selected.state === "draft";
+  const publishBlockers = [
+    dirty ? "変更した開催設定を下書き保存してください。" : null,
+    selected && selected.simulatedVersion !== selected.version ? "最新版の設定で14回の分布試算を行ってください。" : null,
+    review.trim().length < 20 ? "配布・救済・評価境界の検討記録を20文字以上入力してください。" : null,
+    !confirmed ? "下の「本番条件として確定しました」にチェックしてください。" : null,
+  ].filter((message): message is string => message !== null);
   function change<K extends keyof Form>(key: K, value: Form[K]) {
     setForm(previous => ({ ...previous, [key]: value })); setDirty(true); setConfirmed(false);
   }
@@ -131,7 +137,7 @@ export default function QuestAdminPage() {
   return <main className={styles.page}>
     <nav className={styles.nav}><Link href="/admin">管理者トップ</Link><Link href="/quest">利用者画面</Link><Link href="/quest/guide">遊び方</Link></nav>
     <h1>ゆめつきクエスト 開催管理</h1>
-    <div className={styles.notice}>盤面v2・４ステージ76マス・上限14回。配布・救済・評価境界に試作値の初期入力はありません。下書き保存 → 14回の試算 → 運用条件の確認 → 公開の順に進めてください。公開後の設定は固定されます。</div>
+    <div className={styles.notice}>盤面v2・４ステージ76マス・上限14回。星ポイント・評価境界には推奨初期値を入力します。下書き保存 → 14回の試算 → 検討記録を20文字以上入力 → 設定確定のチェック → 公開の順に進めてください。公開後の設定は固定されます。</div>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <p role="status">{status}</p>
     <form className={`${styles.panel} ${styles.form}`} onSubmit={event => {
@@ -239,8 +245,13 @@ export default function QuestAdminPage() {
         </tr>)}</tbody></table></div>}
       {selected.simulation?.some(result => result.groups.top / result.trials > .02) && <p className={styles.notice}>最上位２%を超える方針があります。境界と救済条件を再確認してください。</p>}
       <label>確定した配布・救済・評価境界と分布の検討記録（20文字以上）<textarea value={review} onChange={event => { setReview(event.target.value); setConfirmed(false); }} minLength={20} maxLength={2000} /></label>
-      <label className={styles.check}><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />試作の数値を転用せず、運用条件と目標分布を確認し、この設定を本番の開催条件として確定しました</label>
-      <button className={styles.primary} disabled={busy || dirty || !confirmed || review.trim().length < 20 || selected.simulatedVersion !== selected.version}
+      <p className={styles.small}>検討記録：現在{review.trim().length}文字／20文字以上が必要です。試算だけでは公開できません。</p>
+      <label className={styles.check}><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />運用条件と目標分布を確認し、配布・救済・評価境界をこの開催の本番条件として確定しました</label>
+      {publishBlockers.length > 0 && <div className={styles.notice} aria-live="polite">
+        <strong>公開ボタンが無効になっている理由</strong>
+        <ul>{publishBlockers.map(message => <li key={message}>{message}</li>)}</ul>
+      </div>}
+      <button className={styles.primary} disabled={busy || publishBlockers.length > 0}
         onClick={() => void work(async () => {
           await questCall("adminPublishQuest", { runId: selected.id, version: selected.version, confirmed, reviewNote: review });
           await refreshSelected(selected.id); setConfirmed(false); setStatus("開催を公開しました。参加対象・配布・評価設定は固定されています。");
