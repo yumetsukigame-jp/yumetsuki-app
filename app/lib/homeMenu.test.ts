@@ -17,10 +17,11 @@ test("all 21 existing destinations are preserved; Nanika is separate and Neraiuc
     "https://yumetsuki.base.shop", "/admin",
   ];
   const nanika = ["/nanika-gacha", "/nanika-gacha/guide", "/nanika-gacha/history"];
-  assert.deepEqual(new Set(links(false)), new Set([...old, ...nanika]));
-  assert.deepEqual(new Set(links(true)), new Set([...old, ...nanika, "/neraiuchi", "/neraiuchi/guide", "/neraiuchi/history"]));
+  const quest = ["/quest", "/quest/guide", "/quest/ranking", "/quest/archive"];
+  assert.deepEqual(new Set(links(false)), new Set([...old, ...nanika, ...quest]));
+  assert.deepEqual(new Set(links(true)), new Set([...old, ...nanika, ...quest, "/neraiuchi", "/neraiuchi/guide", "/neraiuchi/history"]));
   assert.deepEqual(visibleHomeMenu(true).map((section) => section.id),
-    ["nibuichi", "gacha", "nanika-gacha", "quiz", "neraiuchi", "points", "account"]);
+    ["quest", "nibuichi", "gacha", "nanika-gacha", "quiz", "neraiuchi", "points", "account"]);
   assert.ok(visibleHomeMenu(false).every((section) => section.id !== "neraiuchi"));
 });
 
@@ -30,6 +31,7 @@ test("every menu destination and original/optimized image exists; profile stays 
   }
   for (const section of visibleHomeMenu(true)) {
     for (const item of [...section.cards, ...section.guides, ...section.details]) {
+      if (item.imageSrc) assert.ok(existsSync(`public${item.imageSrc}`), item.imageSrc);
       if (item.image) {
         assert.ok(existsSync(`public/menu/thumbnails/${item.image}.png`));
         assert.ok(existsSync(`public/menu/thumbnails/${item.image}.webp`));

@@ -246,6 +246,10 @@ export default function AdminTopPage() {
       </Section>
 
       {/* 🖼 画像管理 */}
+      <Section title="ゆめつきクエスト管理" forceCollapseAll>
+        <MenuLink href="/admin/quest">開催設定・試算・公開・付与・集計</MenuLink>
+      </Section>
+
       <Section title="🎯 狙い撃ち管理" forceCollapseAll>
         <MenuLink href="/admin/neraiuchi">狙い撃ちの企画・公開・参加結果</MenuLink>
       </Section>

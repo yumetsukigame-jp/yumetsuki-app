@@ -11,4 +11,7 @@
 .iconLink { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px; color: #17243b; text-decoration: none; border: 1px solid #dbe2ec; border-radius: 10px; font-size: 15px; }
 .icon { width: 40px; height: 40px; flex-shrink: 0; }
 .detailSummary { font-size: 13px; color: #475569; margin: 12px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
-.card:hover, .iconLink:hover { background: #f1f5f9; }
+.card:not([aria-disabled="true"]):hover, .iconLink:not([aria-disabled="true"]):hover { background: #f1f5f9; }
+.disabled { filter: grayscale(1); opacity: .6; background: #f1f5f9; cursor: default; }
+.restriction { font-size: 14px; color: #475569; margin: 0 0 12px; line-height: 1.6; }
+.retry { border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #475569; min-height: 44px; padding: 8px 12px; margin: -12px 0 24px; cursor: pointer; }

@@ -1,0 +1,913 @@
+{
+  "version": "quest-board-v2",
+  "coordinateSystem": "x,y are percentages of the uncropped 2:3 background, origin at top left",
+  "turnLimit": 14,
+  "levelPoints": 12,
+  "scoring": {
+    "base": "progress + 2*(level-1)",
+    "middleMin": 52,
+    "upperMin": 64,
+    "topMinProgress": 61,
+    "topMinLevel": 6
+  },
+  "garden": {
+    "forkId": "s3-05",
+    "mergeId": "s3-07",
+    "ringEntryAnchor": "s3-loop-00",
+    "ringExitId": "s3-loop-00",
+    "ringLength": 6,
+    "forcedExitSteps": 12,
+    "lateExitFromTurn": 12,
+    "lateExitMinSteps": 6,
+    "exitBonusStarPoints": 12
+  },
+  "stages": [
+    {
+      "id": 1,
+      "label": "灯りのともる書斎",
+      "background": "01-library.jpg",
+      "tiles": [
+        {
+          "id": "s1-00",
+          "x": 16,
+          "y": 85,
+          "progress": 0,
+          "kind": "start",
+          "next": [
+            "s1-01"
+          ]
+        },
+        {
+          "id": "s1-01",
+          "x": 33,
+          "y": 85,
+          "progress": 1,
+          "kind": "normal",
+          "next": [
+            "s1-02"
+          ]
+        },
+        {
+          "id": "s1-02",
+          "x": 50,
+          "y": 85,
+          "progress": 2,
+          "kind": "normal",
+          "next": [
+            "s1-03"
+          ]
+        },
+        {
+          "id": "s1-03",
+          "x": 67,
+          "y": 85,
+          "progress": 3,
+          "kind": "normal",
+          "next": [
+            "s1-04"
+          ]
+        },
+        {
+          "id": "s1-04",
+          "x": 84,
+          "y": 85,
+          "progress": 4,
+          "kind": "normal",
+          "next": [
+            "s1-05"
+          ]
+        },
+        {
+          "id": "s1-05",
+          "x": 84,
+          "y": 73,
+          "progress": 5,
+          "kind": "normal",
+          "next": [
+            "s1-06"
+          ]
+        },
+        {
+          "id": "s1-06",
+          "x": 67,
+          "y": 73,
+          "progress": 6,
+          "kind": "normal",
+          "next": [
+            "s1-07"
+          ]
+        },
+        {
+          "id": "s1-07",
+          "x": 50,
+          "y": 73,
+          "progress": 7,
+          "kind": "star",
+          "next": [
+            "s1-08"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s1-08",
+          "x": 33,
+          "y": 73,
+          "progress": 8,
+          "kind": "normal",
+          "next": [
+            "s1-09"
+          ]
+        },
+        {
+          "id": "s1-09",
+          "x": 16,
+          "y": 73,
+          "progress": 9,
+          "kind": "normal",
+          "next": [
+            "s1-10"
+          ]
+        },
+        {
+          "id": "s1-10",
+          "x": 16,
+          "y": 60,
+          "progress": 10,
+          "kind": "normal",
+          "next": [
+            "s1-11"
+          ]
+        },
+        {
+          "id": "s1-11",
+          "x": 33,
+          "y": 60,
+          "progress": 11,
+          "kind": "normal",
+          "next": [
+            "s1-12"
+          ]
+        },
+        {
+          "id": "s1-12",
+          "x": 50,
+          "y": 60,
+          "progress": 12,
+          "kind": "normal",
+          "next": [
+            "s1-13"
+          ]
+        },
+        {
+          "id": "s1-13",
+          "x": 67,
+          "y": 60,
+          "progress": 13,
+          "kind": "star",
+          "next": [
+            "s1-14"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s1-14",
+          "x": 67,
+          "y": 49,
+          "progress": 14,
+          "kind": "normal",
+          "next": [
+            "s1-15"
+          ]
+        },
+        {
+          "id": "s1-15",
+          "x": 49,
+          "y": 43,
+          "progress": 15,
+          "kind": "normal",
+          "next": [
+            "s1-16"
+          ]
+        },
+        {
+          "id": "s1-16",
+          "x": 32,
+          "y": 37,
+          "progress": 16,
+          "kind": "gate",
+          "next": [
+            "s2-00"
+          ],
+          "effect": {
+            "when": "reach",
+            "stopTurn": true
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "label": "月明かりの回廊",
+      "background": "02-corridor.jpg",
+      "tiles": [
+        {
+          "id": "s2-00",
+          "x": 15,
+          "y": 88,
+          "progress": 16,
+          "kind": "start",
+          "next": [
+            "s2-01"
+          ]
+        },
+        {
+          "id": "s2-01",
+          "x": 29,
+          "y": 88,
+          "progress": 17,
+          "kind": "normal",
+          "next": [
+            "s2-02"
+          ]
+        },
+        {
+          "id": "s2-02",
+          "x": 43,
+          "y": 88,
+          "progress": 18,
+          "kind": "normal",
+          "next": [
+            "s2-03"
+          ]
+        },
+        {
+          "id": "s2-03",
+          "x": 57,
+          "y": 88,
+          "progress": 19,
+          "kind": "normal",
+          "next": [
+            "s2-04"
+          ]
+        },
+        {
+          "id": "s2-04",
+          "x": 71,
+          "y": 88,
+          "progress": 20,
+          "kind": "normal",
+          "next": [
+            "s2-05"
+          ]
+        },
+        {
+          "id": "s2-05",
+          "x": 85,
+          "y": 88,
+          "progress": 21,
+          "kind": "normal",
+          "next": [
+            "s2-06"
+          ]
+        },
+        {
+          "id": "s2-06",
+          "x": 85,
+          "y": 76,
+          "progress": 22,
+          "kind": "star",
+          "next": [
+            "s2-07"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s2-07",
+          "x": 71,
+          "y": 76,
+          "progress": 23,
+          "kind": "normal",
+          "next": [
+            "s2-08"
+          ]
+        },
+        {
+          "id": "s2-08",
+          "x": 57,
+          "y": 76,
+          "progress": 24,
+          "kind": "normal",
+          "next": [
+            "s2-09"
+          ]
+        },
+        {
+          "id": "s2-09",
+          "x": 43,
+          "y": 76,
+          "progress": 25,
+          "kind": "normal",
+          "next": [
+            "s2-10"
+          ]
+        },
+        {
+          "id": "s2-10",
+          "x": 29,
+          "y": 76,
+          "progress": 26,
+          "kind": "normal",
+          "next": [
+            "s2-11"
+          ]
+        },
+        {
+          "id": "s2-11",
+          "x": 15,
+          "y": 76,
+          "progress": 27,
+          "kind": "normal",
+          "next": [
+            "s2-12"
+          ]
+        },
+        {
+          "id": "s2-12",
+          "x": 15,
+          "y": 64,
+          "progress": 28,
+          "kind": "normal",
+          "next": [
+            "s2-13"
+          ]
+        },
+        {
+          "id": "s2-13",
+          "x": 29,
+          "y": 64,
+          "progress": 29,
+          "kind": "normal",
+          "next": [
+            "s2-14"
+          ]
+        },
+        {
+          "id": "s2-14",
+          "x": 43,
+          "y": 64,
+          "progress": 30,
+          "kind": "normal",
+          "next": [
+            "s2-15"
+          ]
+        },
+        {
+          "id": "s2-15",
+          "x": 57,
+          "y": 64,
+          "progress": 31,
+          "kind": "star",
+          "next": [
+            "s2-16"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s2-16",
+          "x": 71,
+          "y": 64,
+          "progress": 32,
+          "kind": "normal",
+          "next": [
+            "s2-17"
+          ]
+        },
+        {
+          "id": "s2-17",
+          "x": 85,
+          "y": 64,
+          "progress": 33,
+          "kind": "normal",
+          "next": [
+            "s2-18"
+          ]
+        },
+        {
+          "id": "s2-18",
+          "x": 85,
+          "y": 51,
+          "progress": 34,
+          "kind": "normal",
+          "next": [
+            "s2-19"
+          ]
+        },
+        {
+          "id": "s2-19",
+          "x": 69,
+          "y": 51,
+          "progress": 35,
+          "kind": "normal",
+          "next": [
+            "s2-20"
+          ]
+        },
+        {
+          "id": "s2-20",
+          "x": 56,
+          "y": 42,
+          "progress": 36,
+          "kind": "normal",
+          "next": [
+            "s2-21"
+          ]
+        },
+        {
+          "id": "s2-21",
+          "x": 50,
+          "y": 33,
+          "progress": 37,
+          "kind": "gate",
+          "next": [
+            "s3-00"
+          ],
+          "effect": {
+            "when": "reach",
+            "stopTurn": true
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "label": "星渡りの庭",
+      "background": "03-garden.jpg",
+      "tiles": [
+        {
+          "id": "s3-00",
+          "x": 16,
+          "y": 89,
+          "progress": 37,
+          "kind": "start",
+          "next": [
+            "s3-01"
+          ]
+        },
+        {
+          "id": "s3-01",
+          "x": 32,
+          "y": 89,
+          "progress": 38,
+          "kind": "normal",
+          "next": [
+            "s3-02"
+          ]
+        },
+        {
+          "id": "s3-02",
+          "x": 48,
+          "y": 89,
+          "progress": 39,
+          "kind": "normal",
+          "next": [
+            "s3-03"
+          ]
+        },
+        {
+          "id": "s3-03",
+          "x": 64,
+          "y": 89,
+          "progress": 40,
+          "kind": "star",
+          "next": [
+            "s3-04"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s3-04",
+          "x": 79,
+          "y": 89,
+          "progress": 41,
+          "kind": "normal",
+          "next": [
+            "s3-05"
+          ]
+        },
+        {
+          "id": "s3-05",
+          "x": 68,
+          "y": 78,
+          "progress": 42,
+          "kind": "fork",
+          "next": [
+            "s3-06",
+            "s3-loop-01"
+          ]
+        },
+        {
+          "id": "s3-06",
+          "x": 73,
+          "y": 68,
+          "progress": 43,
+          "kind": "normal",
+          "next": [
+            "s3-07"
+          ]
+        },
+        {
+          "id": "s3-07",
+          "x": 58,
+          "y": 57,
+          "progress": 44,
+          "kind": "normal",
+          "next": [
+            "s3-08"
+          ]
+        },
+        {
+          "id": "s3-08",
+          "x": 70,
+          "y": 57,
+          "progress": 45,
+          "kind": "normal",
+          "next": [
+            "s3-09"
+          ]
+        },
+        {
+          "id": "s3-09",
+          "x": 84,
+          "y": 55,
+          "progress": 46,
+          "kind": "star",
+          "next": [
+            "s3-10"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s3-10",
+          "x": 88,
+          "y": 47,
+          "progress": 47,
+          "kind": "normal",
+          "next": [
+            "s3-11"
+          ]
+        },
+        {
+          "id": "s3-11",
+          "x": 84,
+          "y": 38,
+          "progress": 48,
+          "kind": "normal",
+          "next": [
+            "s3-12"
+          ]
+        },
+        {
+          "id": "s3-12",
+          "x": 74,
+          "y": 37,
+          "progress": 49,
+          "kind": "return",
+          "next": [
+            "s3-13"
+          ],
+          "effect": {
+            "when": "land",
+            "target": "s3-09",
+            "oncePerRun": true
+          }
+        },
+        {
+          "id": "s3-13",
+          "x": 64,
+          "y": 41,
+          "progress": 50,
+          "kind": "normal",
+          "next": [
+            "s3-14"
+          ]
+        },
+        {
+          "id": "s3-14",
+          "x": 54,
+          "y": 44,
+          "progress": 51,
+          "kind": "normal",
+          "next": [
+            "s3-15"
+          ]
+        },
+        {
+          "id": "s3-15",
+          "x": 46,
+          "y": 47,
+          "progress": 52,
+          "kind": "star",
+          "next": [
+            "s3-16"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s3-16",
+          "x": 39,
+          "y": 43,
+          "progress": 53,
+          "kind": "normal",
+          "next": [
+            "s3-17"
+          ]
+        },
+        {
+          "id": "s3-17",
+          "x": 34,
+          "y": 38,
+          "progress": 54,
+          "kind": "normal",
+          "next": [
+            "s3-18"
+          ]
+        },
+        {
+          "id": "s3-18",
+          "x": 28,
+          "y": 42,
+          "progress": 55,
+          "kind": "normal",
+          "next": [
+            "s3-19"
+          ]
+        },
+        {
+          "id": "s3-19",
+          "x": 20,
+          "y": 41,
+          "progress": 56,
+          "kind": "star",
+          "next": [
+            "s3-20"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s3-20",
+          "x": 20,
+          "y": 34,
+          "progress": 57,
+          "kind": "normal",
+          "next": [
+            "s3-21"
+          ]
+        },
+        {
+          "id": "s3-21",
+          "x": 28,
+          "y": 30,
+          "progress": 58,
+          "kind": "gate",
+          "next": [
+            "s4-00"
+          ],
+          "effect": {
+            "when": "reach",
+            "stopTurn": true
+          }
+        },
+        {
+          "id": "s3-loop-00",
+          "x": 43,
+          "y": 69,
+          "progress": 42,
+          "kind": "loop-exit",
+          "next": [
+            "s3-loop-01"
+          ],
+          "exitTo": "s3-07"
+        },
+        {
+          "id": "s3-loop-01",
+          "x": 29,
+          "y": 74,
+          "progress": 42,
+          "kind": "normal",
+          "next": [
+            "s3-loop-02"
+          ]
+        },
+        {
+          "id": "s3-loop-02",
+          "x": 17,
+          "y": 64,
+          "progress": 42,
+          "kind": "normal",
+          "next": [
+            "s3-loop-03"
+          ]
+        },
+        {
+          "id": "s3-loop-03",
+          "x": 20,
+          "y": 54,
+          "progress": 42,
+          "kind": "starflower",
+          "next": [
+            "s3-loop-04"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 28,
+            "oncePerRun": true
+          }
+        },
+        {
+          "id": "s3-loop-04",
+          "x": 34,
+          "y": 50,
+          "progress": 42,
+          "kind": "normal",
+          "next": [
+            "s3-loop-05"
+          ]
+        },
+        {
+          "id": "s3-loop-05",
+          "x": 45,
+          "y": 57,
+          "progress": 42,
+          "kind": "normal",
+          "next": [
+            "s3-loop-00"
+          ]
+        }
+      ],
+      "rescueMarker": {
+        "id": "s3-rescue",
+        "label": "月明かりの小径",
+        "x": 54,
+        "y": 70,
+        "kind": "evaluation-rescue",
+        "affectsMovement": false
+      }
+    },
+    {
+      "id": 4,
+      "label": "星見の塔",
+      "background": "04-tower.jpg",
+      "tiles": [
+        {
+          "id": "s4-00",
+          "x": 18,
+          "y": 86,
+          "progress": 58,
+          "kind": "start",
+          "next": [
+            "s4-01"
+          ]
+        },
+        {
+          "id": "s4-01",
+          "x": 34,
+          "y": 80,
+          "progress": 59,
+          "kind": "normal",
+          "next": [
+            "s4-02"
+          ]
+        },
+        {
+          "id": "s4-02",
+          "x": 50,
+          "y": 74,
+          "progress": 60,
+          "kind": "star",
+          "next": [
+            "s4-03"
+          ],
+          "effect": {
+            "when": "land",
+            "starPoints": 5
+          }
+        },
+        {
+          "id": "s4-03",
+          "x": 66,
+          "y": 68,
+          "progress": 61,
+          "kind": "normal",
+          "next": [
+            "s4-04"
+          ]
+        },
+        {
+          "id": "s4-04",
+          "x": 78,
+          "y": 60,
+          "progress": 62,
+          "kind": "normal",
+          "next": [
+            "s4-05"
+          ]
+        },
+        {
+          "id": "s4-05",
+          "x": 69,
+          "y": 51,
+          "progress": 63,
+          "kind": "normal",
+          "next": [
+            "s4-06"
+          ]
+        },
+        {
+          "id": "s4-06",
+          "x": 58,
+          "y": 45,
+          "progress": 64,
+          "kind": "normal",
+          "next": [
+            "s4-07"
+          ]
+        },
+        {
+          "id": "s4-07",
+          "x": 64,
+          "y": 39,
+          "progress": 65,
+          "kind": "normal",
+          "next": [
+            "s4-08"
+          ]
+        },
+        {
+          "id": "s4-08",
+          "x": 72,
+          "y": 33,
+          "progress": 66,
+          "kind": "finish",
+          "next": []
+        }
+      ]
+    }
+  ],
+  "specialRoutes": [
+    {
+      "id": "early-low-roll-gate",
+      "label": "星渡りの抜け道",
+      "fromStage": 1,
+      "trigger": {
+        "atCompletedTurn": 5,
+        "rollWindow": {
+          "firstTurn": 1,
+          "lastTurn": 5,
+          "allowedFaces": [
+            1,
+            2
+          ],
+          "requireAll": true
+        },
+        "uses": "originalDieResult"
+      },
+      "offer": {
+        "optional": true,
+        "resolveBeforeNextRoll": true,
+        "expiresOnRunClose": true
+      },
+      "destination": "s3-00",
+      "effect": {
+        "extraRollCost": 0,
+        "bonusStarPoints": 0,
+        "preserveEarnedStarPoints": true,
+        "awardSkippedTileRewards": false,
+        "emitStageArrival": true
+      }
+    }
+  ]
+}

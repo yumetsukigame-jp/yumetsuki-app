@@ -3,6 +3,7 @@ export type HomeMenuLink = {
   href: string;
   icon?: string;
   image?: string;
+  imageSrc?: string;
   description?: string;
   imageWidth?: number;
   imageHeight?: number;
@@ -18,6 +19,15 @@ export type HomeMenuSection = {
 };
 
 export const homeMenu: HomeMenuSection[] = [
+  {
+    id: "quest", title: "ゆめつきクエスト", color: "#354e86", accent: "#d6b766",
+    cards: [{ label: "ゆめつきクエスト", href: "/quest", imageSrc: "/quest/menu-thumbnail-v2.jpg", imageWidth: 1024, imageHeight: 576, description: "星のサイコロで、４つの舞台を巡る旅へ。" }],
+    guides: [{ label: "クエストの遊び方", href: "/quest/guide", icon: "book" }],
+    details: [
+      { label: "星務進捗ランキング", href: "/quest/ranking", icon: "ranking" },
+      { label: "過去の星務報告書", href: "/quest/archive", icon: "history" },
+    ],
+  },
   {
     id: "nibuichi", title: "今日のニブイチ", color: "#854d0e", accent: "#eab308",
     cards: [{ label: "今日のニブイチに参加する", href: "/nibuichi", image: "nibuichi", description: "今日の結果を予想しよう。" }],

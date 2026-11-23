@@ -8,6 +8,7 @@ service cloud.firestore {
     function serverOnly(collection) {
       return collection in [
         'admins', 'users', 'xAccountClaims', 'usedCodes', 'userGachaHistory',
+        'questConfig', 'questRuns',
         'gachaShippingClaims', 'rewardRedemptions',
         'nibuichi_user_predictions', 'nibuichi_daily', 'nibuichi_global',
         'quizzes_archive', 'neraiuchiEvents', 'neraiuchiEventsArchive',
@@ -20,6 +21,7 @@ service cloud.firestore {
     // Keep legacy public reads; financial/eligibility writes require an admin or server.
     match /{collection}/{document=**} {
       allow read: if !(collection in [
+        'questConfig', 'questRuns',
         'quizzes', 'neraiuchiEvents', 'neraiuchiEventsArchive', 'neraiuchiSecrets',
         'neraiuchiCounters', 'neraiuchiUserHistory', 'neraiuchiAudit',
         'xAccountClaims', 'validCodes', 'usedCodes', 'gachaShippingClaims', 'rewardRedemptions',

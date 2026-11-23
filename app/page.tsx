@@ -16,6 +16,7 @@ import { homeGuide, visibleHomeMenu } from "@/app/lib/homeMenu";
 import { neraiuchiEnabled, type NeraiuchiHomeStatus } from "@/app/lib/neraiuchi";
 import { initialHomeAnnouncementIds } from "@/app/lib/homeAnnouncementsDisplay";
 import FeatureSection from "@/components/home/FeatureSection";
+import QuestMenuSection from "@/components/home/QuestMenuSection";
 import MenuImageCard from "@/components/home/MenuImageCard";
 import NeraiuchiHomeAnnouncement from "@/components/neraiuchi/NeraiuchiHomeAnnouncement";
 import styles from "./home.module.css";
@@ -641,7 +642,9 @@ export default function Home() {
 </div>
 
 {visibleHomeMenu(neraiuchiEnabled)
-  .map((section) => <FeatureSection key={section.id} section={section} />)}
+  .map((section) => section.id === "quest"
+    ? <QuestMenuSection key={section.id} section={section} />
+    : <FeatureSection key={section.id} section={section} />)}
 
       <div className={styles.standalone}>
         <GuideLinkCard />

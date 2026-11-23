@@ -7,7 +7,9 @@ import MenuImageCard from "./MenuImageCard";
 import IconMenuLink from "./IconMenuLink";
 import styles from "./homeMenu.module.css";
 
-export default function FeatureSection({ section }: { section: HomeMenuSection }) {
+export default function FeatureSection({ section, disabled = false, disabledReason }: {
+  section: HomeMenuSection; disabled?: boolean; disabledReason?: string;
+}) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
   const style = { "--accent": section.accent, "--heading": section.color } as CSSProperties;
@@ -20,15 +22,16 @@ export default function FeatureSection({ section }: { section: HomeMenuSection }
           {open ? "詳細を閉じる ▲" : "詳細を表示 ▼"}
         </button>
       </div>
+      {disabled && disabledReason && <p className={styles.restriction}>{disabledReason}</p>}
       <div className={styles.links}>
-        {section.cards.map((item) => <MenuImageCard key={item.href} item={item} />)}
-        {section.guides.map((item) => <IconMenuLink key={item.href} item={item} />)}
+        {section.cards.map((item) => <MenuImageCard key={item.href} item={item} disabled={disabled} />)}
+        {section.guides.map((item) => <IconMenuLink key={item.href} item={item} disabled={disabled} />)}
       </div>
       {!open && <p className={styles.detailSummary}>詳細：{section.details.map((item) => item.label).join("・")}</p>}
       <div id={detailsId} hidden={!open} className={styles.links}>
-        {section.details.map((item) => item.image
-          ? <MenuImageCard key={item.href} item={item} />
-          : <IconMenuLink key={item.href} item={item} />)}
+        {section.details.map((item) => item.image || item.imageSrc
+          ? <MenuImageCard key={item.href} item={item} disabled={disabled} />
+          : <IconMenuLink key={item.href} item={item} disabled={disabled} />)}
       </div>
     </section>
   );
