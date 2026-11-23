@@ -62,7 +62,7 @@
       "hasTransparency": false,
       "sha256": "f690fa111f8e2b57d3191e24770b48b60fef6dfcb97aafffac293b1eae2ab6c7",
       "source": "image_gen, corrected to two hands",
-      "status": "implemented"
+      "status": "deployed"
     },
     {
       "id": "thumbnails/archive-webp",
@@ -74,7 +74,7 @@
       "sha256": "414dccbc1b0feae0f476706c8617ede147f6ae311a120cbefcc485a9ce332dfc",
       "source": "WebP conversion of corrected artwork",
       "cacheVersion": "414dccbc1b0f",
-      "status": "implemented"
+      "status": "deployed"
     },
     {
       "id": "thumbnails/code",
