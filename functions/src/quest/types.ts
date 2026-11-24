@@ -59,10 +59,12 @@ export type QuestDraft = {
 };
 export type QuestPublicRun = Omit<QuestDraft, "xAccountList" | "accessCode"> & {
   id: string; version: number; state: "draft" | "published" | "settling" | "archived";
+  adminReleased?: number;
   summary?: QuestSummary;
 };
 export type QuestPlayer = QuestState & {
   publicId: string; displayName: string; normalGranted: number; rescueGranted: number;
+  bulkGranted?: number;
   result: QuestResult | null; eligibleAt: number; eligibility: QuestFlag[];
 };
 export type QuestProgress = {

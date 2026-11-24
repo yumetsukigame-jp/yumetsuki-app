@@ -133,7 +133,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         <p>公開・参加条件：{run.publicFlags.map(flag => questFlags[flag]).join(" ／ ")}</p>
         <p className={styles.small}>参加条件は参加時に確認し、この開催回の資格として保存します。参加無料。星ポイントはクエスト内の経験値で、通常ポイントや発送物には交換されません。</p>
         <details><summary>この回の配布・評価ルール</summary>
-          <p>通常サイコロ：{run.rules.distribution.mode === "admin" ? "参加後、管理者が個別に付与します。" : run.rules.distribution.mode === "daily"
+          <p>通常サイコロ：{run.rules.distribution.mode === "admin" ? `管理者が全体・個別に付与します。全体配布済みは累計${run.adminReleased ?? 0}個。途中参加でも未受取分を受け取れ、個別分との合計は14個までです。` : run.rules.distribution.mode === "daily"
             ? `開始日分を含め、日本時間${run.rules.distribution.dailyStartHourJst}時の切り替えごとに１個。通算14個までです。` : "以下の日時に１個ずつ、合計14個を配布します。"}</p>
           {run.rules.distribution.mode === "schedule" && <ol>{run.rules.distribution.releaseAt.map((at, index) => <li key={index}>{formatJstDateTime(new Date(at))}</li>)}</ol>}
           <p>１歩の星ポイント {run.rules.stepStarPoints} ／ {run.rules.levelPoints}ポイントごとにLv.＋１。評価点は現在地の進捗点＋{run.rules.levelScore}×（Lv.−１）。{run.rules.percentMax}点を100%として小数{run.rules.percentDecimals}桁で表示します。</p>

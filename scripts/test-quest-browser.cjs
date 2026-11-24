@@ -46,6 +46,8 @@ async function main() {
           completedGroups: { top: 0, upper: 0, middle: 1, lower: 1 }, stages: { 1: 3, 2: 3, 3: 2, 4: 0 } } };
       let player = createPlayer({ tileId: "s3-05", used: 8, starPoints: 35, pending: { kind: "branch", steps: 3 }, version: 8, lastDie: 5 });
       const requests = [], saves = new Map(), calls = [], errors = [], adminRuns = [];
+      const bulkRequests = [], bulkSaves = new Map();
+      let dropBulkResponse = true;
       let dropResponse = false;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
       function ranking(input) {
@@ -114,6 +116,23 @@ async function main() {
         } else if (action === "adminPublishQuest") {
           assert.equal(input.confirmed, true); assert.ok(input.reviewNote.length >= 20);
           adminRuns[0].state = "published"; adminRuns[0].version = 2; result = { runId: "draft-quest" };
+        } else if (action === "adminReleaseQuestDice") {
+          bulkRequests.push(input);
+          if (bulkSaves.has(input.grantId)) {
+            assert.deepEqual(input, bulkSaves.get(input.grantId).request);
+            result = { ...bulkSaves.get(input.grantId).result, granted: false };
+          } else {
+            assert.equal(input.expectedTotal, adminRuns[0].adminReleased ?? 0);
+            adminRuns[0].adminReleased = (adminRuns[0].adminReleased ?? 0) + input.count;
+            result = { granted: true, releasedTotal: adminRuns[0].adminReleased, count: input.count };
+            bulkSaves.set(input.grantId, { request: input, result });
+          }
+          await new Promise(resolve => setTimeout(resolve, 150));
+          if (dropBulkResponse) {
+            dropBulkResponse = false;
+            return route.fulfill({ status: 503, headers: cors, contentType: "application/json",
+              body: JSON.stringify({ error: { status: "UNAVAILABLE", message: "全体配布の応答を受け取れませんでした（画面テスト）" } }) });
+          }
         } else if (action === "grantQuest") result = { granted: true };
         else if (action === "adminFinalizeQuest") {
           const complete = adminRuns[0].state === "settling";
@@ -241,6 +260,23 @@ async function main() {
       assert.equal(await page.getByText("公開ボタンが無効になっている理由", { exact: true }).count(), 0);
       await publish.click();
       await page.getByRole("heading", { name: "通常サイコロ・救済の個別付与" }).waitFor();
+      page.on("dialog", dialog => dialog.accept());
+      await page.getByLabel("今回全体へ配る個数", { exact: true }).fill("2");
+      await page.getByRole("button", { name: "全体へサイコロを配布する", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "全体配布の応答を受け取れませんでした" }).waitFor();
+      assert.equal(bulkRequests.length, 1);
+      await page.reload();
+      await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
+      const resendBulk = page.getByRole("button", { name: "同じ配布IDで再送して確認", exact: true });
+      await resendBulk.waitFor();
+      assert.equal(await page.getByLabel("今回全体へ配る個数", { exact: true }).inputValue(), "2");
+      assert.equal(await page.getByLabel("今回全体へ配る個数", { exact: true }).getAttribute("readonly"), "");
+      await resendBulk.dblclick();
+      await page.getByRole("status").filter({ hasText: "この配布IDは反映済みです。" }).waitFor();
+      assert.equal(bulkRequests.length, 2);
+      assert.deepEqual(bulkRequests[0], bulkRequests[1]);
+      assert.equal(bulkSaves.size, 1);
+      await page.getByText("全体への配布済み累計：2／14個", { exact: true }).waitFor();
       await page.getByLabel("利用者UID", { exact: true }).fill(uid);
       await page.getByLabel("付与数", { exact: true }).fill("1");
       await page.getByLabel("付与理由", { exact: true }).fill("画面検証のみ");
@@ -249,7 +285,6 @@ async function main() {
       await page.getByRole("button", { name: "この付与IDで付与・再送する" }).click();
       await page.getByRole("status").filter({ hasText: "付与を保存しました。" }).waitFor();
       assert.equal(await page.getByLabel("付与ID", { exact: true }).inputValue(), grantId);
-      page.on("dialog", dialog => dialog.accept());
       await page.getByRole("button", { name: "進行を停止して結果を集計", exact: true }).click();
       await page.getByRole("button", { name: "集計を続きから再開" }).click();
       await page.getByRole("status").filter({ hasText: "全員の結果を確定し" }).waitFor();

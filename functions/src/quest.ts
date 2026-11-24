@@ -18,6 +18,7 @@ type Snap = FirebaseFirestore.DocumentSnapshot;
 type Run = Omit<QuestDraft, "accessCode"> & {
   version: number; state: QuestPublicRun["state"]; codeHash: string;
   simulation?: unknown; simulatedVersion?: number; confirmations?: string;
+  adminReleased?: number;
   closedAt?: number; cursor?: string; summary?: QuestSummary;
 };
 const fail = (message: string, code: functions.https.FunctionsErrorCode = "failed-precondition"): never => {
@@ -56,7 +57,15 @@ function publicRun(snapshot: Snap): QuestPublicRun {
   const run = getRun(snapshot);
   return { id: snapshot.id, title: run.title, description: run.description, thumbnail: run.thumbnail,
     startsAt: run.startsAt, endsAt: run.endsAt, publicFlags: run.publicFlags, rules: run.rules,
-    version: run.version, state: run.state, ...(run.state === "archived" && run.summary ? { summary: run.summary } : {}) };
+    version: run.version, state: run.state, adminReleased: run.adminReleased ?? 0,
+    ...(run.state === "archived" && run.summary ? { summary: run.summary } : {}) };
+}
+function normalReleases(run: Run, player: QuestPlayer, now: number) {
+  if (now < run.startsAt) return [];
+  const keys = run.rules.distribution.mode === "admin"
+    ? Array.from({ length: run.adminReleased ?? 0 }, (_, index) => `bulk-${index + 1}`).slice(player.bulkGranted ?? 0)
+    : questReleaseKeys(run.rules, run.startsAt, run.endsAt, now).slice(player.normalGranted);
+  return keys.slice(0, Math.max(0, run.rules.maxTurns - player.normalGranted));
 }
 function assertOpen(run: Run, pointer: Snap, runId: string, now: number) {
   if (run.state !== "published" || pointer.get("runId") !== runId || now < run.startsAt ||
@@ -137,13 +146,16 @@ export const getQuest = callable(async (raw, context) => {
     reason = await db.runTransaction(tx => participationReason(tx, run, actor, unlock));
   }
   const p = player?.exists ? player.data() as QuestPlayer : null;
-  const scheduledTotal = releasedQuestDice(run.rules, run.startsAt, run.endsAt, run.endsAt - 1);
+  const due = p ? normalReleases(run, p, Date.now()).length : 0;
+  const scheduledTotal = run.rules.distribution.mode === "admin"
+    ? (p?.normalGranted ?? 0) + due
+    : releasedQuestDice(run.rules, run.startsAt, run.endsAt, run.endsAt - 1);
   const forecast = p && !p.result && run.state === "published" && Date.now() < run.endsAt
     ? forecastQuest(p, run.rules, Math.min(14, Math.max(p.normalGranted, scheduledTotal)))
     : null;
   return { run: publicRun(snapshot), player: p, reason, forecast,
     dueDice: p && run.state === "published" && Date.now() < run.endsAt && d.archive !== true
-      ? Math.max(0, releasedQuestDice(run.rules, run.startsAt, run.endsAt, Date.now()) - p.normalGranted) : 0,
+      ? due : 0,
     serverNow: Date.now() };
 });
 
@@ -205,9 +217,10 @@ export const actQuest = callable(async (raw, context) => {
     const p = previous.data() as QuestPlayer;
     if (d.version !== p.version) fail("別の操作が反映されています。再読み込みしてください", "aborted");
     if (p.result) fail("結果は確定済みです");
-    const releases = questReleaseKeys(run.rules, run.startsAt, run.endsAt, now).slice(p.normalGranted);
+    const releases = normalReleases(run, p, now);
     const due = releases.length;
     p.normalGranted += due;
+    if (run.rules.distribution.mode === "admin") p.bulkGranted = (p.bulkGranted ?? 0) + due;
     let next: QuestPlayer;
     if (d.action === "sync") {
       if (!due) fail("現在受け取れる配布分はありません");
@@ -221,6 +234,32 @@ export const actQuest = callable(async (raw, context) => {
     tx.set(playerRef, next); writeProgress(tx, ref, next, !next.pending && d.action !== "sync");
     tx.create(actionRef, { fingerprint, action: d.action, die: d.action === "roll" ? die : null, player: next, at: now });
     return { player: next, replay: false };
+  });
+});
+
+export const adminReleaseQuestDice = callable(async (raw, context) => {
+  const administratorUid = await administrator(context);
+  const d = questObject(raw, ["runId", "grantId", "count", "reason", "expectedTotal"]);
+  const ref = runs.doc(id(d.runId)), grantRef = ref.collection("grants").doc(`bulk_${id(d.grantId)}`);
+  const count = questInteger(d.count, "全体への配布数", 1, 14), reason = questText(d.reason, "配布理由", 500);
+  const expectedTotal = questInteger(d.expectedTotal, "配布済み累計", 0, 14);
+  const fingerprint = hash(JSON.stringify([count, reason, expectedTotal]));
+  return db.runTransaction(async tx => {
+    const [snapshot, pointer, grant] = await Promise.all([tx.get(ref), tx.get(current), tx.get(grantRef)]);
+    if (grant.exists) {
+      if (grant.get("fingerprint") !== fingerprint) fail("配布IDが使用済みです", "already-exists");
+      return { granted: false, releasedTotal: grant.get("releasedTotal"), count: grant.get("count") };
+    }
+    const run = getRun(snapshot); assertOpen(run, pointer, ref.id, Date.now());
+    if (run.rules.distribution.mode !== "admin") fail("全体への手動配布は管理者配布方式の開催で行ってください");
+    const previous = run.adminReleased ?? 0;
+    if (previous !== expectedTotal) fail("全体の配布数が更新されています。開催を選択し直してください", "aborted");
+    const releasedTotal = previous + count;
+    if (releasedTotal > run.rules.maxTurns) fail("全体への配布は累計14個までです");
+    tx.update(ref, { adminReleased: releasedTotal });
+    tx.create(grantRef, { kind: "normal", source: "admin-bulk", count, reason, expectedTotal, releasedTotal,
+      administratorUid, fingerprint, at: Date.now() });
+    return { granted: true, releasedTotal, count };
   });
 });
 
@@ -242,7 +281,8 @@ export const grantQuest = callable(async (raw, context) => {
     if (!previous.exists) fail("参加済みの利用者に付与してください");
     const player = previous.data() as QuestPlayer;
     if (d.kind === "normal") {
-      if (run.rules.distribution.mode !== "admin" || player.normalGranted + count > 14) fail("通常分の付与方式・上限を確認してください");
+      if (run.rules.distribution.mode !== "admin" ||
+          player.normalGranted + normalReleases(run, player, Date.now()).length + count > 14) fail("通常分の付与方式・上限を確認してください");
       player.normalGranted += count;
     } else {
       if (!run.rules.rescue.enabled || !run.rules.rescue.adminEnabled ||

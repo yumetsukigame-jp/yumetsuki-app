@@ -160,6 +160,93 @@ test("normal/rescue admin grants are atomic, capped, and individually idempotent
   await assert.rejects(call("grantQuest", { ...rescue, grantId: randomUUID() }));
   await assert.rejects(call("grantQuest", grant, uid), { code: "permission-denied" });
 });
+test("bulk releases carry over to late joiners, replay exactly once, and reject concurrent stale releases", async () => {
+  const ref = await run(), uid = await join(ref);
+  const release = { runId: ref.id, grantId: randomUUID(), count: 2, expectedTotal: 0, reason: "Synthetic bulk release" };
+  await assert.rejects(call("adminReleaseQuestDice", release, uid), { code: "permission-denied" });
+  await assert.rejects(call("adminReleaseQuestDice", release, null), { code: "unauthenticated" });
+  const delivered = await Promise.all(Array.from({ length: 4 }, () => call("adminReleaseQuestDice", release)));
+  assert.equal(delivered.filter(result => result.granted).length, 1);
+  await assert.rejects(call("adminReleaseQuestDice", { ...release, count: 1 }), { code: "already-exists" });
+  const competing = await Promise.allSettled(Array.from({ length: 2 }, () => call("adminReleaseQuestDice",
+    { ...release, grantId: randomUUID(), count: 1, expectedTotal: 2 })));
+  assert.equal(competing.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(competing.find(result => result.status === "rejected").reason.code, "aborted");
+  assert.equal((await ref.get()).get("adminReleased"), 3);
+  assert.equal((await call("adminListQuest", {})).items.find(item => item.id === ref.id).adminReleased, 3);
+  const late = await join(ref);
+  for (const actor of [uid, late]) {
+    const view = await call("getQuest", {}, actor);
+    assert.equal(view.dueDice, 3);
+    assert.equal(view.run.adminReleased, 3);
+    assert.equal(view.player.normalGranted, 0);
+    const requestId = randomUUID();
+    const received = await action(ref, actor, 0, "sync", requestId);
+    assert.equal(received.player.normalGranted, 3);
+    assert.equal(received.player.bulkGranted, 3);
+    assert.equal(received.player.used, 0);
+    assert.equal(received.player.tileId, initialQuestState().tileId);
+    assert.deepEqual((await action(ref, actor, 0, "sync", requestId)).player, received.player);
+    assert.equal((await call("getQuest", {}, actor)).dueDice, 0);
+  }
+  assert.equal((await ref.collection("grants").get()).size, 8);
+});
+test("bulk releases and legacy individual grants share the 14-die cap, including unclaimed releases", async () => {
+  const ref = await run(), legacy = await join(ref), unclaimed = await join(ref);
+  await seed(ref, legacy, { normalGranted: 13 });
+  const release = { runId: ref.id, grantId: randomUUID(), count: 3, expectedTotal: 0, reason: "Synthetic cap check" };
+  await call("adminReleaseQuestDice", release);
+  assert.equal((await call("getQuest", {}, legacy)).dueDice, 1);
+  const individual = { runId: ref.id, uid: unclaimed, grantId: randomUUID(), kind: "normal", count: 12, reason: "Synthetic individual grant" };
+  await assert.rejects(call("grantQuest", individual));
+  await call("grantQuest", { ...individual, count: 11 });
+  for (const actor of [legacy, unclaimed]) {
+    const version = actor === legacy ? 0 : 1;
+    assert.equal((await action(ref, actor, version, "sync")).player.normalGranted, 14);
+  }
+  await call("adminReleaseQuestDice", { ...release, grantId: randomUUID(), count: 11, expectedTotal: 3 });
+  await assert.rejects(call("adminReleaseQuestDice", { ...release, grantId: randomUUID(), count: 1, expectedTotal: 14 }));
+  assert.equal((await call("getQuest", {}, legacy)).dueDice, 0);
+  const late = await join(ref);
+  assert.equal((await call("getQuest", {}, late)).dueDice, 14);
+  assert.equal((await action(ref, late, 0, "sync")).player.normalGranted, 14);
+  await assert.rejects(call("grantQuest", { ...individual, uid: late, count: 1, grantId: randomUUID() }));
+});
+test("bulk release claims roll once on replay and serialize with concurrent individual grants", async () => {
+  const ref = await run(), uid = await join(ref);
+  const release = { runId: ref.id, grantId: randomUUID(), count: 1, expectedTotal: 0, reason: "Synthetic roll" };
+  await call("adminReleaseQuestDice", release);
+  const requestId = randomUUID();
+  const outcomes = await Promise.all(Array.from({ length: 4 }, () => action(ref, uid, 0, "roll", requestId)));
+  assert.equal(outcomes.filter(result => !result.replay).length, 1);
+  assert.ok(outcomes.every(result => result.player.normalGranted === 1 && result.player.bulkGranted === 1 && result.player.used === 1));
+  assert.equal((await ref.collection("grants").get()).size, 2);
+  const race = await run(), actor = await join(race);
+  await Promise.allSettled([
+    call("adminReleaseQuestDice", { ...release, runId: race.id, grantId: randomUUID() }),
+    call("grantQuest", { runId: race.id, uid: actor, grantId: randomUUID(), kind: "normal", count: 14, reason: "Synthetic race" }),
+  ]);
+  const view = await call("getQuest", {}, actor);
+  assert.equal(view.run.adminReleased, 1);
+  assert.ok(view.player.normalGranted + view.dueDice <= 14);
+});
+test("bulk releases reject scheduled, stale and closed runs while committed replay survives finalization", async () => {
+  const scheduled = await run({ rules: { ...rules, distribution: { ...rules.distribution, mode: "daily" } } });
+  const request = { runId: scheduled.id, grantId: randomUUID(), count: 1, expectedTotal: 0, reason: "Synthetic close race" };
+  await assert.rejects(call("adminReleaseQuestDice", request));
+  const ref = await run(), uid = await join(ref);
+  await assert.rejects(call("adminReleaseQuestDice", request));
+  const release = { ...request, runId: ref.id, grantId: randomUUID() };
+  const [delivery] = await Promise.allSettled([
+    call("adminReleaseQuestDice", release), call("adminFinalizeQuest", { runId: ref.id, confirmed: true }),
+  ]);
+  assert.equal((await call("getQuest", {}, uid)).dueDice, 0);
+  assert.equal((await call("getQuest", { runId: ref.id, archive: true }, uid)).dueDice, 0);
+  assert.ok([0, 1].includes((await ref.get()).get("adminReleased") ?? 0));
+  if (delivery.status === "fulfilled") assert.equal((await call("adminReleaseQuestDice", release)).granted, false);
+  else await assert.rejects(call("adminReleaseQuestDice", release));
+  await assert.rejects(call("adminReleaseQuestDice", { ...release, grantId: randomUUID(), expectedTotal: 1 }));
+});
 test("daily carry-over grants use unique day+uid IDs and synchronize just once", async () => {
   const startsAt = Date.now() - 3 * 86400000;
   const ref = await run({ startsAt, rules: { ...rules, distribution: { ...rules.distribution, mode: "daily" } } });

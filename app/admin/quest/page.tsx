@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
-import { db, storage } from "@/firebase";
+import { auth, db, storage } from "@/firebase";
 import { formatJstDateTime, parseJstDateTime } from "@/app/lib/dateTime";
 import { questCall, questError, questFlags, questGroups } from "@/app/lib/quest";
 import { GACHA_EVENT_FOLDER, GACHA_REGULAR_FOLDER, LEGACY_GACHA_FOLDER } from "@/app/lib/imageFolders";
@@ -26,6 +26,17 @@ const recommendedNumbers: Record<Numeric, number> = {
 };
 type AdminRun = QuestPublicRun & { xAccountList: string[]; simulation: QuestSimulation[] | null; simulatedVersion: number | null };
 type Listing = { items: AdminRun[]; nextCursor: string | null };
+type BulkRequest = { runId: string; grantId: string; count: number; reason: string; expectedTotal: number };
+const bulkKey = (runId: string) => `quest-bulk-request:${auth.currentUser?.uid}:${runId}`;
+function savedBulkRequest(runId: string): BulkRequest | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(bulkKey(runId)) ?? "null");
+    return value?.runId === runId && typeof value.grantId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.grantId) &&
+      Number.isInteger(value.count) && value.count >= 1 && value.count <= 14 &&
+      Number.isInteger(value.expectedTotal) && value.expectedTotal >= 0 && value.expectedTotal <= 14 &&
+      typeof value.reason === "string" && value.reason.trim().length > 0 && value.reason.length <= 500 ? value : null;
+  } catch { return null; }
+}
 const localJst = (ms: number) => new Date(ms + 9 * 3600000).toISOString().slice(0, 16);
 function numberValue(value: string, label: string) {
   if (!value.trim() || !Number.isFinite(Number(value))) throw new Error(`${label}を入力してください`);
@@ -82,9 +93,12 @@ export default function QuestAdminPage() {
   const [confirmed, setConfirmed] = useState(false), [review, setReview] = useState("");
   const [dirty, setDirty] = useState(false);
   const [grant, setGrant] = useState({ uid: "", grantId: "", kind: "normal", count: "", reason: "" });
+  const [bulk, setBulk] = useState({ count: "1", reason: "通常サイコロの全体配布" });
+  const [pendingBulk, setPendingBulk] = useState<BulkRequest | null>(null);
   const [menuAccess, setMenuAccess] = useState<QuestMenuAccess | null>(null);
   const [menuMode, setMenuMode] = useState<QuestMenuMode>("admin");
   const editable = !selected || selected.state === "draft";
+  const currentBulk = pendingBulk?.runId === selected?.id ? pendingBulk : null;
   const publishBlockers = [
     dirty ? "変更した開催設定を下書き保存してください。" : null,
     selected && selected.simulatedVersion !== selected.version ? "最新版の設定で14回の分布試算を行ってください。" : null,
@@ -116,11 +130,44 @@ export default function QuestAdminPage() {
   }
   function pick(run: AdminRun) {
     setSelected(run); setForm(fromRun(run)); setConfirmed(false); setReview(""); setDirty(false); setError(""); setStatus("");
+    const pending = savedBulkRequest(run.id);
+    setPendingBulk(pending);
+    setBulk({ count: String(pending?.count ?? 1), reason: pending?.reason ?? "通常サイコロの全体配布" });
   }
   async function refreshSelected(id: string) {
     const value = await load();
     const item = value.items.find(item => item.id === id);
     if (item) { setSelected(item); setDirty(false); }
+  }
+  function clearBulkRequest(runId: string) {
+    setPendingBulk(null);
+    try { sessionStorage.removeItem(bulkKey(runId)); } catch { /* The server also guards the cumulative total. */ }
+  }
+  async function releaseBulkDice() {
+    const run = selected;
+    if (!run) return;
+    await work(async () => {
+      if (!currentBulk && !window.confirm("開催全体のサイコロ配布数を進めます。途中参加者にも配布済み分を渡し、個別付与分との合計は１人14個までです。実行しますか？")) return;
+      const request: BulkRequest = currentBulk ?? { runId: run.id, grantId: crypto.randomUUID(),
+        count: numberValue(bulk.count, "全体への配布数"), reason: bulk.reason.trim(), expectedTotal: run.adminReleased ?? 0 };
+      setPendingBulk(request);
+      try { sessionStorage.setItem(bulkKey(run.id), JSON.stringify(request)); } catch { /* Keep the same request in memory if storage is unavailable. */ }
+      let result: { granted: boolean; releasedTotal: number; count: number };
+      try {
+        result = await questCall("adminReleaseQuestDice", request);
+      } catch (error) {
+        if (["functions/aborted", "functions/failed-precondition", "functions/invalid-argument", "functions/already-exists"].includes((error as { code?: string }).code ?? "")) {
+          clearBulkRequest(run.id);
+          await refreshSelected(run.id).catch(() => undefined);
+        }
+        throw error;
+      }
+      clearBulkRequest(run.id);
+      await refreshSelected(run.id);
+      setStatus(result.granted
+        ? `全体へ${result.count}個分の配布を確定しました（累計${result.releasedTotal}／14個）。利用者画面で進行を再取得すると受け取れます。途中参加者にも繰り越します。`
+        : "この配布IDは反映済みです。追加の付与はしていません。");
+    });
   }
   async function loadImages(event: boolean) {
     await work(async () => {
@@ -200,7 +247,7 @@ export default function QuestAdminPage() {
         {form.flags.includes("x_account_match") && <label>対象Xアカウント一覧（１行１アカウント、@を含む）<textarea required value={form.xText} onChange={event => change("xText", event.target.value)} /></label>}
         <h3>通常サイコロの配布（救済とは別）</h3>
         <label>配布方式<select required value={form.distribution} onChange={event => change("distribution", event.target.value as Form["distribution"])}>
-          <option value="">選択してください</option><option value="admin">管理者が参加者へ付与</option><option value="daily">開催日から日次で１個、最大14個</option><option value="schedule">14個分の配布日時を指定</option>
+          <option value="">選択してください</option><option value="admin">管理者が全体・個別に付与</option><option value="daily">開催日から日次で１個、最大14個</option><option value="schedule">14個分の配布日時を指定</option>
         </select></label>
         <p className={styles.small}>日次分は参加前・未受け取りの分も期間中に受け取れます。途中参加でも、その開催で配布済みの分は繰り越します。管理者付与方式では予定されていない未付与分を終了見込みに含めません。</p>
         {form.distribution === "daily" && <label>日次切替時刻（日本時間の時、０〜23）<input type="number" min={0} max={23} required value={form.dailyHour} onChange={event => change("dailyHour", event.target.value)} /></label>}
@@ -259,8 +306,23 @@ export default function QuestAdminPage() {
       <p className={styles.small}>同時開催は１回です。前の開催の集計を完了してから公開できます。この操作で通常ポイントや発送物は付与しません。</p>
     </section>}
     {selected && selected.state !== "draft" && <section className={`${styles.panel} ${styles.form}`}>
+      <h2>通常サイコロの全体配布</h2>
+      {selected.rules.distribution.mode === "admin" ? <>
+        <p>全体への配布済み累計：{selected.adminReleased ?? 0}／14個</p>
+        <p>途中参加者にも、開催期間内は同じ配布済み分を渡します。個別付与分に追加し、合計は１人14個までです。利用者は「保存済みの進行を再取得」後に受け取り・使用できます。</p>
+        <form className={styles.form} onSubmit={event => { event.preventDefault(); void releaseBulkDice(); }}>
+          <label>今回全体へ配る個数<input type="number" required min={1} max={currentBulk ? 14 : Math.max(1, 14 - (selected.adminReleased ?? 0))}
+            readOnly={!!currentBulk} value={bulk.count} onChange={event => setBulk({ ...bulk, count: event.target.value })} /></label>
+          <label>全体配布の理由<input required maxLength={500} readOnly={!!currentBulk} value={bulk.reason} onChange={event => setBulk({ ...bulk, reason: event.target.value })} /></label>
+          {currentBulk && <p className={styles.notice}>配布ID：{currentBulk.grantId}。応答が不明な場合は同じIDで再送してください。新しく配り直す操作ではありません。</p>}
+          <button className={styles.primary} disabled={busy || (!currentBulk && (selected.state !== "published" || (selected.adminReleased ?? 0) >= 14))}>
+            {currentBulk ? "同じ配布IDで再送して確認" : "全体へサイコロを配布する"}
+          </button>
+          <button type="button" disabled={busy} onClick={() => void work(async () => { await refreshSelected(selected.id); })}>全体の配布数を再取得</button>
+        </form>
+      </> : <p>日次・日時指定の開催は、設定された日時の配布分を利用者が受け取る方式です。全体への手動配布は管理者配布方式で利用できます。</p>}
       <h2>通常サイコロ・救済の個別付与</h2>
-      <p>参加済みの利用者に限ります。通常分は管理者配布方式のみ・通算14個まで。救済は設定された上限までで、使用は１回です。通信再送には必ず同じ付与IDを使ってください。</p>
+      <p>参加済みの利用者に限ります。通常分は管理者配布方式のみ・全体の未受取分も含めて通算14個まで。救済は設定された上限までで、使用は１回です。通信再送には必ず同じ付与IDを使ってください。</p>
       <form className={styles.form} onSubmit={event => { event.preventDefault(); void work(async () => {
         const result = await questCall<{ granted: boolean }>("grantQuest", { runId: selected.id, ...grant, count: numberValue(grant.count, "付与数") });
         setStatus(result.granted ? "付与を保存しました。新たな付与を行う場合は、新しい付与IDを発行してください。" : "同じ付与IDはすでに反映済みです。追加の付与はしていません。");
