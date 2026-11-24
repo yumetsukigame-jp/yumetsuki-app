@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { QUEST_BOARD, questTile } from "@/functions/src/quest/engine";
 import type { QuestPlayer } from "@/functions/src/quest/types";
 import styles from "./quest.module.css";
@@ -15,7 +15,7 @@ function edge(from: { x: number; y: number }, to: { x: number; y: number }) {
   const length = Math.hypot(dx, dy);
   return { x1: from.x, y1: from.y * 1.5, x2: to.x - dx / length * 6, y2: to.y * 1.5 - dy / length * 6 };
 }
-export default function QuestBoard({ player }: { player: QuestPlayer | null }) {
+export default function QuestBoard({ player, children }: { player: QuestPlayer | null; children?: ReactNode }) {
   const currentStage = player ? Number(player.tileId[1]) : 1;
   const [previewStage, setPreviewStage] = useState<number | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -33,6 +33,7 @@ export default function QuestBoard({ player }: { player: QuestPlayer | null }) {
     </div>
     <h2>{stage.id}．{stage.label}</h2>
     {previewStage !== null && <button type="button" onClick={() => { setPreviewStage(null); setSelected(null); }}>現在地の舞台に戻る</button>}
+    {children}
     <div className={styles.board}>
       <Image src={`/quest/${stage.background}`} alt="" fill sizes="(max-width: 600px) 94vw, 520px" priority />
       <svg className={styles.paths} viewBox="0 0 100 150" aria-hidden="true">

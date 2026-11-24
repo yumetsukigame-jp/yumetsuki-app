@@ -49,6 +49,8 @@ async function main() {
       const bulkRequests = [], bulkSaves = new Map();
       let dropBulkResponse = true;
       let dropResponse = false;
+      let questReloadDelay = 0;
+      let dueDice = 0;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
       function ranking(input) {
         const row = { id: player.publicId, displayName: player.displayName, tileId: player.tileId, score: player.score, used: player.used, level: player.level, rank: 1 };
@@ -82,8 +84,11 @@ async function main() {
           assert.equal(input.version, menuAccess.version);
           menuAccess = { mode: input.mode, version: menuAccess.version + 1, allowed: true };
           result = menuAccess;
-        } else if (action === "getQuest") result = { run: input.archive ? archive : run, player, reason: null,
-          dueDice: 0, serverNow: Date.now(), forecast: { low: 48, median: 59, high: 70, samples: 256, policy: "ローカル画面検証の試算" } };
+        } else if (action === "getQuest") {
+          await new Promise(resolve => setTimeout(resolve, questReloadDelay));
+          result = { run: input.archive ? archive : run, player, reason: null,
+            dueDice, serverNow: Date.now(), forecast: { low: 48, median: 59, high: 70, samples: 256, policy: "ローカル画面検証の試算" } };
+        }
         else if (action === "listQuestProgress") result = ranking(input);
         else if (action === "listQuestArchives") result = { items: [archive], nextCursor: null };
         else if (action === "actQuest") {
@@ -92,6 +97,7 @@ async function main() {
           if (saves.has(input.requestId)) result = { player: saves.get(input.requestId), replay: true };
           else {
             assert.equal(input.version, player.version);
+            player.normalGranted += dueDice; dueDice = 0;
             player = { ...player, ...advanceQuest(player, input.action, rules, input.action === "roll" ? 6 : undefined) };
             saves.set(input.requestId, player); result = { player, replay: false };
           }
@@ -171,6 +177,46 @@ async function main() {
         }
         assert.ok(await page.getByRole("meter", { name: "実績の星務達成率" }).isVisible());
       }
+      const die = page.locator('[class*="diceResult"] > span[aria-hidden="true"]');
+      const board = page.locator('[class*="playArea"] [class*="board"]');
+      for (const [width, height] of [[360, 640], [390, 740], [1280, 900]]) {
+        await page.setViewportSize({ width, height });
+        dueDice = width === 360 ? 1 : 0;
+        player = createPlayer({ tileId: "s2-00", used: 2, lastDie: 2, version: 2, originalRolls: [2, 2], normalGranted: 14 - dueDice });
+        await page.reload();
+        await page.getByText("出目 2", { exact: true }).waitFor();
+        await page.getByRole("button", { name: /^4 塔/ }).click();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        questReloadDelay = 1000;
+        await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).evaluate(button => button.click());
+        await page.getByText("抽選中", { exact: true }).waitFor();
+        assert.equal(await die.textContent(), "★", `${name}: previous die must disappear while rolling`);
+        assert.equal(await page.getByRole("button", { name: /^2 回廊/ }).getAttribute("aria-pressed"), "true");
+        await page.getByRole("status").filter({ hasText: "星のサイコロの出目は6" }).waitFor();
+        assert.equal((await die.textContent()).trim(), "6", `${name}: confirmed die must not wait for reload`);
+        const bounds = await board.boundingBox();
+        assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= height, `${name}: movement board outside ${width}x${height}: ${JSON.stringify(bounds)}`);
+        assert.equal(await page.locator('img[alt^="あなたの現在地"]').getAttribute("alt"), `あなたの現在地 ${player.tileId}`);
+        await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
+        questReloadDelay = 0;
+      }
+      player = createPlayer({ tileId: "s2-00", used: 2, lastDie: 2, version: 2, originalRolls: [2, 2] });
+      await page.reload();
+      await page.getByText("出目 2", { exact: true }).waitFor();
+      dropResponse = true;
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
+      assert.equal((await die.textContent()).trim(), "?", "A lost response must not show the previous die");
+      await page.reload();
+      await page.getByText("出目は未確認", { exact: true }).waitFor();
+      assert.equal((await die.textContent()).trim(), "?");
+      const savedRoll = requests.at(-1);
+      await page.getByRole("button", { name: "前の操作を再送して確認" }).click();
+      await page.getByRole("status").filter({ hasText: "保存済みの結果を確認しました" }).waitFor();
+      assert.equal((await die.textContent()).trim(), "6");
+      assert.deepEqual(requests.at(-1), savedRoll);
+      assert.equal(player.used, 3);
+      await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
       player = createPlayer({ used: 5, tileId: "s1-07", starPoints: 12, originalRolls: [1, 2, 1, 2, 1], shortcut: "offered", pending: { kind: "shortcut", steps: 0 } });
       await page.reload();
       await page.getByRole("button", { name: "今回は見送る", exact: true }).click();

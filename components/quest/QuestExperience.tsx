@@ -34,6 +34,8 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   const [eventSource, setEventSource] = useState("nibuichi");
   const [eventId, setEventId] = useState("");
   const [clock, setClock] = useState(0);
+  const [boardFocus, setBoardFocus] = useState(0);
+  const playArea = useRef<HTMLDivElement>(null);
   const offset = useRef(0), locked = useRef(false), generation = useRef(0);
   const reload = useCallback(async () => {
     const ticket = generation.current;
@@ -82,11 +84,20 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
       setPending(request);
       try { localStorage.setItem(requestKey(actor, run.id), JSON.stringify(request)); } catch { /* Progress is always persisted by the server, not browser storage. */ }
       try {
+        if (["roll", "bridge", "flower", "shortcut-use"].includes(action)) {
+          setBoardFocus(value => value + 1);
+          await new Promise<void>(resolve => requestAnimationFrame(() => {
+            playArea.current?.scrollIntoView({ block: "start", behavior: "instant" });
+            resolve();
+          }));
+        }
+        if (auth.currentUser?.uid !== actor) return;
         const [result] = await Promise.all([
           questCall<{ player: QuestPlayer; replay: boolean }>("actQuest", request),
           action === "roll" ? new Promise(resolve => setTimeout(resolve, 650)) : Promise.resolve(),
         ]);
         if (auth.currentUser?.uid !== actor) return;
+        setView(previous => previous?.run?.id === run.id ? { ...previous, player: result.player, dueDice: 0 } : previous);
         clearRequest(request, actor);
         setStatus(action === "roll" ? `星のサイコロの出目は${result.player.lastDie}。${result.replay ? "保存済みの結果を確認しました。" : "進行を保存しました。"}` : "選択・受け取りを保存しました。");
         await reload();
@@ -111,8 +122,10 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
     <nav className={styles.nav}><Link href="/" prefetch={false}>トップ</Link><Link href="/quest" prefetch={false}>現在のクエスト</Link><Link href="/quest/guide" prefetch={false}>遊び方</Link><Link href="/quest/ranking" prefetch={false}>ランキング</Link><Link href="/quest/archive" prefetch={false}>アーカイブ</Link></nav>
     <h1>{archiveId ? "過去の星務報告書" : rankingOnly ? "星務進捗ランキング" : "ゆめつきクエスト"}</h1>
     <p>白い魔女の補佐役になって、星空に浮かぶ４つの舞台へ。星のサイコロを最大14回振って、旅の行方を見届けよう。</p>
-    {error && <p role="alert" className={styles.error}>{error}</p>}
-    <p role="status" aria-live="polite">{status}</p>
+    {(!player || rankingOnly) && <>
+      {error && <p role="alert" className={styles.error}>{error}</p>}
+      <p role="status" aria-live="polite">{status}</p>
+    </>}
     {loading && <p role="status">開催と保存済みの進行を読み込んでいます…</p>}
     {!loading && !run && <p className={styles.notice}>現在表示できる開催はありません。限定公開の専用コードを受け取った方は、下の欄で解放してください。</p>}
     {!archiveId && !loading && uid && (!run || (!player && run.publicFlags.includes("limited"))) &&
@@ -149,6 +162,32 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         <button type="button" disabled={busy} onClick={() => void operation(reload)}>保存済みの進行を再取得</button>
       </section>
       {player && !rankingOnly && <>
+        <div ref={playArea} className={styles.playArea}>
+          <QuestBoard key={`${run.id}:${boardFocus}`} player={player}>
+            {error && <p role="alert" className={styles.error}>{error}</p>}
+            <p role="status" aria-live="polite" className={styles.playFeedback}>{status}</p>
+            {!archiveId && <>
+              <div className={styles.diceControls}>
+                <div className={styles.diceResult} aria-live="polite">
+                  <span className={`${styles.dice} ${busy && pending?.action === "roll" ? styles.rolling : ""}`} aria-hidden="true">
+                    {pending?.action === "roll" ? busy ? "★" : "?" : player.lastDie ?? "✧"}
+                  </span>
+                  <span>{pending?.action === "roll" ? busy ? "抽選中" : "出目は未確認" : player.lastDie ? `出目 ${player.lastDie}` : "星のサイコロ"}</span>
+                </div>
+                <button className={styles.primary} disabled={busy || !!pending || !canRoll} onClick={() => void act("roll")}>星のサイコロを振る</button>
+              </div>
+            </>}
+          </QuestBoard>
+          {!archiveId && !!view.dueDice && <button disabled={busy || !!pending || !open} onClick={() => void act("sync")}>配布済みの{view.dueDice}個を受け取る</button>}
+          {pending && !busy && !archiveId && <div className={styles.notice}><p>前の操作の応答をまだ確認できていません。同じリクエストを再送して、保存済みの結果を確認します。サイコロを振り直す操作ではありません。受付終了後でも、保存済みの結果は確認できます。</p>
+            <button type="button" disabled={busy} onClick={() => void act(pending.action, pending)}>前の操作を再送して確認</button></div>}
+          {player.pending?.kind === "branch" && <div className={styles.notice}><h3>庭で道を選ぼう</h3><p>出目{player.lastDie}の残り{player.pending.steps}歩。選んだあとは同じターンを再開します。</p>
+            <button disabled={busy || !!pending || !open} onClick={() => void act("bridge")}>星の橋へ（塔を目指す）</button>
+            <button disabled={busy || !!pending || !open} onClick={() => void act("flower")}>巡る花壇へ（星を集める）</button></div>}
+          {player.pending?.kind === "shortcut" && <div className={styles.notice}><h3>星渡りの抜け道が開きました</h3><p>最初の５回がすべて１か２でした。回数と獲得済みの星ポイントはそのまま、庭の入口へ進めます。飛ばしたマスの星や記念品は受け取りません。６回目を振る前に選んでください。</p>
+            <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-use")}>抜け道を使って庭へ進む</button>
+            <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-skip")}>今回は見送る</button></div>}
+        </div>
         <section className={styles.panel}>
           <h2>{player.result ? "星務報告書" : "あなたの星務"}</h2>
           <dl className={styles.stats}>
@@ -174,22 +213,8 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
           </div>}
           <p className={styles.small}>星渡りの抜け道：{player.shortcut === "tracking" ? `１・２が５回続くと開放（${player.originalRolls.length}／５回）`
             : player.shortcut === "missed" ? "今回は条件に届きませんでした" : player.shortcut === "used" ? "使用済み" : player.shortcut === "declined" ? "今回は見送りました" : "扉が開いています"}</p>
-          {pending && !archiveId && <div className={styles.notice}><p>前の操作の応答をまだ確認できていません。同じリクエストを再送して、保存済みの結果を確認します。サイコロを振り直す操作ではありません。受付終了後でも、保存済みの結果は確認できます。</p>
-            <button type="button" disabled={busy} onClick={() => void act(pending.action, pending)}>前の操作を再送して確認</button></div>}
-          {player.pending?.kind === "branch" && <div className={styles.notice}><h3>庭で道を選ぼう</h3><p>出目{player.lastDie}の残り{player.pending.steps}歩。選んだあとは同じターンを再開します。</p>
-            <button disabled={busy || !!pending || !open} onClick={() => void act("bridge")}>星の橋へ（塔を目指す）</button>
-            <button disabled={busy || !!pending || !open} onClick={() => void act("flower")}>巡る花壇へ（星を集める）</button></div>}
-          {player.pending?.kind === "shortcut" && <div className={styles.notice}><h3>星渡りの抜け道が開きました</h3><p>最初の５回がすべて１か２でした。回数と獲得済みの星ポイントはそのまま、庭の入口へ進めます。飛ばしたマスの星や記念品は受け取りません。６回目を振る前に選んでください。</p>
-            <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-use")}>抜け道を使って庭へ進む</button>
-            <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-skip")}>今回は見送る</button></div>}
-          {!archiveId && <>
-            <span className={`${styles.dice} ${busy && pending?.action === "roll" ? styles.rolling : ""}`} aria-hidden="true">{busy && pending?.action === "roll" ? "★" : player.lastDie ?? "✧"}</span>
-            <button className={styles.primary} disabled={busy || !!pending || !canRoll} onClick={() => void act("roll")}>星のサイコロを振る</button>
-            {!!view.dueDice && <button disabled={busy || !!pending || !open} onClick={() => void act("sync")}>配布済みの{view.dueDice}個を受け取る</button>}
-            <p className={styles.small}>出目と進行はサーバーで確定・保存します。分岐や抜け道の選択中は次を振れません。</p>
-          </>}
+          {!archiveId && <p className={styles.small}>出目と進行はサーバーで確定・保存します。分岐や抜け道の選択中は次を振れません。</p>}
         </section>
-        <div className={styles.grid}><QuestBoard player={player} />
           <section className={styles.panel}><h2>月明かりの小径</h2>
             <p>救済は移動ではなく最終評価の補填です。下位だった場合のみ中間までとなり、上位・最上位には繰り上がりません。</p>
             {run.rules.rescue.enabled ? <>
@@ -213,7 +238,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
                 <p className={styles.small}>この開催期間内に確定した本人の勝利だけを照合します。ニブイチは的中記録の集計時刻、狙い撃ちは結果公開時刻が基準です。通常ポイントの受け取りとは別です。</p>
               </form>}
             </> : <p>この開催ではイベント勝利・管理者付与の救済はありません。花壇の救済出口と星渡りの抜け道は盤面のルールとして利用できます。</p>}
-          </section></div>
+          </section>
       </>}
       {!player && !rankingOnly && <QuestBoard player={null} />}
       {uid && <QuestRanking key={`${run.id}:${player?.version ?? 0}`} run={run} archive={!!archiveId} />}

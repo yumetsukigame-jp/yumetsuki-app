@@ -40,6 +40,12 @@
 .page .tabs button { padding: 8px; font-size: .85rem; flex: 1; margin: 3px; white-space: nowrap; }
 .dice { display: block; margin: 15px auto 8px; width: 80px; height: 80px; border-radius: 20px; background: #334572; box-shadow: 0 4px 18px #243a6b30; color: #fff0aa; font-size: 2.5rem; text-align: center; line-height: 80px; }
 .rolling { animation: roll .5s linear infinite; }
+.playArea { scroll-margin-top: 12px; }
+.playArea .board { width: min(100%, 520px, max(160px, calc(66.666svh - 220px))); }
+.playFeedback { min-height: 52px; }
+.diceControls { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.diceResult { flex-shrink: 0; text-align: center; font-size: .85rem; }
+.diceResult .dice { width: 52px; height: 52px; line-height: 52px; font-size: 2rem; margin: 0 auto 4px; }
 @keyframes roll { 0% { transform: rotate(-12deg) scale(.96); } 50% { transform: rotate(12deg) scale(1.04); } 100% { transform: rotate(-12deg) scale(.96); } }
 .ranking { list-style: none; padding: 0; margin: 14px 0; }
 .ranking li { border-bottom: 1px solid #d6deed; padding: 12px 6px; display: flex; gap: 6px; flex-direction: column; overflow-wrap: anywhere; }
