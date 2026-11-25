@@ -167,7 +167,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         if (auth.currentUser?.uid !== actor) return;
         setOverlay(null); setFrames([]);
         const code = (error as { code?: string }).code;
-        if (["functions/aborted", "functions/failed-precondition", "functions/invalid-argument", "functions/permission-denied", "functions/already-exists"].includes(code ?? "")) {
+        if (["functions/aborted", "functions/failed-precondition", "functions/invalid-argument", "functions/permission-denied", "functions/already-exists", "functions/not-found"].includes(code ?? "")) {
           clearRequest(request, actor);
           await reload().catch(() => undefined);
         }

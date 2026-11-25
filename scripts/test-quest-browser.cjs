@@ -47,8 +47,11 @@ async function main() {
       let player = createPlayer({ tileId: "s3-05", used: 8, starPoints: 35, pending: { kind: "branch", steps: 3 }, version: 8, lastDie: 5 });
       const requests = [], saves = new Map(), calls = [], errors = [], adminRuns = [];
       const bulkRequests = [], bulkSaves = new Map();
+      const deleteRequests = [], deleteSaves = new Map();
       let dropBulkResponse = true;
+      let dropDeleteResponse = true;
       let dropResponse = false;
+      let runDeleted = false;
       let questReloadDelay = 0;
       let dueDice = 0;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
@@ -86,12 +89,14 @@ async function main() {
           result = menuAccess;
         } else if (action === "getQuest") {
           await new Promise(resolve => setTimeout(resolve, questReloadDelay));
-          result = { run: input.archive ? archive : run, player, reason: null,
+          result = { run: input.archive ? archive : runDeleted ? null : run, player: runDeleted && !input.archive ? null : player, reason: null,
             dueDice, serverNow: Date.now(), forecast: { low: 48, median: 59, high: 70, samples: 256, policy: "ローカル画面検証の試算" } };
         }
         else if (action === "listQuestProgress") result = ranking(input);
         else if (action === "listQuestArchives") result = { items: [archive], nextCursor: null };
         else if (action === "actQuest") {
+          if (runDeleted) return route.fulfill({ status: 404, headers: cors, contentType: "application/json",
+            body: JSON.stringify({ error: { status: "NOT_FOUND", message: "開催が削除されています（画面テスト）" } }) });
           assert.deepEqual(Object.keys(input).sort(), ["action", "requestId", "runId", "version"]);
           requests.push(input);
           if (saves.has(input.requestId)) result = { player: saves.get(input.requestId), replay: true };
@@ -107,7 +112,27 @@ async function main() {
               body: JSON.stringify({ error: { status: "UNAVAILABLE", message: "応答を受け取れませんでした（画面テスト）" } }) });
           }
           await new Promise(resolve => setTimeout(resolve, 150));
-        } else if (action === "adminListQuest") result = { items: adminRuns, nextCursor: null };
+        } else if (action === "adminListQuest") result = { items: input.runId ? adminRuns.filter(run => run.id === input.runId) : adminRuns, nextCursor: null };
+        else if (action === "adminDeleteQuest") {
+          deleteRequests.push(input);
+          if (deleteSaves.has(input.runId)) {
+            assert.deepEqual(input, deleteSaves.get(input.runId));
+            result = { deleted: true, replay: true };
+          } else {
+            const index = adminRuns.findIndex(run => run.id === input.runId);
+            assert.ok(index >= 0);
+            assert.equal(input.title, adminRuns[index].title);
+            assert.equal(input.version, adminRuns[index].version);
+            assert.equal(input.confirmed, true);
+            adminRuns.splice(index, 1); deleteSaves.set(input.runId, input);
+            result = { deleted: true, replay: false };
+          }
+          if (dropDeleteResponse) {
+            dropDeleteResponse = false;
+            return route.fulfill({ status: 503, headers: cors, contentType: "application/json",
+              body: JSON.stringify({ error: { status: "UNAVAILABLE", message: "削除の応答を受け取れませんでした（画面テスト）" } }) });
+          }
+        }
         else if (action === "adminSaveQuest") {
           assert.equal(input.draft.rules.maxTurns, 14);
           assert.equal(input.draft.rules.boardVersion, "quest-board-v3");
@@ -273,6 +298,15 @@ async function main() {
       assert.equal(await page.getByLabel("比べる時点").locator("option").count(), 4);
       await page.getByText("1／3回", { exact: true }).waitFor();
       run.rules = rules;
+      await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
+      dropResponse = true;
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
+      runDeleted = true;
+      await page.getByRole("button", { name: "前回の結果を確認", exact: true }).click();
+      await page.getByText("現在表示できる開催はありません。", { exact: false }).waitFor();
+      assert.equal(await page.evaluate(key => localStorage.getItem(key), `quest-request:${uid}:${run.id}`), null);
+      runDeleted = false;
       const archiveCalls = calls.filter(call => call.action === "getQuest" && call.input.archive).length;
       await page.goto(`${base}/quest/archive`);
       await page.getByRole("button", { name: "この回の星務報告書を見る" }).waitFor();
@@ -286,6 +320,7 @@ async function main() {
       assert.equal(await page.locator('img').evaluateAll(images => images.filter(image => decodeURIComponent(image.src).includes("/quest/")).length), 8);
       await page.goto(`${base}/admin/quest`);
       await page.getByRole("heading", { name: "新規開催の設定" }).waitFor();
+      await page.locator("summary").filter({ hasText: /^トップメニューの公開範囲$/ }).click();
       const menuSelect = page.getByRole("combobox", { name: "メニューのリンクを利用できる対象" });
       await menuSelect.selectOption("subscriber");
       await page.getByRole("button", { name: "メニューの表示設定を保存", exact: true }).click();
@@ -342,8 +377,9 @@ async function main() {
       assert.equal(await publish.isEnabled(), true);
       assert.equal(await page.getByText("公開ボタンが無効になっている理由", { exact: true }).count(), 0);
       await publish.click();
-      await page.getByRole("heading", { name: "通常サイコロ・救済の個別付与" }).waitFor();
-      page.on("dialog", dialog => dialog.accept());
+      await page.getByRole("heading", { name: "通常サイコロの全体配布" }).waitFor();
+      let acceptDialog = true;
+      page.on("dialog", dialog => acceptDialog ? dialog.accept() : dialog.dismiss());
       await page.getByLabel("今回全体へ配る個数", { exact: true }).fill("2");
       await page.getByRole("button", { name: "全体へサイコロを配布する", exact: true }).click();
       await page.getByRole("alert").filter({ hasText: "全体配布の応答を受け取れませんでした" }).waitFor();
@@ -360,6 +396,7 @@ async function main() {
       assert.deepEqual(bulkRequests[0], bulkRequests[1]);
       assert.equal(bulkSaves.size, 1);
       await page.getByText("全体への配布済み累計：2／14個", { exact: true }).waitFor();
+      await page.locator("summary").filter({ hasText: /^個別付与$/ }).click();
       await page.getByLabel("利用者UID", { exact: true }).fill(uid);
       await page.getByLabel("付与数", { exact: true }).fill("1");
       await page.getByLabel("付与理由", { exact: true }).fill("画面検証のみ");
@@ -375,6 +412,36 @@ async function main() {
         await page.setViewportSize({ width, height: 950 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: admin overflow at ${width}`);
       }
+      assert.equal(await page.getByRole("button", { name: "全体へサイコロを配布する", exact: true }).count(), 0);
+      await page.locator("summary").filter({ hasText: /^開催を完全削除$/ }).click();
+      const deleteButton = page.getByRole("button", { name: "この開催を完全削除する", exact: true });
+      await page.getByLabel("削除する開催名を入力").fill("別の開催");
+      assert.equal(await deleteButton.isEnabled(), false);
+      await page.getByLabel("削除する開催名を入力").fill(adminRuns[0].title);
+      acceptDialog = false;
+      await deleteButton.click();
+      assert.equal(deleteRequests.length, 0);
+      acceptDialog = true;
+      await deleteButton.click();
+      await page.getByRole("alert").filter({ hasText: "削除の応答を受け取れませんでした" }).waitFor();
+      assert.equal(deleteRequests.length, 1);
+      await page.reload();
+      await page.getByRole("button", { name: "削除を再開・確認", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "完全削除しました" }).waitFor();
+      assert.equal(deleteRequests.length, 2);
+      assert.deepEqual(deleteRequests[0], deleteRequests[1]);
+      assert.equal(deleteSaves.size, 1);
+      assert.equal(adminRuns.length, 0);
+      adminRuns.push({ ...run, id: "discarded-draft", title: "削除用下書き", state: "draft",
+        xAccountList: [], simulation: null, simulatedVersion: null });
+      await page.getByRole("button", { name: "一覧を更新", exact: true }).click();
+      await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
+      await page.locator("summary").filter({ hasText: /^開催を完全削除$/ }).click();
+      await page.getByLabel("削除する開催名を入力").fill("削除用下書き");
+      await deleteButton.click();
+      await page.getByRole("status").filter({ hasText: "「削除用下書き」を完全削除しました" }).waitFor();
+      assert.equal(adminRuns.length, 0);
+      assert.equal(deleteSaves.size, 2);
       await page.setViewportSize({ width: 390, height: 950 });
       await page.goto(`${base}/`);
       const menu = page.getByRole("link", { name: /^ゆめつきクエスト/ });

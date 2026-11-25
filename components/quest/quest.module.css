@@ -9,6 +9,12 @@
 .page button[aria-pressed="true"], .page .primary { color: white; background: #354e86; border-color: #354e86; }
 .page button:focus-visible, .page a:focus-visible, .page select:focus-visible, .page input:focus-visible, .page textarea:focus-visible { outline: 3px solid #bd7a00; outline-offset: 3px; }
 .page a { color: #344f8b; text-decoration: underline; text-underline-offset: 3px; }
+.adminPage summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.adminPage h2 { overflow-wrap: anywhere; }
+.deleteDetails { border-top: 1px solid #d9a4a4; margin-top: 12px; color: #842b2b; }
+.deleteLabel { display: flex; flex-direction: column; gap: 6px; }
+.deleteLabel input { border: 1px solid #b47777; border-radius: 8px; padding: 10px; background: white; }
+.page .danger { background: #9a3030; color: white; border-color: #9a3030; }
 .nav { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0; }
 .panel { background: linear-gradient(135deg, #fff, #f3f5fc); padding: 18px; border: 1px solid #d5dced; border-radius: 20px; margin: 18px 0; min-width: 0; }
 .notice { border-left: 4px solid #ab7a16; background: #fff8df; border-radius: 12px; padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }

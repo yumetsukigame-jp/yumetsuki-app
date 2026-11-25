@@ -21,8 +21,8 @@ export const questFlags = {
   public: "全体公開", limited: "限定公開", subscriber: "サブスク限定",
   nibuichi_winner: "前日のニブイチ的中者限定", x_account_match: "Xアカウント一致",
 } as const;
-export async function questCall<T>(name: string, data: object): Promise<T> {
-  return (await httpsCallable<object, T>(functions, name)(data)).data;
+export async function questCall<T>(name: string, data: object, timeout?: number): Promise<T> {
+  return (await httpsCallable<object, T>(functions, name, timeout === undefined ? undefined : { timeout })(data)).data;
 }
 export function questError(error: unknown) {
   return error instanceof Error ? error.message : "通信状況を確認し、もう一度お試しください。";

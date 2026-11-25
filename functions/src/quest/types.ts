@@ -62,7 +62,7 @@ export type QuestDraft = {
   rules: QuestRules;
 };
 export type QuestPublicRun = Omit<QuestDraft, "xAccountList" | "accessCode"> & {
-  id: string; version: number; state: "draft" | "published" | "settling" | "archived";
+  id: string; version: number; state: "draft" | "published" | "settling" | "archived" | "deleting";
   adminReleased?: number;
   summary?: QuestSummary;
 };

@@ -419,6 +419,72 @@ test("tie ranks paginate consistently without exposing UID/private data", async 
   assert.ok(!JSON.stringify(first).includes("MUST_NOT_LEAK"));
   assert.ok(!JSON.stringify(first).includes("originalRolls"));
 });
+test("admin deletion confirms identity and version, removes every state and descendants, and keeps unrelated data", async () => {
+  const survivor = await run(), survivingActor = await join(survivor);
+  for (const state of ["draft", "published", "settling", "archived"]) {
+    const ref = await run(), actor = await join(ref);
+    await seed(ref, actor, { normalGranted: 14 });
+    const descendants = [
+      ref.collection("players").doc(actor).collection("actions").doc("saved-action"),
+      ref.collection("turns").doc("1").collection("players").doc("saved-progress"),
+      ref.collection("grants").doc("saved-grant"),
+      ref.collection("unlocks").doc(actor),
+    ];
+    await Promise.all(descendants.map(doc => doc.set({ testOnly: true })));
+    await ref.update({ state });
+    const request = { runId: ref.id, version: 1, title: "Emulator only", confirmed: true };
+    await assert.rejects(call("adminDeleteQuest", request, actor), { code: "permission-denied" });
+    await assert.rejects(call("adminDeleteQuest", request, null), { code: "unauthenticated" });
+    await assert.rejects(call("adminDeleteQuest", { ...request, title: "Wrong event" }), { code: "invalid-argument" });
+    await assert.rejects(call("adminDeleteQuest", { ...request, version: 2 }), { code: "aborted" });
+    await assert.rejects(call("adminDeleteQuest", { ...request, confirmed: false }));
+    assert.equal((await ref.get()).get("state"), state);
+    const deleted = await Promise.all([call("adminDeleteQuest", request), call("adminDeleteQuest", request)]);
+    assert.ok(deleted.every(result => result.deleted));
+    assert.equal((await ref.get()).exists, false);
+    assert.equal((await ref.collection("players").doc(actor).get()).exists, false);
+    for (const doc of descendants) assert.equal((await doc.get()).exists, false);
+    assert.equal((await db.doc("questConfig/current").get()).exists, false);
+    assert.equal((await call("adminListQuest", { runId: ref.id })).items.length, 0);
+    assert.equal((await call("adminDeleteQuest", request)).replay, true);
+    await assert.rejects(action(ref, actor, 0), { code: "not-found" });
+    assert.equal((await db.doc(`users/${actor}`).get()).get("points"), 42);
+  }
+  assert.equal((await survivor.get()).exists, true);
+  assert.equal((await survivor.collection("players").doc(survivingActor).get()).exists, true);
+  const batch = db.batch(), data = (await survivor.get()).data();
+  for (let index = 0; index < 21; index++) batch.set(db.collection("questRuns").doc(), { ...data, createdAt: Date.now() + index + 1 });
+  await batch.commit();
+  assert.ok((await call("adminListQuest", {})).items.every(item => item.id !== survivor.id));
+  assert.equal((await call("adminListQuest", { runId: survivor.id })).items[0].id, survivor.id);
+});
+test("admin deletion stops writes, resumes failed cleanup automatically, and cannot resurrect a deleted run", async () => {
+  const ref = await run(), actor = await join(ref);
+  await seed(ref, actor, { normalGranted: 14 });
+  const request = { runId: ref.id, version: 1, title: "Emulator only", confirmed: true };
+  const outage = mock.method(db, "recursiveDelete", async () => { throw new Error("Synthetic cleanup outage"); });
+  try { await assert.rejects(call("adminDeleteQuest", request), { code: "internal" }); }
+  finally { outage.mock.restore(); }
+  assert.equal((await ref.get()).get("state"), "deleting");
+  assert.equal((await call("getQuest", {}, actor)).run, null);
+  await assert.rejects(action(ref, actor, 0));
+  const draft = { title: "Emulator only", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg",
+    startsAt: Date.now() - 600000, endsAt: Date.now() + 600000,
+    publicFlags: ["public"], xAccountList: [], accessCode: "", rules };
+  await assert.rejects(call("adminSaveQuest", { runId: ref.id, version: 1, draft }));
+  await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
+  assert.equal((await ref.get()).get("state"), "deleting");
+  const next = await run(), nextActor = await join(next);
+  await api.finalizeEndedQuest.run({});
+  assert.equal((await ref.get()).exists, false);
+  assert.equal((await ref.collection("players").doc(actor).get()).exists, false);
+  assert.equal((await db.doc("questConfig/current").get()).get("runId"), next.id);
+  assert.equal((await next.collection("players").doc(nextActor).get()).exists, true);
+  assert.equal((await call("adminDeleteQuest", request)).replay, true);
+  await assert.rejects(call("adminSaveQuest", { runId: ref.id, version: 1, draft }), { code: "not-found" });
+  await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
+  assert.equal((await ref.get()).exists, false);
+});
 test("publishing requires the latest saved simulation and explicit configuration confirmation", async () => {
   const old = await run();
   await call("adminFinalizeQuest", { runId: old.id, confirmed: true });

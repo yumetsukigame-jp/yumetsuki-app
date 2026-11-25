@@ -13,6 +13,7 @@ import type { QuestAction, QuestDraft, QuestPlayer, QuestProgress, QuestPublicRu
 if (!admin.apps.length) admin.initializeApp();
 const db = getFirestore(), runs = db.collection("questRuns"), current = db.doc("questConfig/current");
 const menuSettings = db.doc("questConfig/menu");
+const deletions = db.doc("questConfig/deletions").collection("requests");
 type Tx = FirebaseFirestore.Transaction;
 type Snap = FirebaseFirestore.DocumentSnapshot;
 type Run = Omit<QuestDraft, "accessCode"> & {
@@ -37,8 +38,8 @@ async function administrator(context: functions.https.CallableContext) {
   if (!(await db.doc(`admins/${actor}`).get()).exists) fail("管理者のみ実行できます", "permission-denied");
   return actor;
 }
-function callable(handler: (data: unknown, context: functions.https.CallableContext) => Promise<unknown>) {
-  return functions.region("us-east1").runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onCall(async (data, context) => {
+function callable(handler: (data: unknown, context: functions.https.CallableContext) => Promise<unknown>, timeoutSeconds = 120) {
+  return functions.region("us-east1").runWith({ timeoutSeconds, memory: "512MB" }).https.onCall(async (data, context) => {
     try { return await handler(data, context); }
     catch (error) {
       if (error instanceof functions.https.HttpsError) throw error;
@@ -392,6 +393,7 @@ export const adminSaveQuest = callable(async (raw, context) => {
   const { accessCode, ...configuration } = draft;
   const version = await db.runTransaction(async tx => {
     const previous = await tx.get(ref);
+    if (d.runId && !previous.exists) fail("開催が削除されています。一覧を更新してください", "not-found");
     if (previous.exists && (previous.get("state") !== "draft" || previous.get("version") !== d.version)) fail("公開済み、または設定が更新されています");
     const version = (previous.get("version") ?? 0) + 1;
     tx.set(ref, { ...configuration, codeHash: hash(accessCode), state: "draft", version, createdAt: previous.get("createdAt") ?? Date.now() });
@@ -401,7 +403,16 @@ export const adminSaveQuest = callable(async (raw, context) => {
 });
 
 export const adminListQuest = callable(async (raw, context) => {
-  await administrator(context); const d = questObject(raw, ["cursor"]);
+  await administrator(context); const d = questObject(raw, ["cursor", "runId"]);
+  const row = (doc: Snap) => ({
+    ...publicRun(doc), xAccountList: doc.get("xAccountList"), simulation: doc.get("simulation") ?? null,
+    simulatedVersion: doc.get("simulatedVersion") ?? null,
+  });
+  if (d.runId !== undefined) {
+    if (d.cursor !== undefined) fail("開催IDとカーソルは併用できません", "invalid-argument");
+    const snapshot = await runs.doc(id(d.runId)).get();
+    return { items: snapshot.exists ? [row(snapshot)] : [], nextCursor: null };
+  }
   let query = runs.orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(20);
   if (d.cursor) {
     const after = await runs.doc(id(d.cursor)).get();
@@ -409,11 +420,41 @@ export const adminListQuest = callable(async (raw, context) => {
     query = query.startAfter(after);
   }
   const snapshot = await query.get();
-  return { items: snapshot.docs.map(doc => ({
-    ...publicRun(doc), xAccountList: doc.get("xAccountList"), simulation: doc.get("simulation") ?? null,
-    simulatedVersion: doc.get("simulatedVersion") ?? null,
-  })), nextCursor: snapshot.size === 20 ? snapshot.docs[19].id : null };
+  return { items: snapshot.docs.map(row), nextCursor: snapshot.size === 20 ? snapshot.docs[19].id : null };
 });
+
+async function finishDeletion(runId: string, receipt: FirebaseFirestore.DocumentReference) {
+  const ref = runs.doc(runId), snapshot = await ref.get();
+  if (snapshot.exists && snapshot.get("state") !== "deleting") fail("削除対象の状態が変更されています", "aborted");
+  await db.recursiveDelete(ref);
+  await receipt.update({ state: "deleted", completedAt: Date.now() });
+}
+export const adminDeleteQuest = callable(async (raw, context) => {
+  const actor = await administrator(context);
+  const d = questObject(raw, ["runId", "version", "title", "confirmed"]);
+  if (d.confirmed !== true) fail("完全削除の確認が必要です");
+  const ref = runs.doc(id(d.runId)), receipt = deletions.doc(ref.id);
+  const version = questInteger(d.version, "開催の版", 1, Number.MAX_SAFE_INTEGER);
+  const title = questText(d.title, "確認する開催名", 120);
+  const replay = await db.runTransaction(async tx => {
+    const [snapshot, pointer, saved] = await Promise.all([tx.get(ref), tx.get(current), tx.get(receipt)]);
+    if (saved.exists) {
+      if (saved.get("version") !== version || saved.get("title") !== title) fail("削除確認の内容が一致しません", "aborted");
+      return saved.get("state") === "deleted";
+    }
+    const run = getRun(snapshot);
+    if (run.version !== version) fail("開催設定が更新されています。一覧を更新してください", "aborted");
+    if (run.title !== title) fail("開催名が一致しません", "invalid-argument");
+    if (run.state === "deleting") fail("削除記録を確認できません");
+    tx.update(ref, { state: "deleting", closedAt: run.closedAt ?? Date.now() });
+    if (pointer.get("runId") === ref.id) tx.delete(current);
+    tx.create(receipt, { state: "deleting", version, title, actor, startedAt: Date.now() });
+    return false;
+  });
+  if (replay) return { deleted: true, replay: true };
+  await finishDeletion(ref.id, receipt);
+  return { deleted: true, replay: false };
+}, 540);
 
 export const adminSimulateQuest = callable(async (raw, context) => {
   await administrator(context); const d = questObject(raw, ["runId", "version"]), ref = runs.doc(id(d.runId));
@@ -450,7 +491,10 @@ export const adminPublishQuest = callable(async (raw, context) => {
 
 async function finalizePage(ref: FirebaseFirestore.DocumentReference, allowEarly: boolean) {
   return db.runTransaction(async tx => {
-    const snapshot = await tx.get(ref), run = getRun(snapshot);
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) return { complete: true };
+    const run = getRun(snapshot);
+    if (run.state === "deleting") return { complete: true };
     if (run.state === "archived") return { complete: true, summary: run.summary };
     if (run.state !== "published" && run.state !== "settling") fail("公開済み開催を指定してください");
     if (!allowEarly && Date.now() < run.endsAt) fail("まだ開催中です");
@@ -486,5 +530,11 @@ export const finalizeEndedQuest = functions.region("us-east1").runWith({ timeout
         let complete = false;
         while (!complete && Date.now() < deadline) complete = (await finalizePage(snapshot.ref, false)).complete;
       }
+    }
+    const removing = await deletions.where("state", "==", "deleting").limit(3).get();
+    for (const snapshot of removing.docs) {
+      if (Date.now() >= deadline) break;
+      try { await finishDeletion(snapshot.id, snapshot.ref); }
+      catch (error) { console.error("クエスト削除の再開失敗", snapshot.id, error instanceof Error ? error.message : "unknown"); }
     }
   });
