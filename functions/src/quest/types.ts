@@ -1,8 +1,8 @@
 export type QuestFlag = "public" | "limited" | "subscriber" | "nibuichi_winner" | "x_account_match";
 export type QuestGroup = "top" | "upper" | "middle" | "lower";
 export type QuestRules = {
-  boardVersion: "quest-board-v2";
-  maxTurns: 14;
+  boardVersion: "quest-board-v2" | "quest-board-v3";
+  maxTurns: number;
   stepStarPoints: number;
   levelPoints: number;
   levelScore: number;
@@ -29,7 +29,11 @@ export type QuestRules = {
   };
 };
 export type QuestPending = { kind: "branch"; steps: number } | { kind: "shortcut"; steps: 0 };
+export type QuestStep = { from: string; to: string; kind: "walk" | "return" | "warp" | "stage" };
+export type QuestTrace = { steps: QuestStep[]; rewards: { label: string; points: number; tileId: string }[] };
 export type QuestState = {
+  visitedPaths?: QuestStep[];
+  lastTrace?: QuestTrace;
   tileId: string;
   starPoints: number;
   level: number;

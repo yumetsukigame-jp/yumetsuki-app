@@ -151,7 +151,7 @@ export const getQuest = callable(async (raw, context) => {
     ? (p?.normalGranted ?? 0) + due
     : releasedQuestDice(run.rules, run.startsAt, run.endsAt, run.endsAt - 1);
   const forecast = p && !p.result && run.state === "published" && Date.now() < run.endsAt
-    ? forecastQuest(p, run.rules, Math.min(14, Math.max(p.normalGranted, scheduledTotal)))
+    ? forecastQuest(p, run.rules, Math.min(run.rules.maxTurns, Math.max(p.normalGranted, scheduledTotal)))
     : null;
   return { run: publicRun(snapshot), player: p, reason, forecast,
     dueDice: p && run.state === "published" && Date.now() < run.endsAt && d.archive !== true
@@ -202,7 +202,7 @@ export const actQuest = callable(async (raw, context) => {
   const actionRef = playerRef.collection("actions").doc(id(d.requestId));
   const allowed = ["roll", "bridge", "flower", "shortcut-use", "shortcut-skip", "rescue", "sync"];
   if (!allowed.includes(d.action as string)) fail("操作が不正です", "invalid-argument");
-  const die = randomInt(1, 7), fingerprint = hash(JSON.stringify([d.action, d.version]));
+  const die = randomInt(1, 7), flowerDraw = randomInt(1, 8), fingerprint = hash(JSON.stringify([d.action, d.version]));
   return db.runTransaction(async tx => {
     const [snapshot, pointer, previous, saved] = await Promise.all([
       tx.get(ref), tx.get(current), tx.get(playerRef), tx.get(actionRef),
@@ -224,10 +224,10 @@ export const actQuest = callable(async (raw, context) => {
     let next: QuestPlayer;
     if (d.action === "sync") {
       if (!due) fail("現在受け取れる配布分はありません");
-      next = { ...p, version: p.version + 1 };
+      next = { ...p, version: p.version + 1, lastTrace: { steps: [], rewards: [] } };
     } else {
       if (d.action === "roll" && p.used >= p.normalGranted) fail("配布済みのサイコロがありません");
-      next = { ...p, ...advanceQuest(p, d.action as QuestAction, run.rules, die) };
+      next = { ...p, ...advanceQuest(p, d.action as QuestAction, run.rules, die, flowerDraw) };
     }
     for (const release of releases) tx.create(ref.collection("grants").doc(`${release}_${hash(actor)}`),
       { uid: actor, kind: "normal", count: 1, source: release, at: now });
@@ -241,8 +241,8 @@ export const adminReleaseQuestDice = callable(async (raw, context) => {
   const administratorUid = await administrator(context);
   const d = questObject(raw, ["runId", "grantId", "count", "reason", "expectedTotal"]);
   const ref = runs.doc(id(d.runId)), grantRef = ref.collection("grants").doc(`bulk_${id(d.grantId)}`);
-  const count = questInteger(d.count, "全体への配布数", 1, 14), reason = questText(d.reason, "配布理由", 500);
-  const expectedTotal = questInteger(d.expectedTotal, "配布済み累計", 0, 14);
+  const count = questInteger(d.count, "全体への配布数", 1, 99), reason = questText(d.reason, "配布理由", 500);
+  const expectedTotal = questInteger(d.expectedTotal, "配布済み累計", 0, 99);
   const fingerprint = hash(JSON.stringify([count, reason, expectedTotal]));
   return db.runTransaction(async tx => {
     const [snapshot, pointer, grant] = await Promise.all([tx.get(ref), tx.get(current), tx.get(grantRef)]);
@@ -255,7 +255,7 @@ export const adminReleaseQuestDice = callable(async (raw, context) => {
     const previous = run.adminReleased ?? 0;
     if (previous !== expectedTotal) fail("全体の配布数が更新されています。開催を選択し直してください", "aborted");
     const releasedTotal = previous + count;
-    if (releasedTotal > run.rules.maxTurns) fail("全体への配布は累計14個までです");
+    if (releasedTotal > run.rules.maxTurns) fail(`全体への配布は累計${run.rules.maxTurns}個までです`);
     tx.update(ref, { adminReleased: releasedTotal });
     tx.create(grantRef, { kind: "normal", source: "admin-bulk", count, reason, expectedTotal, releasedTotal,
       administratorUid, fingerprint, at: Date.now() });
@@ -267,7 +267,7 @@ export const grantQuest = callable(async (raw, context) => {
   const administratorUid = await administrator(context);
   const d = questObject(raw, ["runId", "uid", "grantId", "kind", "count", "reason"]);
   const ref = runs.doc(id(d.runId)), actor = id(d.uid), grantRef = ref.collection("grants").doc(`admin_${id(d.grantId)}`);
-  const count = questInteger(d.count, "付与数", 1, 14), reason = questText(d.reason, "付与理由", 500);
+  const count = questInteger(d.count, "付与数", 1, 99), reason = questText(d.reason, "付与理由", 500);
   if (d.kind !== "normal" && d.kind !== "rescue") fail("付与種別が不正です", "invalid-argument");
   const fingerprint = hash(JSON.stringify([actor, d.kind, count, reason]));
   return db.runTransaction(async tx => {
@@ -282,7 +282,7 @@ export const grantQuest = callable(async (raw, context) => {
     const player = previous.data() as QuestPlayer;
     if (d.kind === "normal") {
       if (run.rules.distribution.mode !== "admin" ||
-          player.normalGranted + normalReleases(run, player, Date.now()).length + count > 14) fail("通常分の付与方式・上限を確認してください");
+          player.normalGranted + normalReleases(run, player, Date.now()).length + count > run.rules.maxTurns) fail("通常分の付与方式・上限を確認してください");
       player.normalGranted += count;
     } else {
       if (!run.rules.rescue.enabled || !run.rules.rescue.adminEnabled ||
@@ -348,7 +348,7 @@ export const listQuestProgress = callable(async (raw, context) => {
   if (!canRead(run, player, unlock)) fail("この開催を閲覧できません", "permission-denied");
   if (d.archive === true ? run.state !== "archived" : pointer.get("runId") !== ref.id) fail("開催回を選び直してください");
   const collection = d.turn === undefined ? ref.collection("progress")
-    : ref.collection("turns").doc(String(questInteger(d.turn, "使用回数", 1, 14))).collection("players");
+    : ref.collection("turns").doc(String(questInteger(d.turn, "使用回数", 1, run.rules.maxTurns))).collection("players");
   let query = collection.orderBy("score", "desc").orderBy(FieldPath.documentId()).limit(25);
   if (d.cursor !== undefined) {
     const after = await collection.doc(id(d.cursor)).get();
@@ -462,7 +462,7 @@ async function finalizePage(ref: FirebaseFirestore.DocumentReference, allowEarly
       const player = snapshot.data() as QuestPlayer;
       const result = questResult(player, run.rules);
       summary.total++; summary.groups[result.group]++;
-      if (player.used === 14) { summary.completed++; summary.completedGroups[result.group]++; }
+      if (player.used === run.rules.maxTurns) { summary.completed++; summary.completedGroups[result.group]++; }
       for (const stage of player.reachedStages) summary.stages[String(stage)]++;
       tx.update(snapshot.ref, { result });
     }

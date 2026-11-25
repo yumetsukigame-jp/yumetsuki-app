@@ -1,5 +1,5 @@
 import definition from "./board-v2.json";
-import type { QuestAction, QuestGroup, QuestResult, QuestRules, QuestState } from "./types";
+import type { QuestAction, QuestGroup, QuestResult, QuestRules, QuestState, QuestStep } from "./types";
 
 type Tile = {
   id: string; x: number; y: number; progress: number; kind: string; next: string[]; exitTo?: string;
@@ -7,11 +7,26 @@ type Tile = {
 };
 export class QuestRuleError extends Error {}
 export const QUEST_BOARD = definition;
+const oldGarden = definition.stages[2];
+const flowerExit: Tile = { id: "s3-loop-06", x: 44, y: 63, progress: 42, kind: "loop-exit", next: ["s3-loop-00"], exitTo: "s3-20" };
+const newStages = definition.stages.map(stage => stage.id !== 3 ? stage : {
+  ...oldGarden, tiles: [
+    ...oldGarden.tiles.map(tile => tile.id === "s3-loop-00" ? { ...tile, kind: "normal", exitTo: undefined } :
+      tile.id === "s3-loop-05" ? { ...tile, next: [flowerExit.id] } : tile),
+    flowerExit,
+  ],
+});
+export function questBoard(version: QuestRules["boardVersion"]) {
+  return version === "quest-board-v3" ? { ...definition, version: "quest-board-v3", stages: newStages,
+    garden: { ...definition.garden, ringExitId: flowerExit.id, ringLength: 7, forcedExitSteps: 14 } } : definition;
+}
 export const QUEST_TILES = new Map<string, Tile>(
   definition.stages.flatMap(stage => stage.tiles.map(tile => [tile.id, tile as Tile] as const)),
 );
-export function questTile(id: string): Tile {
-  const tile = QUEST_TILES.get(id);
+export function questTile(id: string, version?: QuestRules["boardVersion"]): Tile {
+  const tile = id === flowerExit.id ? flowerExit :
+    version === "quest-board-v3" && id.startsWith("s3-loop-") ?
+      newStages[2].tiles.find(item => item.id === id) as Tile | undefined : QUEST_TILES.get(id);
   if (!tile) throw new Error("盤面のマスが見つかりません");
   return tile;
 }
@@ -30,7 +45,10 @@ export function initialQuestState(): QuestState {
     rescueCredits: 0, rescueUsed: false, shortcut: "tracking", souvenirs: [], lastDie: null,
   };
 }
-function arrive(state: QuestState, id: string) {
+function arrive(state: QuestState, id: string, kind: QuestStep["kind"] = "walk") {
+  const step = { from: state.tileId, to: id, kind };
+  state.lastTrace?.steps.push(step);
+  if (state.visitedPaths && !state.visitedPaths.some(path => path.from === step.from && path.to === id && path.kind === kind)) state.visitedPaths.push(step);
   state.tileId = id;
   const stage = questStage(id);
   if (!state.reachedStages.includes(stage)) {
@@ -42,25 +60,30 @@ function once(state: QuestState, key: string, operation: () => void) {
   if (state.effects.includes(key)) return;
   state.effects.push(key); operation();
 }
-function exitGarden(state: QuestState) {
-  once(state, "garden-exit", () => { state.starPoints += definition.garden.exitBonusStarPoints; });
-  arrive(state, definition.garden.mergeId);
+function reward(state: QuestState, label: string, points: number) {
+  if (!points) return;
+  state.starPoints += points;
+  state.lastTrace?.rewards.push({ label, points, tileId: state.tileId });
+}
+function exitGarden(state: QuestState, jackpot = false) {
+  once(state, "garden-exit", () => reward(state, "花壇出口", definition.garden.exitBonusStarPoints));
+  arrive(state, jackpot ? flowerExit.exitTo! : definition.garden.mergeId, "warp");
 }
 function finishTurn(state: QuestState, rules: QuestRules) {
-  const tile = questTile(state.tileId), effect = tile.effect;
+  const tile = questTile(state.tileId, rules.boardVersion), effect = tile.effect;
   if (effect?.when === "land") {
     const apply = () => {
-      state.starPoints += effect.starPoints ?? 0;
-      if (effect.target) arrive(state, effect.target);
+      reward(state, tile.kind === "starflower" ? "星咲きの花" : "金の星", effect.starPoints ?? 0);
+      if (effect.target) arrive(state, effect.target, "return");
       if (tile.kind === "starflower") state.souvenirs.push("starflower");
     };
     if (effect.oncePerRun) once(state, tile.id, apply); else apply();
   }
   if (state.tileId.startsWith("s3-loop-") && (
-    state.tileId === definition.garden.ringExitId ||
-    state.loopSteps >= definition.garden.forcedExitSteps ||
+    tile.kind === "loop-exit" ||
+    state.loopSteps >= gardenLimit(rules) ||
     (state.used >= definition.garden.lateExitFromTurn && state.loopSteps >= definition.garden.lateExitMinSteps)
-  )) exitGarden(state);
+  )) exitGarden(state, tile.id === flowerExit.id);
   updateQuestScore(state, rules);
   const route = definition.specialRoutes[0];
   if (state.used === route.trigger.atCompletedTurn && state.shortcut === "tracking" &&
@@ -69,25 +92,28 @@ function finishTurn(state: QuestState, rules: QuestRules) {
     state.shortcut = "offered"; state.pending = { kind: "shortcut", steps: 0 };
   }
 }
+function gardenLimit(rules: QuestRules) {
+  return questBoard(rules.boardVersion).garden.forcedExitSteps;
+}
 function walk(state: QuestState, steps: number, rules: QuestRules) {
   while (steps > 0) {
-    const tile = questTile(state.tileId);
+    const tile = questTile(state.tileId, rules.boardVersion);
     if (tile.kind === "finish") break;
     if (tile.kind === "fork" && !state.branch) {
       state.pending = { kind: "branch", steps }; return;
     }
     const next = tile.kind === "fork" ? (state.branch === "flower" ? tile.next[1] : tile.next[0]) : tile.next[0];
     if (!next) break;
-    arrive(state, next); steps--; state.starPoints += rules.stepStarPoints;
+    arrive(state, next); steps--; reward(state, "移動", rules.stepStarPoints);
     if (next.startsWith("s3-loop-")) {
       state.loopSteps++;
-      if (state.loopSteps >= definition.garden.forcedExitSteps) {
-        exitGarden(state);
+      if (state.loopSteps >= gardenLimit(rules)) {
+        if (rules.boardVersion === "quest-board-v2") exitGarden(state);
         break;
       }
     }
     const reached = questTile(state.tileId);
-    if (reached.effect?.stopTurn) { arrive(state, reached.next[0]); break; }
+    if (reached.effect?.stopTurn) { arrive(state, reached.next[0], "stage"); break; }
     if (reached.kind === "fork" && !state.branch) {
       state.pending = { kind: "branch", steps };
       updateQuestScore(state, rules); return;
@@ -95,9 +121,16 @@ function walk(state: QuestState, steps: number, rules: QuestRules) {
   }
   finishTurn(state, rules);
 }
-export function advanceQuest(previous: QuestState, action: QuestAction, rules: QuestRules, die?: number): QuestState {
+export function advanceQuest(previous: QuestState, action: QuestAction, rules: QuestRules, die?: number, flowerDraw?: number, record = true): QuestState {
   const state: QuestState = structuredClone(previous);
   state.version++;
+  if (record) {
+    state.visitedPaths ??= [];
+    state.lastTrace = { steps: [], rewards: [] };
+  } else {
+    delete state.visitedPaths;
+    delete state.lastTrace;
+  }
   if (action === "rescue") {
     if (!rules.rescue.enabled || state.rescueUsed || state.rescueCredits < 1 ||
         state.used < rules.rescue.fromTurn || state.score >= rules.rescue.belowScore) {
@@ -109,13 +142,20 @@ export function advanceQuest(previous: QuestState, action: QuestAction, rules: Q
   if (action === "shortcut-use" || action === "shortcut-skip") {
     if (state.pending?.kind !== "shortcut") throw new QuestRuleError("抜け道の選択待ちではありません");
     state.pending = null; state.shortcut = action === "shortcut-use" ? "used" : "declined";
-    if (action === "shortcut-use") arrive(state, definition.specialRoutes[0].destination);
+    if (action === "shortcut-use") arrive(state, definition.specialRoutes[0].destination, "warp");
     updateQuestScore(state, rules); return state;
   }
   if (action === "bridge" || action === "flower") {
     if (state.pending?.kind !== "branch") throw new QuestRuleError("分岐の選択待ちではありません");
     const steps = state.pending.steps; state.pending = null; state.branch = action;
-    if (steps > 0) walk(state, steps, rules); else finishTurn(state, rules);
+    if (action === "flower" && rules.boardVersion === "quest-board-v3") {
+      if (!Number.isInteger(flowerDraw) || flowerDraw! < 1 || flowerDraw! > 7) throw new Error("花壇の出目が不正です");
+      const index = flowerDraw! - 1;
+      arrive(state, `s3-loop-0${index}`, "warp");
+      state.loopSteps = 1;
+      finishTurn(state, rules);
+    } else if (steps > 0) walk(state, steps, rules);
+    else finishTurn(state, rules);
     return state;
   }
   if (state.pending || state.used >= rules.maxTurns || questTile(state.tileId).kind === "finish") {

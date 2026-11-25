@@ -98,7 +98,7 @@ async function main() {
           else {
             assert.equal(input.version, player.version);
             player.normalGranted += dueDice; dueDice = 0;
-            player = { ...player, ...advanceQuest(player, input.action, rules, input.action === "roll" ? 6 : undefined) };
+            player = { ...player, ...advanceQuest(player, input.action, run.rules, input.action === "roll" ? 6 : undefined, 7) };
             saves.set(input.requestId, player); result = { player, replay: false };
           }
           if (dropResponse) {
@@ -110,6 +110,7 @@ async function main() {
         } else if (action === "adminListQuest") result = { items: adminRuns, nextCursor: null };
         else if (action === "adminSaveQuest") {
           assert.equal(input.draft.rules.maxTurns, 14);
+          assert.equal(input.draft.rules.boardVersion, "quest-board-v3");
           assert.equal(input.draft.rules.middleMin, 52);
           adminRuns.splice(0, adminRuns.length, { ...input.draft, id: "draft-quest", version: 1, state: "draft", simulation: null, simulatedVersion: null });
           result = { runId: "draft-quest", version: 1 };
@@ -159,8 +160,8 @@ async function main() {
       await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
       run.endsAt = Date.now() - 1;
       await page.reload();
-      await page.getByRole("button", { name: "前の操作を再送して確認" }).click();
-      await page.getByRole("status").filter({ hasText: "選択・受け取りを保存しました。" }).waitFor();
+      await page.getByRole("button", { name: "前回の結果を確認" }).click();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目" }).waitFor();
       assert.equal(requests.length, 2);
       assert.equal(requests[0].requestId, requests[1].requestId);
       assert.equal(player.used, 8);
@@ -173,7 +174,7 @@ async function main() {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow at ${width}`);
         for (const stage of QUEST_BOARD.stages) {
           await page.getByRole("button", { name: new RegExp(`^${stage.id} (書斎|回廊|庭|塔)`) }).click();
-          assert.equal(await page.locator("button[aria-label^='s'][title]").count(), stage.tiles.length);
+          assert.equal(await page.locator("button[data-kind][title]").count(), stage.tiles.length);
         }
         assert.ok(await page.getByRole("meter", { name: "実績の星務達成率" }).isVisible());
       }
@@ -192,11 +193,13 @@ async function main() {
         await page.getByText("抽選中", { exact: true }).waitFor();
         assert.equal(await die.textContent(), "★", `${name}: previous die must disappear while rolling`);
         assert.equal(await page.getByRole("button", { name: /^2 回廊/ }).getAttribute("aria-pressed"), "true");
-        await page.getByRole("status").filter({ hasText: "星のサイコロの出目は6" }).waitFor();
+        await page.locator('[data-overlay="dice"]').getByText("出目 6").waitFor();
+        assert.equal((await die.textContent()).trim(), "6", `${name}: confirmed die must remain visible during movement`);
+        await page.locator('[class*="playFeedback"]').filter({ hasText: "出目 6" }).waitFor();
         assert.equal((await die.textContent()).trim(), "6", `${name}: confirmed die must not wait for reload`);
         const bounds = await board.boundingBox();
         assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= height, `${name}: movement board outside ${width}x${height}: ${JSON.stringify(bounds)}`);
-        assert.equal(await page.locator('img[alt^="あなたの現在地"]').getAttribute("alt"), `あなたの現在地 ${player.tileId}`);
+        assert.equal(await page.locator('button[aria-current="location"]').count(), 1);
         await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
         questReloadDelay = 0;
       }
@@ -211,27 +214,28 @@ async function main() {
       await page.getByText("出目は未確認", { exact: true }).waitFor();
       assert.equal((await die.textContent()).trim(), "?");
       const savedRoll = requests.at(-1);
-      await page.getByRole("button", { name: "前の操作を再送して確認" }).click();
-      await page.getByRole("status").filter({ hasText: "保存済みの結果を確認しました" }).waitFor();
+      await page.getByRole("button", { name: "前回の結果を確認" }).click();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目 6" }).waitFor();
       assert.equal((await die.textContent()).trim(), "6");
+      assert.equal(await page.locator('[data-overlay]').count(), 0, "An already-visible replay must not repeat movement or rewards");
       assert.deepEqual(requests.at(-1), savedRoll);
       assert.equal(player.used, 3);
       await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
       player = createPlayer({ used: 5, tileId: "s1-07", starPoints: 12, originalRolls: [1, 2, 1, 2, 1], shortcut: "offered", pending: { kind: "shortcut", steps: 0 } });
       await page.reload();
       await page.getByRole("button", { name: "今回は見送る", exact: true }).click();
-      await page.getByRole("status").filter({ hasText: "選択・受け取りを保存しました。" }).waitFor();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目" }).waitFor();
       assert.equal(player.tileId, "s1-07");
       assert.equal(player.used, 5);
       player = createPlayer({ used: 5, tileId: "s1-07", starPoints: 12, originalRolls: [1, 2, 1, 2, 1], shortcut: "offered", pending: { kind: "shortcut", steps: 0 } });
       await page.reload();
       await page.getByRole("button", { name: "抜け道を使って庭へ進む", exact: true }).click();
-      await page.getByRole("status").filter({ hasText: "選択・受け取りを保存しました。" }).waitFor();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目" }).waitFor();
       assert.equal(player.tileId, "s3-00");
       const before = requests.length;
       const roll = page.getByRole("button", { name: "星のサイコロを振る", exact: true });
       await roll.evaluate(button => { button.click(); button.click(); });
-      await page.getByRole("status").filter({ hasText: "星のサイコロの出目は6" }).waitFor();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目 6" }).waitFor();
       assert.equal(requests.length, before + 1);
       assert.equal(player.used, 6);
       assert.equal(player.pending.kind, "branch");
@@ -241,8 +245,34 @@ async function main() {
       assert.ok(calls.some(call => call.action === "listQuestProgress" && call.input.turn === 8 && call.input.cursor));
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.getByRole("button", { name: "星の橋へ（塔を目指す）" }).click();
-      await page.getByRole("status").filter({ hasText: "選択・受け取りを保存しました。" }).waitFor();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "出目" }).waitFor();
       if (process.env.QUEST_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.QUEST_SCREENSHOT_DIR, `quest-${name}-ui.png`), fullPage: true });
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      player = createPlayer({ tileId: "s1-14", used: 5, starPoints: 20, version: 5, lastDie: 5 });
+      await page.reload();
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.locator('[data-overlay="dice"]').getByText("出目 6").waitFor();
+      const arrival = page.locator('[data-overlay="stage"]').getByText("月明かりの回廊");
+      await arrival.waitFor();
+      assert.ok(await arrival.locator('xpath=../..').locator('img[alt=""]').count());
+      await page.locator('[data-overlay="reward"]').getByText("星ポイント ＋2").waitFor();
+      await page.getByText("到達 +2点").waitFor();
+      await page.getByRole("button", { name: /^1 書斎/ }).click();
+      assert.ok(await page.locator('[data-visited="true"]').count() >= 4);
+      run.rules = { ...rules, boardVersion: "quest-board-v3", maxTurns: 3,
+        rescue: { ...rules.rescue, enabled: false, adminEnabled: false, eventSources: [],
+          fromTurn: 3, simulationTurn: 3, simulationRate: 0 } };
+      player = createPlayer({ tileId: "s3-05", used: 1, version: 1, lastDie: 2, normalGranted: 3,
+        pending: { kind: "branch", steps: 3 } });
+      await page.reload();
+      await page.getByRole("button", { name: "巡る花壇へ（７つの花から星門を引く）", exact: true }).click();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "星ポイント ＋12" }).waitFor();
+      assert.equal(player.tileId, "s3-20");
+      assert.equal(player.used, 1);
+      assert.equal(await page.locator("button[data-kind][title]").count(), QUEST_BOARD.stages[2].tiles.length + 1);
+      assert.equal(await page.getByLabel("比べる時点").locator("option").count(), 4);
+      await page.getByText("1／3回", { exact: true }).waitFor();
+      run.rules = rules;
       const archiveCalls = calls.filter(call => call.action === "getQuest" && call.input.archive).length;
       await page.goto(`${base}/quest/archive`);
       await page.getByRole("button", { name: "この回の星務報告書を見る" }).waitFor();
@@ -267,9 +297,16 @@ async function main() {
       const fields = ["１歩あたりの星ポイント", "１レベル上がる星ポイント", "レベル上昇ごとの評価加点", "達成率100%に相当する評価点",
         "達成率の小数桁（０〜２）", "中間の下限評価点", "上位の下限評価点", "最上位の塔進捗点（59〜66）", "最上位の必要レベル"];
       for (let index = 0; index < fields.length; index++) assert.equal(
-        await page.getByLabel(fields[index], { exact: true }).inputValue(), String([1, 12, 2, 80, 1, 52, 63, 61, 6][index]));
+        await page.getByLabel(fields[index], { exact: true }).inputValue(), String([1, 12, 2, 80, 1, 52, 68, 66, 6][index]));
       assert.equal(await page.getByLabel("配布方式").inputValue(), "");
       assert.equal(await page.getByLabel("この開催での救済").inputValue(), "");
+      await page.getByLabel("サイコロの使用上限", { exact: true }).fill("99");
+      await page.getByLabel("配布方式").selectOption("schedule");
+      assert.equal(await page.getByLabel(/個目の配布日時（日本時間）/).count(), 99);
+      await page.getByLabel("サイコロの使用上限", { exact: true }).fill("1");
+      assert.equal(await page.getByLabel(/個目の配布日時（日本時間）/).count(), 1);
+      await page.getByLabel("サイコロの使用上限", { exact: true }).fill("14");
+      await page.getByLabel("配布方式").selectOption("");
       assert.equal(await page.getByRole("button", { name: "確定した設定で開催を公開する" }).count(), 0);
       await page.getByLabel("開催名", { exact: true }).fill("ローカル検証のみ");
       await page.getByLabel("開始日時（日本時間）").fill("2026-11-23T12:00");
@@ -284,18 +321,18 @@ async function main() {
       await page.getByRole("button", { name: "新しい開催を作る", exact: true }).click();
       assert.equal(await page.getByLabel("開催名", { exact: true }).inputValue(), "");
       assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "12");
-      assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "63");
+      assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "68");
       assert.equal(await publish.count(), 0);
       await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
       await publish.waitFor();
       assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "15");
       assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "64");
       assert.equal(await publish.isEnabled(), false);
-      await page.getByText("最新版の設定で14回の分布試算を行ってください。", { exact: true }).waitFor();
-      await page.getByRole("button", { name: "保存した設定で14回を試算する" }).click();
+      await page.getByText("最新版の設定で分布試算を行ってください。", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "保存した設定で分布を試算する" }).click();
       await page.getByText("各２万件、６条件の試算を保存しました。", { exact: false }).waitFor();
       assert.equal(await publish.isEnabled(), false);
-      assert.equal(await page.getByText("最新版の設定で14回の分布試算を行ってください。", { exact: true }).count(), 0);
+      assert.equal(await page.getByText("最新版の設定で分布試算を行ってください。", { exact: true }).count(), 0);
       await page.getByText("配布・救済・評価境界の検討記録を20文字以上入力してください。", { exact: true }).waitFor();
       await page.getByLabel("確定した配布・救済・評価境界と分布の検討記録（20文字以上）").fill("ローカルモックでの操作検証のみ。本番の開催設定ではありません。");
       assert.equal(await page.getByText("配布・救済・評価境界の検討記録を20文字以上入力してください。", { exact: true }).count(), 0);

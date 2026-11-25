@@ -22,7 +22,7 @@ const numericFields = {
 type Numeric = keyof typeof numericFields;
 const recommendedNumbers: Record<Numeric, number> = {
   stepStarPoints: 1, levelPoints: 12, levelScore: 2, percentMax: 80, percentDecimals: 1,
-  middleMin: 52, upperMin: 63, topMinProgress: 61, topMinLevel: 6,
+  middleMin: 52, upperMin: 68, topMinProgress: 66, topMinLevel: 6,
 };
 type AdminRun = QuestPublicRun & { xAccountList: string[]; simulation: QuestSimulation[] | null; simulatedVersion: number | null };
 type Listing = { items: AdminRun[]; nextCursor: string | null };
@@ -32,8 +32,8 @@ function savedBulkRequest(runId: string): BulkRequest | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(bulkKey(runId)) ?? "null");
     return value?.runId === runId && typeof value.grantId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.grantId) &&
-      Number.isInteger(value.count) && value.count >= 1 && value.count <= 14 &&
-      Number.isInteger(value.expectedTotal) && value.expectedTotal >= 0 && value.expectedTotal <= 14 &&
+      Number.isInteger(value.count) && value.count >= 1 && value.count <= 99 &&
+      Number.isInteger(value.expectedTotal) && value.expectedTotal >= 0 && value.expectedTotal <= 99 &&
       typeof value.reason === "string" && value.reason.trim().length > 0 && value.reason.length <= 500 ? value : null;
   } catch { return null; }
 }
@@ -43,37 +43,39 @@ function numberValue(value: string, label: string) {
   return Number(value);
 }
 function newForm() {
-  return { title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
+  return { maxTurns: "14", title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
     flags: ["public"] as QuestFlag[], xText: "", accessCode: "",
     numbers: Object.fromEntries(Object.entries(recommendedNumbers).map(([key, value]) => [key, String(value)])) as Record<Numeric, string>,
-    distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(14).fill(""), dailyHour: "",
+    distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(99).fill(""), dailyHour: "",
     rescue: "" as "" | "yes" | "no", adminRescue: false, eventSources: [] as QuestRules["rescue"]["eventSources"],
     rescueFrom: "", rescueBelow: "", rescueMax: "", rescueRate: "", rescueTurn: "" };
 }
 type Form = ReturnType<typeof newForm>;
 function fromRun(run: AdminRun): Form {
   const r = run.rules;
-  return { title: run.title, description: run.description, thumbnail: run.thumbnail,
+  return { maxTurns: String(r.maxTurns), title: run.title, description: run.description, thumbnail: run.thumbnail,
     startsAt: localJst(run.startsAt), endsAt: localJst(run.endsAt), flags: run.publicFlags,
     xText: run.xAccountList.join("\n"), accessCode: "",
     numbers: Object.fromEntries(Object.keys(numericFields).map(key => [key, String(r[key as Numeric])])) as Record<Numeric, string>,
-    distribution: r.distribution.mode, releaseAt: Array.from({ length: 14 }, (_, index) =>
+    distribution: r.distribution.mode, releaseAt: Array.from({ length: 99 }, (_, index) =>
       r.distribution.releaseAt[index] === undefined ? "" : localJst(r.distribution.releaseAt[index])),
     dailyHour: String(r.distribution.dailyStartHourJst), rescue: r.rescue.enabled ? "yes" : "no",
     adminRescue: r.rescue.adminEnabled, eventSources: r.rescue.eventSources, rescueFrom: String(r.rescue.fromTurn),
     rescueBelow: String(r.rescue.belowScore), rescueMax: String(r.rescue.maxGrants),
     rescueRate: String(r.rescue.simulationRate * 100), rescueTurn: String(r.rescue.simulationTurn) };
 }
-function toDraft(form: Form): QuestDraft {
+function toDraft(form: Form, boardVersion: QuestRules["boardVersion"]): QuestDraft {
+  const maxTurns = numberValue(form.maxTurns, "使用上限");
+  if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 99) throw new Error("使用上限は１〜99回です");
   if (!form.distribution || !form.rescue) throw new Error("配布方式と救済の有無を明示的に選んでください");
   const numbers = Object.fromEntries(Object.entries(form.numbers).map(([key, value]) => [key, numberValue(value, numericFields[key as Numeric])])) as Record<Numeric, number>;
   const distribution: QuestRules["distribution"] = {
-    mode: form.distribution, releaseAt: form.distribution === "schedule" ? form.releaseAt.map(value => parseJstDateTime(value).getTime()) : [],
+    mode: form.distribution, releaseAt: form.distribution === "schedule" ? form.releaseAt.slice(0,maxTurns).map(value => parseJstDateTime(value).getTime()) : [],
     dailyStartHourJst: form.distribution === "daily" ? numberValue(form.dailyHour, "日次切替時刻") : 0,
   };
   const rescue: QuestRules["rescue"] = form.rescue === "no"
-    ? { enabled: false, adminEnabled: false, eventSources: [], fromTurn: 14, belowScore: numbers.middleMin,
-      maxGrants: 1, simulationRate: 0, simulationTurn: 14 }
+    ? { enabled: false, adminEnabled: false, eventSources: [], fromTurn: maxTurns, belowScore: numbers.middleMin,
+      maxGrants: 1, simulationRate: 0, simulationTurn: maxTurns }
     : { enabled: true, adminEnabled: form.adminRescue, eventSources: form.eventSources,
       fromTurn: numberValue(form.rescueFrom, "救済を使える使用回数"), belowScore: numberValue(form.rescueBelow, "救済対象の評価点上限"),
       maxGrants: numberValue(form.rescueMax, "救済付与上限"), simulationRate: numberValue(form.rescueRate, "試算時の救済保有率") / 100,
@@ -81,7 +83,7 @@ function toDraft(form: Form): QuestDraft {
   return { title: form.title, description: form.description, thumbnail: form.thumbnail,
     startsAt: parseJstDateTime(form.startsAt).getTime(), endsAt: parseJstDateTime(form.endsAt).getTime(),
     publicFlags: form.flags, xAccountList: form.xText.split(/\r?\n/).map(line => line.trim()).filter(Boolean), accessCode: form.accessCode,
-    rules: { boardVersion: "quest-board-v2", maxTurns: 14, ...numbers, distribution, rescue } };
+    rules: { boardVersion, maxTurns, ...numbers, distribution, rescue } };
 }
 export default function QuestAdminPage() {
   const [form, setForm] = useState(newForm);
@@ -101,7 +103,7 @@ export default function QuestAdminPage() {
   const currentBulk = pendingBulk?.runId === selected?.id ? pendingBulk : null;
   const publishBlockers = [
     dirty ? "変更した開催設定を下書き保存してください。" : null,
-    selected && selected.simulatedVersion !== selected.version ? "最新版の設定で14回の分布試算を行ってください。" : null,
+    selected && selected.simulatedVersion !== selected.version ? "最新版の設定で分布試算を行ってください。" : null,
     review.trim().length < 20 ? "配布・救済・評価境界の検討記録を20文字以上入力してください。" : null,
     !confirmed ? "下の「本番条件として確定しました」にチェックしてください。" : null,
   ].filter((message): message is string => message !== null);
@@ -147,7 +149,7 @@ export default function QuestAdminPage() {
     const run = selected;
     if (!run) return;
     await work(async () => {
-      if (!currentBulk && !window.confirm("開催全体のサイコロ配布数を進めます。途中参加者にも配布済み分を渡し、個別付与分との合計は１人14個までです。実行しますか？")) return;
+      if (!currentBulk && !window.confirm("開催全体のサイコロ配布数を進めます。途中参加者にも配布済み分を渡し、個別付与分との合計は開催の使用上限までです。実行しますか？")) return;
       const request: BulkRequest = currentBulk ?? { runId: run.id, grantId: crypto.randomUUID(),
         count: numberValue(bulk.count, "全体への配布数"), reason: bulk.reason.trim(), expectedTotal: run.adminReleased ?? 0 };
       setPendingBulk(request);
@@ -165,7 +167,7 @@ export default function QuestAdminPage() {
       clearBulkRequest(run.id);
       await refreshSelected(run.id);
       setStatus(result.granted
-        ? `全体へ${result.count}個分の配布を確定しました（累計${result.releasedTotal}／14個）。利用者画面で進行を再取得すると受け取れます。途中参加者にも繰り越します。`
+        ? `全体へ${result.count}個分の配布を確定しました（累計${result.releasedTotal}／${selected.rules.maxTurns}個）。利用者画面で進行を再取得すると受け取れます。途中参加者にも繰り越します。`
         : "この配布IDは反映済みです。追加の付与はしていません。");
     });
   }
@@ -184,7 +186,7 @@ export default function QuestAdminPage() {
   return <main className={styles.page}>
     <nav className={styles.nav}><Link href="/admin">管理者トップ</Link><Link href="/quest">利用者画面</Link><Link href="/quest/guide">遊び方</Link></nav>
     <h1>ゆめつきクエスト 開催管理</h1>
-    <div className={styles.notice}>盤面v2・４ステージ76マス・上限14回。星ポイント・評価境界には推奨初期値を入力します。下書き保存 → 14回の試算 → 検討記録を20文字以上入力 → 設定確定のチェック → 公開の順に進めてください。公開後の設定は固定されます。</div>
+    <div className={styles.notice}>４ステージ・使用上限は初期値14回（１〜99回）。星ポイント・評価境界には推奨初期値を入力します。下書き保存 → 分布試算 → 検討記録を20文字以上入力 → 設定確定のチェック → 公開の順に進めてください。公開後の設定は固定されます。</div>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <p role="status">{status}</p>
     <form className={`${styles.panel} ${styles.form}`} onSubmit={event => {
@@ -220,7 +222,7 @@ export default function QuestAdminPage() {
       event.preventDefault();
       void work(async () => {
         const result = await questCall<{ runId: string; version: number }>("adminSaveQuest", {
-          ...(selected ? { runId: selected.id, version: selected.version } : {}), draft: toDraft(form),
+          ...(selected ? { runId: selected.id, version: selected.version } : {}), draft: toDraft(form, selected?.rules.boardVersion ?? "quest-board-v3"),
         });
         await refreshSelected(result.runId); setConfirmed(false); setStatus("下書きを保存しました。設定を変えた場合は、再度試算が必要です。");
       });
@@ -246,31 +248,33 @@ export default function QuestAdminPage() {
           value={form.accessCode} onChange={event => change("accessCode", event.target.value)} /></label>}
         {form.flags.includes("x_account_match") && <label>対象Xアカウント一覧（１行１アカウント、@を含む）<textarea required value={form.xText} onChange={event => change("xText", event.target.value)} /></label>}
         <h3>通常サイコロの配布（救済とは別）</h3>
+        <label>サイコロの使用上限<input type="number" min={1} max={99} required value={form.maxTurns}
+          onChange={event => change("maxTurns",event.target.value)} /></label>
         <label>配布方式<select required value={form.distribution} onChange={event => change("distribution", event.target.value as Form["distribution"])}>
-          <option value="">選択してください</option><option value="admin">管理者が全体・個別に付与</option><option value="daily">開催日から日次で１個、最大14個</option><option value="schedule">14個分の配布日時を指定</option>
+          <option value="">選択してください</option><option value="admin">管理者が全体・個別に付与</option><option value="daily">開催日から日次で１個</option><option value="schedule">回数分の配布日時を指定</option>
         </select></label>
         <p className={styles.small}>日次分は参加前・未受け取りの分も期間中に受け取れます。途中参加でも、その開催で配布済みの分は繰り越します。管理者付与方式では予定されていない未付与分を終了見込みに含めません。</p>
         {form.distribution === "daily" && <label>日次切替時刻（日本時間の時、０〜23）<input type="number" min={0} max={23} required value={form.dailyHour} onChange={event => change("dailyHour", event.target.value)} /></label>}
-        {form.distribution === "schedule" && <div className={styles.fields}>{form.releaseAt.map((value, index) => <label key={index}>{index + 1}個目の配布日時（日本時間）
+        {form.distribution === "schedule" && <div className={styles.fields}>{form.releaseAt.slice(0, Math.min(99, Number(form.maxTurns) || 0)).map((value, index) => <label key={index}>{index + 1}個目の配布日時（日本時間）
           <input type="datetime-local" required value={value} onChange={event => change("releaseAt", form.releaseAt.map((at, i) => i === index ? event.target.value : at))} /></label>)}</div>}
         <h3>星ポイント・評価境界</h3>
-        <p className={styles.small}>評価点＝現在地の進捗点＋レベル加点×（Lv.−１）。最上位は塔の指定進捗点とレベルの両方を満たす方です。盤面の金の星・星咲き・出口の効果はboard-v2に固定されています。</p>
-        {!selected && <p className={styles.notice}>新規開催には試算用の推奨初期値を入力しています。配布・救済条件によって分布は変わるため、そのまま確定値とはせず、条件を設定して14回の分布を試算してから公開してください。</p>}
+        <p className={styles.small}>評価点＝現在地の進捗点＋レベル加点×（Lv.−１）。最上位は塔の指定進捗点とレベルの両方を満たす方です。盤面の金の星・星咲き・出口の効果は開催の盤面バージョンで決まります。</p>
+        {!selected && <p className={styles.notice}>新規開催には試算用の推奨初期値を入力しています。配布・救済条件によって分布は変わるため、そのまま確定値とはせず、条件を設定して分布を試算してから公開してください。</p>}
         <div className={styles.fields}>{Object.entries(numericFields).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "stepStarPoints" || key === "levelScore" || key === "percentDecimals" ? 0 : 1}
           step={1} value={form.numbers[key as Numeric]} onChange={event => change("numbers", { ...form.numbers, [key]: event.target.value })} /></label>)}</div>
         <h3>イベント勝利・管理者付与による救済</h3>
         <label>この開催での救済<select required value={form.rescue} onChange={event => change("rescue", event.target.value as Form["rescue"])}>
           <option value="">明示的に選択してください</option><option value="no">付与による救済を使わない</option><option value="yes">条件を設定して使う</option>
         </select></label>
-        <p className={styles.small}>参加資格と独立した設定です。補填は中間の下限までで、コマや実績スコアは動かしません。花壇の救済出口と５回連続の抜け道は、救済付与の有無によらず盤面v2のルールとして動きます。</p>
+        <p className={styles.small}>参加資格と独立した設定です。補填は中間の下限までで、コマや実績スコアは動かしません。花壇の救済出口と５回連続の抜け道は、救済付与の有無によらず盤面のルールとして動きます。</p>
         {form.rescue === "yes" && <>
           <label className={styles.check}><input type="checkbox" checked={form.adminRescue} onChange={event => change("adminRescue", event.target.checked)} />管理者による救済付与を許可</label>
           {(["nibuichi", "neraiuchi"] as const).map(source => <label key={source} className={styles.check}><input type="checkbox" checked={form.eventSources.includes(source)}
             onChange={event => change("eventSources", event.target.checked ? [...form.eventSources, source] : form.eventSources.filter(value => value !== source))} />{source === "nibuichi" ? "ニブイチの的中" : "狙い撃ちの勝利"}を対象にする</label>)}
           <p className={styles.small}>開催期間内に確定した本人の結果を、本人が企画ID・対象日から確認して受け取ります。ニブイチは的中記録の集計時刻、狙い撃ちは結果公開時刻が基準です。通常のガチャ当選は自動連携しません。</p>
           <div className={styles.fields}>{([
-            ["rescueFrom", "小径を使える使用回数（１〜14）"], ["rescueBelow", "対象評価点の上限（この値未満、中間下限以下）"],
-            ["rescueMax", "１人の救済付与上限（１〜14）"], ["rescueRate", "試算時の救済保有率（０〜100%）"], ["rescueTurn", "試算時に小径を使い始める使用回（１〜14）"],
+            ["rescueFrom", "小径を使える使用回数（開催の使用上限まで）"], ["rescueBelow", "対象評価点の上限（この値未満、中間下限以下）"],
+            ["rescueMax", "１人の救済付与上限（開催の使用上限まで）"], ["rescueRate", "試算時の救済保有率（０〜100%）"], ["rescueTurn", "試算時に小径を使い始める使用回（開催の使用上限まで）"],
           ] as const).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "rescueRate" ? 0 : 1} step={key === "rescueRate" ? "any" : 1}
             value={form[key]} onChange={event => change(key, event.target.value)} /></label>)}</div>
         </>}
@@ -278,12 +282,12 @@ export default function QuestAdminPage() {
       </fieldset>
     </form>
     {selected?.state === "draft" && <section className={`${styles.panel} ${styles.form}`}>
-      <h2>14回の分布試算と公開</h2>
+      <h2>分布試算と公開</h2>
       {dirty && <p className={styles.notice}>未保存の変更があります。保存してから再試算してください。</p>}
       <button disabled={busy || dirty} onClick={() => void work(async () => {
         await questCall("adminSimulateQuest", { runId: selected.id, version: selected.version }); await refreshSelected(selected.id);
         setConfirmed(false); setStatus("各２万件、６条件の試算を保存しました。方針による差と救済保有率を確認してください。");
-      })}>保存した設定で14回を試算する</button>
+      })}>保存した設定で分布を試算する</button>
       <p>目標：最上位２%以下、上位約８%、中間約50%、下位約40%。選択方針・救済の保有率で分布は変わります。救済保有は出目・分岐と独立とした試算です。全参加者の実績分布とは区別してください。</p>
       {selected.simulation && <div className={styles.report}><table><thead><tr><th>分岐／抜け道</th>{Object.values(questGroups).map(label => <th key={label}>{label}</th>)}<th>庭到達</th><th>塔到達</th><th>救済使用</th></tr></thead><tbody>
         {selected.simulation.map(result => <tr key={`${result.policy}-${result.shortcutUse}`}><th>{{ bridge: "橋", flower: "花壇", mixed: "各50%" }[result.policy]}／{result.shortcutUse ? "使用" : "見送り"}</th>
@@ -308,28 +312,28 @@ export default function QuestAdminPage() {
     {selected && selected.state !== "draft" && <section className={`${styles.panel} ${styles.form}`}>
       <h2>通常サイコロの全体配布</h2>
       {selected.rules.distribution.mode === "admin" ? <>
-        <p>全体への配布済み累計：{selected.adminReleased ?? 0}／14個</p>
-        <p>途中参加者にも、開催期間内は同じ配布済み分を渡します。個別付与分に追加し、合計は１人14個までです。利用者は「保存済みの進行を再取得」後に受け取り・使用できます。</p>
+        <p>全体への配布済み累計：{selected.adminReleased ?? 0}／{selected.rules.maxTurns}個</p>
+        <p>途中参加者にも、開催期間内は同じ配布済み分を渡します。個別付与分に追加し、合計は１人あたり開催の使用上限までです。利用者は「保存済みの進行を再取得」後に受け取り・使用できます。</p>
         <form className={styles.form} onSubmit={event => { event.preventDefault(); void releaseBulkDice(); }}>
-          <label>今回全体へ配る個数<input type="number" required min={1} max={currentBulk ? 14 : Math.max(1, 14 - (selected.adminReleased ?? 0))}
+          <label>今回全体へ配る個数<input type="number" required min={1} max={currentBulk ? selected.rules.maxTurns : Math.max(1, selected.rules.maxTurns - (selected.adminReleased ?? 0))}
             readOnly={!!currentBulk} value={bulk.count} onChange={event => setBulk({ ...bulk, count: event.target.value })} /></label>
           <label>全体配布の理由<input required maxLength={500} readOnly={!!currentBulk} value={bulk.reason} onChange={event => setBulk({ ...bulk, reason: event.target.value })} /></label>
           {currentBulk && <p className={styles.notice}>配布ID：{currentBulk.grantId}。応答が不明な場合は同じIDで再送してください。新しく配り直す操作ではありません。</p>}
-          <button className={styles.primary} disabled={busy || (!currentBulk && (selected.state !== "published" || (selected.adminReleased ?? 0) >= 14))}>
+          <button className={styles.primary} disabled={busy || (!currentBulk && (selected.state !== "published" || (selected.adminReleased ?? 0) >= selected.rules.maxTurns))}>
             {currentBulk ? "同じ配布IDで再送して確認" : "全体へサイコロを配布する"}
           </button>
           <button type="button" disabled={busy} onClick={() => void work(async () => { await refreshSelected(selected.id); })}>全体の配布数を再取得</button>
         </form>
       </> : <p>日次・日時指定の開催は、設定された日時の配布分を利用者が受け取る方式です。全体への手動配布は管理者配布方式で利用できます。</p>}
       <h2>通常サイコロ・救済の個別付与</h2>
-      <p>参加済みの利用者に限ります。通常分は管理者配布方式のみ・全体の未受取分も含めて通算14個まで。救済は設定された上限までで、使用は１回です。通信再送には必ず同じ付与IDを使ってください。</p>
+      <p>参加済みの利用者に限ります。通常分は管理者配布方式のみ・全体の未受取分も含めて開催の使用上限まで。救済は設定された上限までで、使用は１回です。通信再送には必ず同じ付与IDを使ってください。</p>
       <form className={styles.form} onSubmit={event => { event.preventDefault(); void work(async () => {
         const result = await questCall<{ granted: boolean }>("grantQuest", { runId: selected.id, ...grant, count: numberValue(grant.count, "付与数") });
         setStatus(result.granted ? "付与を保存しました。新たな付与を行う場合は、新しい付与IDを発行してください。" : "同じ付与IDはすでに反映済みです。追加の付与はしていません。");
       }); }}>
         <label>利用者UID<input required value={grant.uid} onChange={event => setGrant({ ...grant, uid: event.target.value })} /></label>
         <label>種別<select value={grant.kind} onChange={event => setGrant({ ...grant, kind: event.target.value })}><option value="normal">通常サイコロ</option><option value="rescue">救済権利</option></select></label>
-        <label>付与数<input type="number" required min={1} max={14} value={grant.count} onChange={event => setGrant({ ...grant, count: event.target.value })} /></label>
+        <label>付与数<input type="number" required min={1} max={grant.kind === "rescue" ? selected.rules.rescue.maxGrants : selected.rules.maxTurns} value={grant.count} onChange={event => setGrant({ ...grant, count: event.target.value })} /></label>
         <label>付与理由<input required maxLength={500} value={grant.reason} onChange={event => setGrant({ ...grant, reason: event.target.value })} /></label>
         <label>付与ID<input required pattern="[a-zA-Z0-9_-]{1,128}" value={grant.grantId} onChange={event => setGrant({ ...grant, grantId: event.target.value })} /></label>
         <button type="button" disabled={busy} onClick={() => setGrant({ ...grant, grantId: crypto.randomUUID() })}>新しい付与IDを発行</button>
@@ -344,7 +348,7 @@ export default function QuestAdminPage() {
           await refreshSelected(selected.id); setStatus(result.complete ? "全員の結果を確定し、アーカイブへ移しました。" : "100人分を確定しました。もう一度押すと次のページから再開します。");
         });
       }}>{selected.state === "settling" ? "集計を続きから再開" : "進行を停止して結果を集計"}</button>
-      {selected.summary && <p>全参加者 {selected.summary.total}人 ／ 14回使用 {selected.summary.completed}人。結果は利用者アーカイブで確認できます。</p>}
+      {selected.summary && <p>全参加者 {selected.summary.total}人 ／ {selected.rules.maxTurns}回使用 {selected.summary.completed}人。結果は利用者アーカイブで確認できます。</p>}
     </section>}
   </main>;
 }

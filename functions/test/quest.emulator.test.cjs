@@ -143,6 +143,52 @@ test("shortcut offer survives reload; decline remains optional and idempotent", 
   assert.equal(chosen.player.used, 5);
   assert.equal(chosen.player.shortcut, "declined");
 });
+test("v3 flower draw, rewards and recorded path persist once across concurrent resend", async () => {
+  const ref = await run({ rules: { ...rules, boardVersion: "quest-board-v3" } }), actor = await join(ref);
+  await seed(ref, actor, { tileId: "s3-05", used: 8, normalGranted: 14, version: 8,
+    pending: { kind: "branch", steps: 3 }, lastDie: 5, starPoints: 35 });
+  const requestId = randomUUID();
+  const results = await Promise.all(Array.from({ length: 4 }, () => action(ref, actor, 8, "flower", requestId)));
+  for (const result of results) assert.deepEqual(result.player, results[0].player);
+  const player = results[0].player;
+  assert.ok(["s3-loop-00", "s3-loop-01", "s3-loop-02", "s3-loop-03", "s3-loop-04", "s3-loop-05", "s3-20"].includes(player.tileId));
+  assert.equal(player.used, 8);
+  assert.equal(player.lastDie, 5);
+  assert.equal(player.lastTrace.steps[0].from, "s3-05");
+  assert.deepEqual((await call("getQuest", {}, actor)).player.visitedPaths, player.visitedPaths);
+  assert.equal((await ref.collection("players").doc(actor).collection("actions").get()).size, 1);
+  assert.equal((await ref.collection("turns").doc("8").collection("players").doc(player.publicId).get()).get("tileId"), player.tileId);
+});
+test("configured 1 and 99 turn limits agree across saved draft, release, roll, ranking and finalization", async () => {
+  for (const maxTurns of [1, 99]) {
+    const configured = { ...rules, boardVersion: "quest-board-v3", maxTurns, rescue: { ...rules.rescue,
+      enabled: false, adminEnabled: false, eventSources: [], fromTurn: maxTurns, simulationTurn: maxTurns, simulationRate: 0 } };
+    const saved = await call("adminSaveQuest", { draft: { title: "Synthetic configurable limit", description: "",
+      thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: Date.now() - 600000, endsAt: Date.now() + 600000,
+      publicFlags: ["public"], xAccountList: [], accessCode: "", rules: configured } });
+    const ref = db.collection("questRuns").doc(saved.runId);
+    assert.equal((await ref.get()).get("rules.maxTurns"), maxTurns);
+    await ref.update({ state: "published" });
+    await db.doc("questConfig/current").set({ runId: ref.id });
+    const actor = await join(ref);
+    const release = { runId: ref.id, grantId: randomUUID(), count: maxTurns, expectedTotal: 0, reason: "Synthetic cap" };
+    assert.equal((await call("adminReleaseQuestDice", release)).releasedTotal, maxTurns);
+    assert.equal((await call("getQuest", {}, actor)).dueDice, maxTurns);
+    await assert.rejects(call("grantQuest", { runId: ref.id, uid: actor, grantId: randomUUID(), kind: "normal", count: 1, reason: "Over cap" }));
+    const synced = await action(ref, actor, 0, "sync");
+    assert.equal(synced.player.normalGranted, maxTurns);
+    await seed(ref, actor, { used: maxTurns - 1, tileId: "s2-00" });
+    const rolled = await action(ref, actor, synced.player.version);
+    assert.equal(rolled.player.used, maxTurns);
+    await assert.rejects(action(ref, actor, rolled.player.version));
+    const ranking = await call("listQuestProgress", { runId: ref.id, turn: maxTurns }, actor);
+    assert.equal(ranking.items[0].used, maxTurns);
+    await assert.rejects(call("listQuestProgress", { runId: ref.id, turn: maxTurns + 1 }, actor));
+    const finalized = await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
+    assert.equal(finalized.summary.completed, 1);
+    assert.equal((await call("getQuest", { runId: ref.id, archive: true }, actor)).player.result.used, maxTurns);
+  }
+});
 test("normal/rescue admin grants are atomic, capped, and individually idempotent", async () => {
   const ref = await run(), uid = await join(ref);
   const grant = { runId: ref.id, uid, grantId: randomUUID(), kind: "normal", count: 14, reason: "Synthetic only" };

@@ -72,3 +72,35 @@
 @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 @media (max-width: 400px) { .panel { padding: 12px; } .fields { grid-template-columns: minmax(0, 1fr); } .stats > div { padding: 10px 3px; } }
 @media (prefers-reduced-motion: reduce) { .rolling { animation: none; } .pawn { transition: none; } }
+
+.tile[data-visited="true"] { border-radius:50%; filter:drop-shadow(0 0 4px #ffd473); }
+.tile[data-active="true"] { z-index:2; filter:drop-shadow(0 0 8px #81efff); }
+.pawn { transition-duration:.18s; }
+.mapOverlay { position:absolute; left:8%; right:8%; top:24%; z-index:5; display:grid; place-items:center; gap:.4rem; padding:1.15rem .75rem; text-align:center; color:#fff5da; background:linear-gradient(90deg,#0a18377a,#0b1a38f2,#0a18377a); border-block:1px solid #ebd293a0; text-shadow:0 2px 8px #000; pointer-events:none; animation:quest-arrive .28s ease-out both; }
+.mapOverlay strong { font-size:clamp(1.08rem,5vw,1.7rem); }
+.mapOverlay[data-overlay="dice"] { top:34%; perspective:480px; }
+.mapOverlay[data-overlay="reward"] { top:17%; color:#ffe8a4; }
+.mapDie { display:grid; place-items:center; width:4.4rem; height:4.4rem; border:2px solid #ffe7ad; border-radius:.85rem; box-shadow:0 0 25px #66dcffba; background:#c3f2ff; color:#102447; font-size:3.5rem; line-height:1; text-shadow:none; }
+.mapDie[data-spinning="true"] { animation:quest-cast .66s ease-in-out infinite; }
+.scoreChange { color:#9de6f9; font-weight:700; }
+@keyframes quest-cast { 0% { transform:rotateX(0deg) rotateY(0deg) scale(.8); } 45% { transform:rotateX(200deg) rotateY(160deg) scale(1.12); } 100% { transform:rotateX(360deg) rotateY(360deg) scale(.8); } }
+@keyframes quest-arrive { from { opacity:.25; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { .mapOverlay,.mapDie[data-spinning="true"] { animation:none; } .pawn { transition:none; } }
+
+.mapDie:has(.dieCube) { background:none; border:0; box-shadow:none; }
+.dieCube { position:relative; width:4.4rem; height:4.4rem; transform-style:preserve-3d; animation:quest-cast .72s linear infinite; }
+.dieCube span { position:absolute; inset:0; display:grid; place-items:center; border-radius:.62rem; border:2px solid #ffe2a9; color:#102447; background:linear-gradient(140deg,#f1ffff,#7fd3ef); box-shadow:inset 0 0 14px #3983ae; backface-visibility:hidden; }
+.dieCube span:nth-child(1) { transform:translateZ(2.2rem); }
+.dieCube span:nth-child(2) { transform:rotateY(90deg) translateZ(2.2rem); }
+.dieCube span:nth-child(3) { transform:rotateX(90deg) translateZ(2.2rem); }
+.dieCube span:nth-child(4) { transform:rotateX(-90deg) translateZ(2.2rem); }
+.dieCube span:nth-child(5) { transform:rotateY(-90deg) translateZ(2.2rem); }
+.dieCube span:nth-child(6) { transform:rotateY(180deg) translateZ(2.2rem); }
+.meter { display:flex; }
+.meter .progressFill { background:#4da2db; }
+.meter .levelFill { background:#e5b751; }
+.meterKey { display:flex; gap:1rem; flex-wrap:wrap; }
+.meterKey span::before { content:""; display:inline-block; width:.65em; height:.65em; border-radius:50%; margin-right:.4em; background:#4da2db; }
+.meterKey span:nth-child(2)::before { background:#e5b751; }
+.scoreChange { color:#175584; }
+@media (prefers-reduced-motion:reduce) { .dieCube { animation:none; } }

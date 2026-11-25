@@ -46,7 +46,7 @@ export default function QuestRanking({ run, archive = false }: { run: QuestPubli
       setBusy(true); setData(null); setError(""); setTurn(event.target.value);
     }} disabled={busy}>
       <option value="">現在の進捗</option>
-      {Array.from({ length: 14 }, (_, index) => <option key={index} value={index + 1}>{index + 1}回使用した時点</option>)}
+      {Array.from({ length: run.rules.maxTurns }, (_, index) => <option key={index} value={index + 1}>{index + 1}回使用した時点</option>)}
     </select></label>
     <div className={styles.routes} aria-label="舞台別の参加人数">
       {data?.stages.map(({ stage, count }) => <div key={stage} style={{

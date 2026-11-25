@@ -37,12 +37,13 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
   if ((!d.publicFlags.includes("public") || d.publicFlags.includes("limited")) && accessCode.length < 8) throw new QuestInputError("非公開・限定公開には8文字以上の専用コードが必要です");
   const r = questObject(d.rules, ["boardVersion", "maxTurns", "stepStarPoints", "levelPoints", "levelScore", "percentMax",
     "percentDecimals", "middleMin", "upperMin", "topMinProgress", "topMinLevel", "distribution", "rescue"]);
-  if (r.boardVersion !== "quest-board-v2" || r.maxTurns !== 14) throw new QuestInputError("盤面v2・上限14回を指定してください");
+  if (r.boardVersion !== "quest-board-v2" && r.boardVersion !== "quest-board-v3") throw new QuestInputError("盤面を指定してください");
+  const maxTurns = questInteger(r.maxTurns, "サイコロの使用上限", 1, 99);
   const distribution = questObject(r.distribution, ["mode", "releaseAt", "dailyStartHourJst"]);
   if (!["schedule", "daily", "admin"].includes(distribution.mode as string)) throw new QuestInputError("配布方式を選んでください");
-  if (!Array.isArray(distribution.releaseAt) || distribution.releaseAt.length > 14) throw new QuestInputError("配布日時は14回以内で指定してください");
+  if (!Array.isArray(distribution.releaseAt) || distribution.releaseAt.length > maxTurns) throw new QuestInputError("配布日時は使用上限以内で指定してください");
   const releaseAt = distribution.releaseAt.map(at => questInteger(at, "配布日時", startsAt, endsAt - 1)).sort((a, b) => a - b);
-  if (distribution.mode === "schedule" && releaseAt.length !== 14) throw new QuestInputError("日時指定方式は14回分の配布日時を指定してください（同時配布可）");
+  if (distribution.mode === "schedule" && releaseAt.length !== maxTurns) throw new QuestInputError("日時指定方式は使用上限と同じ数の配布日時を指定してください（同時配布可）");
   if (distribution.mode !== "schedule" && releaseAt.length) throw new QuestInputError("日時指定以外では配布日時を空にしてください");
   const rescue = questObject(r.rescue, ["enabled", "adminEnabled", "eventSources", "fromTurn", "belowScore", "maxGrants", "simulationRate", "simulationTurn"]);
   if (typeof rescue.enabled !== "boolean" || typeof rescue.adminEnabled !== "boolean" ||
@@ -51,7 +52,7 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
   if (typeof rescue.simulationRate !== "number" || !Number.isFinite(rescue.simulationRate) ||
       rescue.simulationRate < 0 || rescue.simulationRate > 1) throw new QuestInputError("試算時の救済保有率は0〜1で指定してください");
   const rules: QuestRules = {
-    boardVersion: "quest-board-v2", maxTurns: 14,
+    boardVersion: r.boardVersion, maxTurns,
     stepStarPoints: questInteger(r.stepStarPoints, "1歩の星ポイント", 0, 100),
     levelPoints: questInteger(r.levelPoints, "レベル間隔", 1, 10000),
     levelScore: questInteger(r.levelScore, "レベル加点", 0, 100),
@@ -66,11 +67,11 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
     rescue: {
       enabled: rescue.enabled, adminEnabled: rescue.adminEnabled,
       eventSources: rescue.eventSources as QuestRules["rescue"]["eventSources"],
-      fromTurn: questInteger(rescue.fromTurn, "救済を使える回数", 1, 14),
+      fromTurn: questInteger(rescue.fromTurn, "救済を使える回数", 1, maxTurns),
       belowScore: questInteger(rescue.belowScore, "救済対象の評価点上限（未満）", 1, 10000),
-      maxGrants: questInteger(rescue.maxGrants, "救済付与上限", 1, 14),
+      maxGrants: questInteger(rescue.maxGrants, "救済付与上限", 1, maxTurns),
       simulationRate: rescue.simulationRate,
-      simulationTurn: questInteger(rescue.simulationTurn, "救済試算の使用回", 1, 14),
+      simulationTurn: questInteger(rescue.simulationTurn, "救済試算の使用回", 1, maxTurns),
     },
   };
   if (rules.middleMin >= rules.upperMin || rules.rescue.belowScore > rules.middleMin) throw new QuestInputError("中間未満だけを救済対象とし、上位の境界は中間より大きくしてください");

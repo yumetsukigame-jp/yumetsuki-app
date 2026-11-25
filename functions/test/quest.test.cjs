@@ -131,7 +131,8 @@ test("invalid draft configuration and sample omissions cannot become a live run"
   const draft = { title: "Test", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg",
     startsAt: 1000, endsAt: 2000, publicFlags: ["public"], xAccountList: [], accessCode: "", rules };
   assert.equal(validateQuestDraft(draft).rules.maxTurns, 14);
-  assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, maxTurns: 15 } }));
+  assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, maxTurns: 99 } }).rules.maxTurns, 99);
+  assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, maxTurns: 100 } }));
   assert.throws(() => validateQuestDraft({ ...draft, publicFlags: ["limited"], accessCode: "short" }));
   assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, middleMin: 64 } }));
 });
@@ -143,4 +144,45 @@ test("14-turn simulation and forecasts are deterministic, complete and bounded",
   assert.ok(report.stage3 > report.stage4);
   const forecast = forecastQuest(state(), rules, 0);
   assert.deepEqual([forecast.low, forecast.median, forecast.high], [0, 0, 0]);
+});
+
+test("v3 flower has one immediate warp among seven landings and records its reward", () => {
+  const v3 = { ...rules, boardVersion: "quest-board-v3" };
+  const fork = state({ tileId: "s3-05", used: 8, pending: { kind: "branch", steps: 3 } });
+  for (let face = 1; face <= 7; face++) {
+    const next = advanceQuest(fork, "flower", v3, undefined, face);
+    assert.equal(next.used, 8);
+    assert.equal(next.tileId, face === 7 ? "s3-20" : `s3-loop-0${face - 1}`);
+    assert.ok(next.visitedPaths.length >= 1);
+    if (face === 7) {
+      assert.deepEqual(next.lastTrace.steps.at(-1), { from: "s3-loop-06", to: "s3-20", kind: "warp" });
+      assert.equal(next.lastTrace.rewards[0].label, "花壇出口");
+    }
+  }
+});
+
+test("movement records each walked tile, the stage boundary, and earned points", () => {
+  const result = roll(state({ tileId: "s1-14" }), 6);
+  assert.deepEqual(result.lastTrace.steps.map(step => [step.to, step.kind]),
+    [["s1-15", "walk"], ["s1-16", "walk"], ["s2-00", "stage"]]);
+  assert.equal(result.lastTrace.rewards.reduce((sum, reward) => sum + reward.points, 0), result.starPoints);
+  assert.equal(result.visitedPaths.length, 3);
+});
+
+test("v3 ring uses the seventh exit and its own forced limit without changing v2", () => {
+  const v3 = { ...rules, boardVersion: "quest-board-v3" };
+  const from = state({ tileId: "s3-loop-05", used: 8, loopSteps: 3 });
+  assert.equal(advanceQuest(from, "roll", v3, 1).tileId, "s3-20");
+  assert.equal(roll(from, 1).tileId, "s3-07");
+  const forced = advanceQuest(state({ tileId: "s3-loop-00", used: 8, loopSteps: 13 }), "roll", v3, 6);
+  assert.equal(forced.tileId, "s3-07");
+  assert.equal(forced.starPoints, 13);
+});
+
+test("99-turn schedules release all slots and complete simulation", () => {
+  const releaseAt = Array.from({ length: 99 }, (_, index) => index + 1);
+  const extended = { ...rules, maxTurns: 99, distribution: { ...rules.distribution, mode: "schedule", releaseAt } };
+  assert.equal(releasedQuestDice(extended, 1, 120, 100), 99);
+  const report = simulateQuest(extended, 100);
+  assert.equal(Object.values(report.groups).reduce((sum, count) => sum + count, 0), 100);
 });
