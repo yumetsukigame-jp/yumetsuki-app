@@ -7,13 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "@/firebase";
 import { formatJstDateTime } from "@/app/lib/dateTime";
 import { questCall, questError, questFlags, questGroups, type QuestView } from "@/app/lib/quest";
-import { questBoard, questPercent, questTile } from "@/functions/src/quest/engine";
+import { questBoard, questGoalDistance, questPercent, questResult, questTile } from "@/functions/src/quest/engine";
 import type { QuestAction, QuestPlayer, QuestStep } from "@/functions/src/quest/types";
 import QuestBoard from "./QuestBoard";
 import QuestRanking from "./QuestRanking";
 import styles from "./quest.module.css";
 
 type Request = { runId: string; version: number; requestId: string; action: QuestAction | "sync" };
+const rankOrder = ["lower", "middle", "upper", "top"] as const;
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const requestKey = (uid: string, runId: string) => `quest-request:${uid}:${runId}`;
 function savedRequest(uid: string, runId: string): Request | null {
@@ -154,13 +155,20 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         setScoreChange([moveScore && `到達 ${signed(moveScore)}点`, levelScore && `レベル ${signed(levelScore)}点`].filter(Boolean).join(" ／ "));
         const rewardText = [...sums].map(([label, points]) => `${label} ＋${points}`).join(" ／ ");
         if (earned > 0) setOverlay({ title: `星ポイント ＋${earned}`, kind: "reward", detail: rewardText });
+        const beforeGroup = questResult(player, run.rules).group;
+        const afterGroup = questResult(result.player, run.rules).group;
+        const promoted = rankOrder.indexOf(afterGroup) > rankOrder.indexOf(beforeGroup);
         setFrames([]);
-        setView(previous => previous?.run?.id === run.id ? { ...previous, player: result.player, dueDice: 0 } : previous);
+        setView(previous => previous?.run?.id === run.id ? { ...previous, player: result.player, dueDice: 0, forecast: null } : previous);
         clearRequest(request, actor);
         setStatus([`出目 ${result.player.lastDie ?? "—"}`, earned > 0 && `星ポイント ＋${earned} ${rewardText}`, result.player.level > player.level && `Lv.${player.level} → ${result.player.level}`].filter(Boolean).join(" · "));
         await reload();
-        if (current() && earned > 0) {
-          await wait(reduced ? 400 : 1100);
+        if (current() && (earned > 0 || promoted)) {
+          if (earned > 0) await wait(reduced ? 400 : 1100);
+          if (current() && promoted) {
+            setOverlay({ kind: "stage", title: `${questGroups[afterGroup]}にランクアップ！`, detail: "現在の星務評価" });
+            await wait(reduced ? 400 : 1150);
+          }
           if (current()) setOverlay(null);
         }
       } catch (error) {
@@ -179,6 +187,18 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   const open = !!run && !archiveId && run.state === "published" && clock >= run.startsAt && clock < run.endsAt;
   const canRoll = open && !!player && !player.pending && player.used < run.rules.maxTurns && questTile(player.tileId).kind !== "finish" &&
     player.used < player.normalGranted + (view?.dueDice ?? 0);
+  const evaluation = player && run ? player.result ?? questResult(player, run.rules) : null;
+  const grade = evaluation?.group ?? null;
+  const gradeIndex = grade ? rankOrder.indexOf(grade) : -1;
+  const nextGrade = gradeIndex >= 0 && gradeIndex < rankOrder.length - 1 ? rankOrder[gradeIndex + 1] : null;
+  const nextScore = run && nextGrade && nextGrade !== "top" ? (nextGrade === "middle" ? run.rules.middleMin : run.rules.upperMin) - (player?.score ?? 0) : null;
+  const goalDistance = player && run && !player.result ? questGoalDistance(player, run.rules.boardVersion) : null;
+  const remaining = player && run ? run.rules.maxTurns - player.used : 0;
+  const routePending = player?.pending?.kind === "branch" && (player.pending.steps > 0 || run?.rules.boardVersion === "quest-board-v3") || player?.pending?.kind === "shortcut";
+  const journeyOpen = open && !!player && (remaining > 0 || routePending) && questTile(player.tileId).kind !== "finish";
+  const forecast = journeyOpen && !busy && !pending ? view?.forecast : null;
+  const counts = forecast?.groups;
+  const likely = counts ? rankOrder.reduce((best, group) => counts[group] > counts[best] ? group : best) : null;
   const canRescue = open && player && run.rules.rescue.enabled && !player.rescueUsed && player.rescueCredits > 0 &&
     player.used >= run.rules.rescue.fromTurn && player.score < run.rules.rescue.belowScore;
   return <main className={styles.page}>
@@ -225,6 +245,44 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         <button type="button" disabled={busy} onClick={() => void operation(reload)}>保存済みの進行を再取得</button>
       </section>
       {player && !rankingOnly && <>
+          <div className={styles.gradeCard} aria-live="polite" aria-label="星務評価">
+            <p>{player.result ? "最終グループ" : "現在の星務評価"}</p>
+            <strong className={styles.gradeTitle}>{grade && questGroups[grade]}</strong>
+            {!player.result && <small>現在の実績による暫定評価です。最終グループは開催終了後に確定します。</small>}
+            {evaluation?.naturalGroup !== grade && <p>月明かりの小径による中間への補填を適用しています。実績の評価点は変わりません。</p>}
+            <ol className={styles.gradeTrack} aria-label="星務評価の４グループ">
+              {rankOrder.map((group, index) => <li key={group} data-grade={group} data-cleared={index < gradeIndex}
+                aria-current={group === grade ? "step" : undefined}>{questGroups[group]}</li>)}
+            </ol>
+            {journeyOpen && nextGrade && nextGrade !== "top" && <p className={styles.gradeGoal}>
+              次は <strong>{questGroups[nextGrade]}</strong> まであと <strong>{nextScore}点</strong>
+              <small>到達点を伸ばそう。{run.rules.levelScore > 0 && nextScore !== null && <>レベルでも１つ上がるごとに＋{run.rules.levelScore}点。</>}</small>
+            </p>}
+            {journeyOpen && nextGrade === "top" && <div className={styles.gradeGoal}>
+              <p>次は <strong>最上位</strong></p>
+              <ul>
+                <li>{Number(player.tileId[1]) === 4 && questTile(player.tileId).progress >= run.rules.topMinProgress ? "✓" : "○"} 星見の塔・{run.rules.topMinProgress - questTile("s4-00").progress}マス目に到達</li>
+                <li>{player.level >= run.rules.topMinLevel ? "✓" : "○"} Lv.{run.rules.topMinLevel}
+                  {player.level < run.rules.topMinLevel && `まで星ポイントあと ${(run.rules.topMinLevel - 1) * run.rules.levelPoints - player.starPoints}`}</li>
+              </ul>
+            </div>}
+            {journeyOpen && grade === "top" && <p>最上位に到達しました。</p>}
+            {!player.result && !journeyOpen && <p>最終グループは開催終了後に確定します。</p>}
+            {goalDistance !== null && <p className={styles.gradeForecast}>
+              {goalDistance === 0 ? <strong>星見の塔のゴールに到着</strong> : <>
+                ゴールまで <strong>最短あと{goalDistance}マス</strong>
+                <small>ワープが決まった場合を含む盤面上の距離</small>
+              </>}
+            </p>}
+            {likely && counts && forecast && <div className={styles.gradeForecast}>
+              <p>終了見込み <strong>{questGroups[likely]}</strong>
+                <small>試算{forecast.samples}件中{Math.round(counts[likely] / forecast.samples * 100)}%で最も多いグループ。結果の保証ではありません。</small></p>
+              <details><summary>見込みの試算条件</summary>
+                <p>受け取り済み・配布予定のサイコロで遊んだ場合の目安です。今後の管理者による追加配布は含みません。</p>
+                <p>{forecast.policy}</p>
+              </details>
+            </div>}
+          </div>
         <div ref={playArea} className={styles.playArea}>
           <QuestBoard key={`${run.id}:${boardFocus}`} player={player} version={run.rules.boardVersion} frames={frames} overlay={overlay}>
             {error && <p role="alert" className={styles.error}>{error}</p>}
@@ -254,27 +312,24 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         <section className={styles.panel}>
           <h2>{player.result ? "星務報告書" : "あなたの星務"}</h2>
           <dl className={styles.stats}>
-            <div><dt>星務達成率（実績）</dt><dd>{questPercent(player.score, run.rules)}%</dd></div>
+            <div><dt>星務達成率（{player.result ? "確定実績" : "実績"}）</dt><dd>{questPercent(player.score, run.rules)}%</dd></div>
             <div><dt>星ポイント・レベル</dt><dd>Lv.{player.level}</dd><small>{player.starPoints} 星ポイント</small></div>
             <div><dt>サイコロ使用回数</dt><dd>{player.used}／{run.rules.maxTurns}回</dd></div>
           </dl>
-          <div className={styles.meter} role="meter" aria-label="実績の星務達成率" aria-valuenow={questPercent(player.score, run.rules)} aria-valuemin={0} aria-valuemax={100}>
-            <span className={styles.progressFill} style={{ width: `${questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
-            <span className={styles.levelFill} style={{
-              width: `${questPercent(player.score, run.rules) - questPercent(questTile(player.tileId).progress, run.rules)}%`,
-            }} />
-          </div>
-          {view.forecast && player.used < run.rules.maxTurns && questTile(player.tileId).kind !== "finish" ? <>
-            <div className={styles.forecast}><span>終了見込み</span><strong>中央値 {questPercent(view.forecast.median, run.rules)}%</strong>
-              <span>10〜90%の範囲：{questPercent(view.forecast.low, run.rules)}〜{questPercent(view.forecast.high, run.rules)}%</span></div>
-
-          </> : <p>{player.result ? "確定した実績です。" : player.used === run.rules.maxTurns || questTile(player.tileId).kind === "finish" ? "サイコロの進行は完了しました。最終グループは開催終了後に確定します。" : "開催終了のため、終了見込みの試算は行いません。"}</p>}
-          <p className={styles.meterKey}><span>到達 {questTile(player.tileId).progress}点</span><span>レベル {(player.level-1)*run.rules.levelScore}点</span></p>
+          <details>
+            <summary>評価点の内訳</summary>
+            <p>実績の評価点：{player.score}点</p>
+            <div className={styles.meter} role="meter" aria-label="実績の星務達成率" aria-valuenow={questPercent(player.score, run.rules)} aria-valuemin={0} aria-valuemax={100}>
+              <span className={styles.progressFill} style={{ width: `${questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
+              <span className={styles.levelFill} style={{ width: `${questPercent(player.score, run.rules) - questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
+            </div>
+            <p className={styles.meterKey}><span>到達 {questTile(player.tileId).progress}点</span><span>レベル {(player.level-1)*run.rules.levelScore}点</span></p>
+            <p>次のレベルまで星ポイント {run.rules.levelPoints - player.starPoints % run.rules.levelPoints}</p>
+            {forecast && <p>終了見込みの達成率：中央値 {questPercent(forecast.median, run.rules)}% ／ 10〜90%の範囲 {questPercent(forecast.low, run.rules)}〜{questPercent(forecast.high, run.rules)}%（実績とは別の試算です）</p>}
+          </details>
           {scoreChange && <p className={styles.scoreChange}>{scoreChange}</p>}
-          <p className={styles.small}>次のレベルまで星ポイント {run.rules.levelPoints - player.starPoints % run.rules.levelPoints}</p>
           <p>受け取り済み {player.normalGranted}個 ／ 配布待ちの受け取り分 {view.dueDice ?? 0}個 ／ 今振れる分 {canRoll ? Math.max(0, player.normalGranted + (view.dueDice ?? 0) - player.used) : 0}個</p>
           {player.result && <div className={styles.notice}>
-            <h3>最終グループ：{questGroups[player.result.group]}</h3>
             <p>到達マス {player.result.tileId} ／ Lv.{player.result.level} ／ 使用{player.result.used}回</p>
             {player.result.rescueUsed && <p>月明かりの小径を使用。補填は中間の下限までで、実績の評価点は変わりません。</p>}
             <p>旅の記念：{player.souvenirs.map(value => value === "starflower" ? "星咲きの花" : `第${value.slice(-1)}舞台への到達`).join("、") || "書斎で受けた星務"}</p>

@@ -15,4 +15,6 @@
 
 元の引き継ぎ・見本は `local-data/completed-handoffs/` へ移動し、Git管理外で保管する。保管資料内の「未実装」「本番未反映」は資料作成時点の記録で、現在の状態ではない。
 
+追加の本番反映済み内容・検証結果は `local-data/completed-handoffs/README.md` に記録する。このフォルダには完了履歴や再反映の指示を置かない。
+
 アプリの正本は `app/`・`components/`・`functions/`、使用素材は `public/`、既存の素材台帳は `design-assets/manifest.json`。実装済み資料をこのフォルダへ戻さない。

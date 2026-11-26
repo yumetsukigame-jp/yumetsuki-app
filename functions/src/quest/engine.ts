@@ -31,6 +31,36 @@ export function questTile(id: string, version?: QuestRules["boardVersion"]): Til
   return tile;
 }
 export function questStage(id: string) { return Number(id[1]); }
+export function questGoalDistance(state: Pick<QuestState, "tileId" | "branch" | "pending">, version: QuestRules["boardVersion"]) {
+  const board = questBoard(version);
+  const distances = new Map([[state.tileId, 0]]);
+  const remaining = new Set(board.stages.flatMap(stage => stage.tiles.map(tile => tile.id)));
+  while (remaining.size) {
+    let id: string | undefined;
+    let distance = Infinity;
+    for (const candidate of remaining) {
+      const steps = distances.get(candidate) ?? Infinity;
+      if (steps < distance) { id = candidate; distance = steps; }
+    }
+    if (!id) return null;
+    remaining.delete(id);
+    const tile = questTile(id, version);
+    if (tile.kind === "finish") return distance;
+    const next = tile.kind === "fork" && state.branch ? [tile.next[state.branch === "flower" ? 1 : 0]] : tile.next;
+    const routes = next.map(to => ({ to, cost: tile.kind === "gate" ? 0 : 1 }));
+    if (tile.exitTo) routes.push({ to: tile.exitTo, cost: 0 });
+    if (tile.kind === "fork" && version === "quest-board-v3" && state.branch !== "bridge") {
+      routes.push({ to: board.garden.ringExitId, cost: 0 });
+    }
+    if (id === state.tileId && state.pending?.kind === "shortcut") {
+      routes.push({ to: board.specialRoutes[0].destination, cost: 0 });
+    }
+    for (const { to, cost } of routes) {
+      if (distance + cost < (distances.get(to) ?? Infinity)) distances.set(to, distance + cost);
+    }
+  }
+  return null;
+}
 export function updateQuestScore(state: QuestState, rules: QuestRules) {
   state.level = 1 + Math.floor(state.starPoints / rules.levelPoints);
   state.score = questTile(state.tileId).progress + rules.levelScore * (state.level - 1);

@@ -3,7 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
-const { initialQuestState, advanceQuest, updateQuestScore, QUEST_BOARD } = require("../functions/lib/quest/engine");
+const { initialQuestState, advanceQuest, updateQuestScore, questResult, QUEST_BOARD } = require("../functions/lib/quest/engine");
+const { forecastQuest } = require("../functions/lib/quest/simulation");
 const { rules } = require("../functions/test/quest-fixtures.cjs");
 const base = process.env.QUEST_TEST_URL || "http://127.0.0.1:3216";
 if (new URL(base).hostname !== "127.0.0.1") throw Error("Only loopback mock UI checks are allowed");
@@ -90,7 +91,7 @@ async function main() {
         } else if (action === "getQuest") {
           await new Promise(resolve => setTimeout(resolve, questReloadDelay));
           result = { run: input.archive ? archive : runDeleted ? null : run, player: runDeleted && !input.archive ? null : player, reason: null,
-            dueDice, serverNow: Date.now(), forecast: { low: 48, median: 59, high: 70, samples: 256, policy: "ローカル画面検証の試算" } };
+            dueDice, serverNow: Date.now(), forecast: forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + dueDice)) };
         }
         else if (action === "listQuestProgress") result = ranking(input);
         else if (action === "listQuestArchives") result = { items: [archive], nextCursor: null };
@@ -179,10 +180,21 @@ async function main() {
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${base}/quest`);
       await page.getByRole("heading", { name: "庭で道を選ぼう" }).waitFor();
+      const gradeCard = page.locator('[aria-label="星務評価"]');
+      await gradeCard.getByText("現在の星務評価", { exact: true }).waitFor();
+      assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "下位");
+      await gradeCard.getByText("6点", { exact: true }).waitFor();
+      await gradeCard.getByText(/終了見込み/).waitFor();
+      await gradeCard.locator("summary").filter({ hasText: "見込みの試算条件" }).click();
+      await gradeCard.getByText(/未付与分は含みません/).waitFor();
+      await page.locator("summary").filter({ hasText: "評価点の内訳" }).click();
+      await page.getByRole("meter", { name: "実績の星務達成率" }).waitFor();
+      await page.getByText("実績の評価点：46点", { exact: true }).waitFor();
       assert.equal(await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).isEnabled(), false);
       dropResponse = true;
       await page.getByRole("button", { name: "巡る花壇へ（星を集める）", exact: true }).click();
       await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
+      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0, "Unconfirmed operations must hide stale forecasts");
       run.endsAt = Date.now() - 1;
       await page.reload();
       await page.getByRole("button", { name: "前回の結果を確認" }).click();
@@ -193,7 +205,7 @@ async function main() {
       assert.equal(player.tileId, "s3-loop-03");
       run.endsAt = Date.now() + 3600000;
       await page.reload();
-      await page.getByRole("meter", { name: "実績の星務達成率" }).waitFor();
+      await page.locator('[aria-label="星務評価"]').waitFor();
       for (const width of [360, 390, 1280]) {
         await page.setViewportSize({ width, height: 950 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: horizontal overflow at ${width}`);
@@ -201,7 +213,7 @@ async function main() {
           await page.getByRole("button", { name: new RegExp(`^${stage.id} (書斎|回廊|庭|塔)`) }).click();
           assert.equal(await page.locator("button[data-kind][title]").count(), stage.tiles.length);
         }
-        assert.ok(await page.getByRole("meter", { name: "実績の星務達成率" }).isVisible());
+        assert.ok(await page.locator('[aria-label="星務評価"]').isVisible());
       }
       const die = page.locator('[class*="diceResult"] > span[aria-hidden="true"]');
       const board = page.locator('[class*="playArea"] [class*="board"]');
@@ -297,7 +309,33 @@ async function main() {
       assert.equal(await page.locator("button[data-kind][title]").count(), QUEST_BOARD.stages[2].tiles.length + 1);
       assert.equal(await page.getByLabel("比べる時点").locator("option").count(), 4);
       await page.getByText("1／3回", { exact: true }).waitFor();
+      await page.locator('[data-overlay="stage"]').getByText("中間にランクアップ！", { exact: true }).waitFor();
+      assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "中間");
+      await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
+      player = createPlayer({ tileId: "s4-02", used: 2, starPoints: 60, normalGranted: 3 });
+      await page.reload();
+      await gradeCard.getByText("次は", { exact: false }).waitFor();
+      await gradeCard.getByText("○ 星見の塔・3マス目に到達", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.locator('[data-overlay="stage"]').getByText("最上位にランクアップ！", { exact: true }).waitFor();
+      assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "最上位");
+      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0);
+      await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
+      player.result = questResult(player, run.rules);
+      await page.reload();
+      await gradeCard.getByText("最終グループ", { exact: true }).waitFor();
+      assert.equal(await gradeCard.getByText(/暫定評価/).count(), 0);
+      assert.equal(await gradeCard.getByText(/次は/).count(), 0);
       run.rules = rules;
+      player = createPlayer({ used: 14, rescueUsed: true });
+      await page.reload();
+      await gradeCard.getByText(/中間への補填を適用しています/).waitFor();
+      assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "中間");
+      await page.getByText("0%", { exact: true }).waitFor();
+      await gradeCard.getByText("最終グループは開催終了後に確定します。", { exact: true }).waitFor();
+      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0);
+      player = createPlayer({ tileId: "s3-20", used: 1, normalGranted: 3 });
+      await page.reload();
       await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
       dropResponse = true;
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();

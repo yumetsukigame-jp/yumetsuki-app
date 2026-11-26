@@ -110,3 +110,16 @@
 .meterKey span:nth-child(2)::before { background:#e5b751; }
 .scoreChange { color:#175584; }
 @media (prefers-reduced-motion:reduce) { .dieCube { animation:none; } }
+
+.gradeCard { padding: 16px; border: 1px solid #b89554; border-radius: 16px; color: #fff3db; background: radial-gradient(ellipse at top,#253e66,#111c35 80%); }
+.gradeCard > p { margin: 0 0 6px; }
+.gradeTitle { display:block; font-size:clamp(1.65rem,6vw,2.4rem); color:#ffe09a; line-height:1.25; }
+.gradeTrack { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; list-style:none; padding:0; margin:12px 0; }
+.gradeTrack li { padding:6px 2px; text-align:center; border:1px solid #708398; border-radius:8px; font-weight:650; color:#ecedf2; }
+.gradeTrack li[data-cleared="true"] { color:#d6bd8a; }
+.gradeTrack [aria-current="step"] { color:#1e2940; background:#ffe09a; border-color:#ffe09a; box-shadow:0 0 16px #ffda8766; }
+.gradeGoal, .gradeForecast { margin-top:10px; }
+.gradeGoal strong, .gradeForecast strong { color:#ffe09a; }
+.gradeCard small { display:block; color:#d9e5f5; }
+.gradeGoal ul { padding-left:0; margin:4px 0; list-style:none; }
+.gradeCard summary { cursor:pointer; padding:8px 0; }

@@ -10,7 +10,7 @@ export type QuestView = {
   reason?: string | null;
   dueDice?: number;
   serverNow: number;
-  forecast?: { low: number; median: number; high: number; policy: string; samples: number } | null;
+  forecast?: { low: number; median: number; high: number; policy: string; samples: number; groups?: Record<keyof typeof questGroups, number> } | null;
 };
 export type QuestRankingData = {
   items: QuestProgress[]; own: QuestProgress | null; nextCursor: string | null;

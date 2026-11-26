@@ -40,16 +40,25 @@ export function simulateQuest(rules: QuestRules, trials = 20000, policy: QuestSi
 }
 export function forecastQuest(initial: QuestState, rules: QuestRules, totalTurns: number, seed = 7) {
   const random = questRandom(seed), scores: number[] = [];
-  for (let i = 0; i < 256; i++) {
-    let state = structuredClone(initial);
+  const groups = { lower: 0, middle: 0, upper: 0, top: 0 };
+  const resolveForecast = (state: QuestState) => {
     state = resolve(state, rules, random, "mixed", true);
+    if (rules.rescue.enabled && !state.rescueUsed && state.rescueCredits > 0 &&
+        state.used >= rules.rescue.fromTurn && state.score < rules.rescue.belowScore) {
+      state = advanceQuest(state, "rescue", rules, undefined, undefined, false);
+    }
+    return state;
+  };
+  for (let i = 0; i < 256; i++) {
+    let state = resolveForecast(structuredClone(initial));
     while (state.used < totalTurns && questTile(state.tileId).kind !== "finish") {
       state = advanceQuest(state, "roll", rules, 1 + Math.floor(random() * 6), undefined, false);
-      state = resolve(state, rules, random, "mixed", true);
+      state = resolveForecast(state);
     }
     scores.push(state.score);
+    groups[questResult(state, rules).group]++;
   }
   scores.sort((a, b) => a - b);
-  return { low: scores[25], median: scores[128], high: scores[230], samples: 256,
-    policy: "未選択の分岐は各50%、抜け道は使用。未付与の救済は含まず、評価補填は達成率に加算しません。" };
+  return { low: scores[25], median: scores[128], high: scores[230], samples: scores.length, groups,
+    policy: "未選択の分岐は各50%、抜け道は使用。付与済みの救済は利用条件成立時に使用し、未付与分は含みません。評価補填は達成率に加算しません。" };
 }

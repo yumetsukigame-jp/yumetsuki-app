@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const { rules } = require("./quest-fixtures.cjs");
 const { QUEST_BOARD, QUEST_TILES, initialQuestState, advanceQuest, questResult, updateQuestScore,
-  releasedQuestDice, questReleaseKeys, questPercent } = require("../lib/quest/engine");
+  releasedQuestDice, questReleaseKeys, questPercent, questGoalDistance } = require("../lib/quest/engine");
 const { simulateQuest, forecastQuest } = require("../lib/quest/simulation");
 const { validateQuestDraft } = require("../lib/quest/config");
 const state = (overrides = {}) => ({ ...initialQuestState(), ...overrides });
@@ -185,4 +185,42 @@ test("99-turn schedules release all slots and complete simulation", () => {
   assert.equal(releasedQuestDice(extended, 1, 120, 100), 99);
   const report = simulateQuest(extended, 100);
   assert.equal(Object.values(report.groups).reduce((sum, count) => sum + count, 0), 100);
+});
+
+test("forecast counts all groups and includes an already activated rescue", () => {
+  const forecast = forecastQuest(state({ rescueUsed: true }), rules, 0);
+  assert.deepEqual(forecast.groups, { lower: 0, middle: forecast.samples, upper: 0, top: 0 });
+  const full = forecastQuest(state(), rules, 14);
+  assert.equal(Object.values(full.groups).reduce((sum, value) => sum + value, 0), full.samples);
+});
+
+test("forecast uses only granted rescue when eligible, without changing actual points or state", () => {
+  const initial = state({ used: 14, rescueCredits: 1 });
+  const original = structuredClone(initial);
+  const forecast = forecastQuest(initial, rules, 14);
+  assert.equal(forecast.groups.middle, forecast.samples);
+  assert.equal(forecast.median, 0);
+  assert.deepEqual(initial, original);
+  assert.equal(forecastQuest(state({ used: 14 }), rules, 14).groups.lower, forecast.samples);
+  assert.equal(forecastQuest(state({ used: 11, rescueCredits: 1 }), rules, 11).groups.lower, forecast.samples);
+  const later = forecastQuest(state({ used: 11, rescueCredits: 1 }), rules, 12);
+  assert.equal(later.groups.middle, later.samples);
+  const disabled = forecastQuest(initial, { ...rules, rescue: { ...rules.rescue, enabled: false } }, 14);
+  assert.equal(disabled.groups.lower, disabled.samples);
+});
+
+test("goal distance respects gates, board versions, chosen branches and offered shortcuts", () => {
+  const v2 = rules.boardVersion, v3 = "quest-board-v3";
+  assert.equal(questGoalDistance(state({ tileId: "s4-08" }), v3), 0);
+  assert.equal(questGoalDistance(state({ tileId: "s4-00" }), v3), 8);
+  assert.equal(questGoalDistance(state({ tileId: "s3-20" }), v3), 9);
+  const fork = state({ tileId: "s3-05", pending: { kind: "branch", steps: 0 } });
+  assert.equal(questGoalDistance(fork, v3), 9);
+  assert.equal(questGoalDistance(fork, v2), 24);
+  assert.equal(questGoalDistance({ ...fork, branch: "bridge", pending: null }, v3), 24);
+  assert.equal(questGoalDistance(state({ tileId: "s3-loop-05", branch: "flower" }), v3), 10);
+  assert.equal(questGoalDistance(state({ tileId: "s3-loop-05", branch: "flower" }), v2), 23);
+  const shortcut = state({ tileId: "s1-07", pending: { kind: "shortcut", steps: 0 } });
+  assert.equal(questGoalDistance(shortcut, v3), 14);
+  assert.ok(questGoalDistance({ ...shortcut, pending: null }, v3) > 14);
 });
