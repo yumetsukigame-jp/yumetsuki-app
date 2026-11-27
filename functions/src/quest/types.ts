@@ -3,6 +3,7 @@ export type QuestGroup = "top" | "upper" | "middle" | "lower";
 export type QuestRules = {
   boardVersion: "quest-board-v2" | "quest-board-v3";
   maxTurns: number;
+  psaLimit?: number;
   stepStarPoints: number;
   levelPoints: number;
   levelScore: number;
@@ -32,6 +33,10 @@ export type QuestPending = { kind: "branch"; steps: number } | { kind: "shortcut
 export type QuestStep = { from: string; to: string; kind: "walk" | "return" | "warp" | "stage" };
 export type QuestTrace = { steps: QuestStep[]; rewards: { label: string; points: number; tileId: string }[] };
 export type QuestState = {
+  psaFragments?: number;
+  psaCollectedTiles?: string[];
+  psaReserved?: boolean;
+  psaTicketIssued?: boolean;
   visitedPaths?: QuestStep[];
   lastTrace?: QuestTrace;
   tileId: string;
@@ -64,6 +69,7 @@ export type QuestDraft = {
 export type QuestPublicRun = Omit<QuestDraft, "xAccountList" | "accessCode"> & {
   id: string; version: number; state: "draft" | "published" | "settling" | "archived" | "deleting";
   adminReleased?: number;
+  psaRemaining?: number;
   summary?: QuestSummary;
 };
 export type QuestPlayer = QuestState & {

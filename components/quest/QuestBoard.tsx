@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useId, useState, type ReactNode } from "react";
 import { questBoard, questTile } from "@/functions/src/quest/engine";
+import { isQuestPsaTile } from "@/functions/src/quest/psa";
 import type { QuestPlayer, QuestRules, QuestStep } from "@/functions/src/quest/types";
 import styles from "./quest.module.css";
 
@@ -15,8 +16,8 @@ function edge(from: { x: number; y: number }, to: { x: number; y: number }) {
   const length = Math.hypot(dx, dy);
   return { x1: from.x, y1: from.y * 1.5, x2: to.x - dx / length * 6, y2: to.y * 1.5 - dy / length * 6 };
 }
-export default function QuestBoard({ player, version, frames, overlay, children }: {
-  player: QuestPlayer | null; version: QuestRules["boardVersion"]; frames?: QuestStep[];
+export default function QuestBoard({ player, version, frames, overlay, psaAvailable, children }: {
+  player: QuestPlayer | null; version: QuestRules["boardVersion"]; frames?: QuestStep[]; psaAvailable?: boolean;
   overlay?: { title: string; kind: "dice" | "stage" | "reward"; detail?: string } | null; children?: ReactNode;
 }) {
   const board = questBoard(version);
@@ -69,11 +70,13 @@ export default function QuestBoard({ player, version, frames, overlay, children 
       </svg>
       {stage.tiles.map(tile => {
         const art = ["star", "return", "starflower"].includes(tile.kind) ? tile.kind : "normal";
-        const label = `${kindNames[tile.kind] ?? tile.kind}${visited.has(tile.id) ? "、通過済み" : ""}`;
+        const fragment = psaAvailable && isQuestPsaTile(tile.id) && !player?.psaCollectedTiles?.includes(tile.id);
+        const label = `${kindNames[tile.kind] ?? tile.kind}${visited.has(tile.id) ? "、通過済み" : ""}${fragment ? "、PSAのかけら" : ""}`;
         return <button key={tile.id} type="button" className={styles.tile} data-kind={tile.kind} data-visited={visited.has(tile.id)} data-active={frame?.to === tile.id}
           style={{ left: `${tile.x}%`, top: `${tile.y}%` }} title={label} aria-label={label}
           aria-current={position === tile.id ? "location" : undefined} onClick={() => setSelected(tile.id)}>
           <Image src={`/quest/tile-${art}.png`} alt="" width={100} height={100} />
+          {fragment && <Image className={styles.fragmentBadge} src="/quest/psa-fragment.png" alt="" width={28} height={28} />}
           {(tile.kind === "gate" || tile.kind === "fork" || tile.kind === "finish" || tile.kind === "loop-exit") &&
             <span>{tile.kind === "fork" ? "分岐" : tile.kind === "finish" ? "奥" : tile.kind === "loop-exit" ? "出口" : "扉"}</span>}
         </button>;
@@ -94,6 +97,7 @@ export default function QuestBoard({ player, version, frames, overlay, children 
     {selectedTile && <p className={styles.small}>
 {kindNames[selectedTile.kind] ?? selectedTile.kind}
       {selectedTile.effect?.starPoints ? ` · 止まると星ポイント＋${selectedTile.effect.starPoints}` : ""}
+      {psaAvailable && isQuestPsaTile(selectedTile.id) && !player?.psaCollectedTiles?.includes(selectedTile.id) ? " · 止まるとPSAのかけら＋１（このマスで１回限り）" : ""}
       {visited.has(selectedTile.id) ? " · 通過済み" : ""}</p>}
   </section>;
 }

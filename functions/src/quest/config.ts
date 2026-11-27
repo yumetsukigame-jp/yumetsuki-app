@@ -36,7 +36,7 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
   const accessCode = questText(d.accessCode, "限定コード", 100, true);
   if ((!d.publicFlags.includes("public") || d.publicFlags.includes("limited")) && accessCode.length < 8) throw new QuestInputError("非公開・限定公開には8文字以上の専用コードが必要です");
   const r = questObject(d.rules, ["boardVersion", "maxTurns", "stepStarPoints", "levelPoints", "levelScore", "percentMax",
-    "percentDecimals", "middleMin", "upperMin", "topMinProgress", "topMinLevel", "distribution", "rescue"]);
+    "percentDecimals", "middleMin", "upperMin", "topMinProgress", "topMinLevel", "distribution", "rescue", "psaLimit"]);
   if (r.boardVersion !== "quest-board-v2" && r.boardVersion !== "quest-board-v3") throw new QuestInputError("盤面を指定してください");
   const maxTurns = questInteger(r.maxTurns, "サイコロの使用上限", 1, 99);
   const distribution = questObject(r.distribution, ["mode", "releaseAt", "dailyStartHourJst"]);
@@ -53,6 +53,7 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
       rescue.simulationRate < 0 || rescue.simulationRate > 1) throw new QuestInputError("試算時の救済保有率は0〜1で指定してください");
   const rules: QuestRules = {
     boardVersion: r.boardVersion, maxTurns,
+    psaLimit: r.psaLimit === undefined ? 0 : questInteger(r.psaLimit, "PSAチケット上限", 0, 100000),
     stepStarPoints: questInteger(r.stepStarPoints, "1歩の星ポイント", 0, 100),
     levelPoints: questInteger(r.levelPoints, "レベル間隔", 1, 10000),
     levelScore: questInteger(r.levelScore, "レベル加点", 0, 100),

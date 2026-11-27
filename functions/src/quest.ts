@@ -5,6 +5,8 @@ import { FieldPath, getFirestore } from "firebase-admin/firestore";
 import { getYesterdayJST6 } from "./common/date";
 import { matchesXAccountRow } from "./common/normalize";
 import { advanceQuest, initialQuestState, questReleaseKeys, questResult, releasedQuestDice, QuestRuleError } from "./quest/engine";
+import { grantNanikaRightPlan } from "./nanikaGachaRights";
+import { applyQuestPsa } from "./quest/psa";
 import { forecastQuest, simulateQuest } from "./quest/simulation";
 import { questInteger, questObject, questText, validateQuestDraft, QuestInputError } from "./quest/config";
 import { QUEST_MENU_MODES, questMenuMode } from "./quest/menu";
@@ -20,6 +22,7 @@ type Run = Omit<QuestDraft, "accessCode"> & {
   version: number; state: QuestPublicRun["state"]; codeHash: string;
   simulation?: unknown; simulatedVersion?: number; confirmations?: string;
   adminReleased?: number;
+  psaReservedCount?: number;
   closedAt?: number; cursor?: string; summary?: QuestSummary;
 };
 const fail = (message: string, code: functions.https.FunctionsErrorCode = "failed-precondition"): never => {
@@ -59,6 +62,7 @@ function publicRun(snapshot: Snap): QuestPublicRun {
   return { id: snapshot.id, title: run.title, description: run.description, thumbnail: run.thumbnail,
     startsAt: run.startsAt, endsAt: run.endsAt, publicFlags: run.publicFlags, rules: run.rules,
     version: run.version, state: run.state, adminReleased: run.adminReleased ?? 0,
+    psaRemaining: Math.max(0, (run.rules.psaLimit ?? 0) - (run.psaReservedCount ?? 0)),
     ...(run.state === "archived" && run.summary ? { summary: run.summary } : {}) };
 }
 function normalReleases(run: Run, player: QuestPlayer, now: number) {
@@ -229,6 +233,18 @@ export const actQuest = callable(async (raw, context) => {
     } else {
       if (d.action === "roll" && p.used >= p.normalGranted) fail("配布済みのサイコロがありません");
       next = { ...p, ...advanceQuest(p, d.action as QuestAction, run.rules, die, flowerDraw) };
+      if (run.rules.psaLimit) {
+        const taken = run.psaReservedCount ?? 0;
+        const prize = applyQuestPsa(p, next, run.rules.psaLimit - taken);
+        next.psaFragments = prize.fragments;
+        if (prize.collected) next.psaCollectedTiles = [...(p.psaCollectedTiles ?? []), next.tileId];
+        if (prize.newlyReserved || p.psaReserved) next.psaReserved = prize.reserved;
+        if (prize.newlyReserved) tx.update(ref, { psaReservedCount: taken + 1 });
+        // Reopen a provisional slot only before the run-wide cutoff has been reached.
+        if (p.psaReserved && !prize.reserved && taken > 0 && taken < run.rules.psaLimit) {
+          tx.update(ref, { psaReservedCount: taken - 1 });
+        }
+      }
     }
     for (const release of releases) tx.create(ref.collection("grants").doc(`${release}_${hash(actor)}`),
       { uid: actor, kind: "normal", count: 1, source: release, at: now });
@@ -502,13 +518,19 @@ async function finalizePage(ref: FirebaseFirestore.DocumentReference, allowEarly
     if (run.cursor) query = query.startAfter(run.cursor);
     const page = await tx.get(query);
     const summary = structuredClone(run.summary ?? newSummary());
+    const grants = new Map(await Promise.all(page.docs
+      .filter(doc => (run.rules.psaLimit ?? 0) > 0 && doc.get("psaReserved") === true && doc.get("psaTicketIssued") !== true &&
+        !(doc.get("reachedStages") as number[]).includes(4))
+      .map(async doc => [doc.id, await grantNanikaRightPlan(tx, doc.id, "psa")] as const)));
     for (const snapshot of page.docs) {
       const player = snapshot.data() as QuestPlayer;
       const result = questResult(player, run.rules);
       summary.total++; summary.groups[result.group]++;
       if (player.used === run.rules.maxTurns) { summary.completed++; summary.completedGroups[result.group]++; }
       for (const stage of player.reachedStages) summary.stages[String(stage)]++;
-      tx.update(snapshot.ref, { result });
+      const grant = grants.get(snapshot.id);
+      if (grant) grant();
+      tx.update(snapshot.ref, { result, ...(grant ? { psaTicketIssued: true } : {}) });
     }
     const complete = page.size < 100;
     tx.update(ref, { state: complete ? "archived" : "settling", closedAt: run.closedAt ?? Date.now(),

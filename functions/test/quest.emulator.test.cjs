@@ -523,3 +523,78 @@ test("client Rules deny all Quest data to participants and admins, including nes
     await assert.rejects(setDoc(doc(store, path), { score: 999 }), { code: "permission-denied" });
   }
 });
+
+test("PSA last slot is atomic and fallback rewards settle once", async () => {
+  const random = mock.method(require("node:crypto"), "randomInt", (_min, max) => max === 7 ? 2 : 1);
+  try {
+    const ref = await run({ rules: { ...rules, psaLimit: 2 } });
+    const users = await Promise.all([join(ref), join(ref), join(ref)]);
+    await Promise.all(users.map(uid => seed(ref, uid, { psaFragments: 4, normalGranted: 3 })));
+    const requests = users.map(() => randomUUID());
+    const results = await Promise.all(users.map((uid, index) => action(ref, uid, 0, "roll", requests[index])));
+    const reserved = users.filter((_uid, index) => results[index].player.psaReserved);
+    assert.equal(reserved.length, 2);
+    assert.equal((await ref.get()).get("psaReservedCount"), 2);
+    const replay = await Promise.all(users.map((uid, index) => action(ref, uid, 0, "roll", requests[index])));
+    assert.ok(replay.every(result => result.replay));
+    assert.equal((await ref.get()).get("psaReservedCount"), 2);
+    const tower = await seed(ref, reserved[0], { tileId: "s3-20" });
+    const moved = await action(ref, reserved[0], tower.version);
+    assert.equal(moved.player.psaReserved, false);
+    assert.equal(moved.player.psaFragments, 0);
+    assert.equal((await ref.get()).get("psaReservedCount"), 2);
+    const loser = users.find(uid => !reserved.includes(uid));
+    const retry = await seed(ref, loser, { tileId: "s1-00" });
+    const closed = await action(ref, loser, retry.version);
+    assert.equal(closed.player.psaFragments, 4);
+    assert.notEqual(closed.player.psaReserved, true);
+    assert.equal((await call("getQuest", {}, loser)).run.psaRemaining, 0);
+    await db.doc(`nanikaGachaRights/${reserved[1]}`).set({ uid: reserved[1], psa: 2, points: 7 });
+    await Promise.all(Array.from({ length: 2 }, () => call("adminFinalizeQuest", { runId: ref.id, confirmed: true })));
+    await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
+    assert.equal((await db.doc(`nanikaGachaRights/${reserved[0]}`).get()).exists, false);
+    const rights = await db.doc(`nanikaGachaRights/${reserved[1]}`).get();
+    assert.equal(rights.get("psa"), 3);
+    assert.equal(rights.get("points"), 7);
+    assert.equal((await ref.collection("players").doc(reserved[1]).get()).get("psaTicketIssued"), true);
+    assert.equal((await db.doc(`nanikaGachaRights/${loser}`).get()).exists, false);
+  } finally { random.mock.restore(); }
+});
+
+test("PSA slots released before the cap remain available, and tiles are collectible only once", async () => {
+  const random = mock.method(require("node:crypto"), "randomInt", (_min, max) => max === 7 ? 2 : 1);
+  try {
+    const ref = await run({ rules: { ...rules, psaLimit: 2 } });
+    const first = await join(ref), second = await join(ref);
+    await seed(ref, first, { psaFragments: 4, normalGranted: 3 });
+    const reserved = await action(ref, first, 0);
+    assert.equal(reserved.player.psaReserved, true);
+    assert.equal((await ref.get()).get("psaReservedCount"), 1);
+    const tower = await seed(ref, first, { tileId: "s3-20" });
+    await action(ref, first, tower.version);
+    assert.equal((await ref.get()).get("psaReservedCount"), 0);
+    await seed(ref, second, { normalGranted: 3 });
+    const fragment = await action(ref, second, 0);
+    assert.equal(fragment.player.psaFragments, 1);
+    const revisit = await seed(ref, second, { tileId: "s1-00" });
+    const same = await action(ref, second, revisit.version);
+    assert.equal(same.player.psaFragments, 1);
+    assert.deepEqual(same.player.psaCollectedTiles, ["s1-02"]);
+  } finally { random.mock.restore(); }
+});
+
+test("PSA disabled and legacy runs neither collect fragments nor issue tickets", async () => {
+  const random = mock.method(require("node:crypto"), "randomInt", (_min, max) => max === 7 ? 2 : 1);
+  try {
+    for (const configured of [rules, { ...rules, psaLimit: 0 }]) {
+      const ref = await run({ rules: configured }), uid = await join(ref);
+      await seed(ref, uid, { psaFragments: 4, normalGranted: 3 });
+      const moved = await action(ref, uid, 0);
+      assert.equal(moved.player.psaFragments, 4);
+      assert.notEqual(moved.player.psaReserved, true);
+      await seed(ref, uid, { psaReserved: true });
+      await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
+      assert.equal((await db.doc(`nanikaGachaRights/${uid}`).get()).exists, false);
+    }
+  } finally { random.mock.restore(); }
+});

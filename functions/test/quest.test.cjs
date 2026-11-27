@@ -131,6 +131,11 @@ test("invalid draft configuration and sample omissions cannot become a live run"
   const draft = { title: "Test", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg",
     startsAt: 1000, endsAt: 2000, publicFlags: ["public"], xAccountList: [], accessCode: "", rules };
   assert.equal(validateQuestDraft(draft).rules.maxTurns, 14);
+  assert.equal(validateQuestDraft(draft).rules.psaLimit, 0);
+  assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, psaLimit: 2 } }).rules.psaLimit, 2);
+  for (const psaLimit of [-1, 0.5, 100001]) {
+    assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, psaLimit } }));
+  }
   assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, maxTurns: 99 } }).rules.maxTurns, 99);
   assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, maxTurns: 100 } }));
   assert.throws(() => validateQuestDraft({ ...draft, publicFlags: ["limited"], accessCode: "short" }));
@@ -223,4 +228,44 @@ test("goal distance respects gates, board versions, chosen branches and offered 
   const shortcut = state({ tileId: "s1-07", pending: { kind: "shortcut", steps: 0 } });
   assert.equal(questGoalDistance(shortcut, v3), 14);
   assert.ok(questGoalDistance({ ...shortcut, pending: null }, v3) > 14);
+});
+
+test("PSA fragments reserve the fifth item only if a slot remains and never repeat the same tile", () => {
+  const { applyQuestPsa, previewQuestRoll } = require("../lib/quest/psa");
+  const psaRules = { ...rules, psaLimit: 1 };
+  const p = { ...initialQuestState(), psaFragments: 4 };
+  const next = advanceQuest(p, "roll", rules, 2);
+  assert.equal(applyQuestPsa(p, next, 1).newlyReserved, true);
+  assert.equal(applyQuestPsa(p, next, 0).fragments, 4);
+  assert.equal(applyQuestPsa({ ...p, psaCollectedTiles: [next.tileId] }, next, 1).collected, false);
+  assert.ok(previewQuestRoll(p, psaRules, 2, 1).events.includes("PSAチケット枠を確保"));
+  assert.ok(!previewQuestRoll(p, psaRules, 2, 0).events.some(line => line.includes("PSA")));
+  assert.ok(!previewQuestRoll(p, rules, 2, 1).events.some(line => line.includes("PSA")));
+});
+
+test("the tower clears incomplete PSA fragments and revokes reserved tickets", () => {
+  const { applyQuestPsa } = require("../lib/quest/psa");
+  const p = { ...initialQuestState(), tileId: "s3-20", psaFragments: 3 };
+  const next = advanceQuest(p, "roll", rules, 1);
+  assert.equal(next.tileId, "s4-00");
+  assert.equal(applyQuestPsa(p, next, 1).lost, 3);
+  const reserved = applyQuestPsa({ ...p, psaFragments: 0, psaReserved: true }, next, 0);
+  assert.equal(reserved.reserved, false);
+  assert.equal(reserved.lost, 5);
+});
+
+test("PSA roll previews match one-time rewards and tower loss without modifying saved progress", () => {
+  const { previewQuestRoll, applyQuestPsa } = require("../lib/quest/psa");
+  const psaRules = { ...rules, psaLimit: 2 };
+  const p = state({ tileId: "s3-11", effects: [] });
+  const before = structuredClone(p);
+  const preview = previewQuestRoll(p, psaRules, 1, 2);
+  assert.ok(preview.events.includes("戻りの魔法陣"));
+  assert.equal(preview.starPoints, advanceQuest(p, "roll", psaRules, 1).starPoints - p.starPoints);
+  assert.deepEqual(p, before);
+  const tower = state({ tileId: "s3-20", psaReserved: true });
+  assert.ok(previewQuestRoll(tower, psaRules, 1, 0).events.includes("PSAチケット枠が失効"));
+  const returned = state({ reachedStages: [1, 2, 3, 4], psaFragments: 4 });
+  const next = advanceQuest(returned, "roll", psaRules, 2);
+  assert.equal(applyQuestPsa(returned, next, 2).collected, false);
 });

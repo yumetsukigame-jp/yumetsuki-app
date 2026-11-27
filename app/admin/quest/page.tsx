@@ -55,7 +55,7 @@ function numberValue(value: string, label: string) {
   return Number(value);
 }
 function newForm() {
-  return { maxTurns: "14", title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
+  return { maxTurns: "14", psaLimit: "0", title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
     flags: ["public"] as QuestFlag[], xText: "", accessCode: "",
     numbers: Object.fromEntries(Object.entries(recommendedNumbers).map(([key, value]) => [key, String(value)])) as Record<Numeric, string>,
     distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(99).fill(""), dailyHour: "",
@@ -65,7 +65,7 @@ function newForm() {
 type Form = ReturnType<typeof newForm>;
 function fromRun(run: AdminRun): Form {
   const r = run.rules;
-  return { maxTurns: String(r.maxTurns), title: run.title, description: run.description, thumbnail: run.thumbnail,
+  return { maxTurns: String(r.maxTurns), psaLimit: String(r.psaLimit ?? 0), title: run.title, description: run.description, thumbnail: run.thumbnail,
     startsAt: localJst(run.startsAt), endsAt: localJst(run.endsAt), flags: run.publicFlags,
     xText: run.xAccountList.join("\n"), accessCode: "",
     numbers: Object.fromEntries(Object.keys(numericFields).map(key => [key, String(r[key as Numeric])])) as Record<Numeric, string>,
@@ -95,7 +95,7 @@ function toDraft(form: Form, boardVersion: QuestRules["boardVersion"]): QuestDra
   return { title: form.title, description: form.description, thumbnail: form.thumbnail,
     startsAt: parseJstDateTime(form.startsAt).getTime(), endsAt: parseJstDateTime(form.endsAt).getTime(),
     publicFlags: form.flags, xAccountList: form.xText.split(/\r?\n/).map(line => line.trim()).filter(Boolean), accessCode: form.accessCode,
-    rules: { boardVersion, maxTurns, ...numbers, distribution, rescue } };
+    rules: { boardVersion, maxTurns, psaLimit: numberValue(form.psaLimit, "PSAチケット上限"), ...numbers, distribution, rescue } };
 }
 export default function QuestAdminPage() {
   const [form, setForm] = useState(newForm);
@@ -291,6 +291,11 @@ export default function QuestAdminPage() {
           value={form.accessCode} onChange={event => change("accessCode", event.target.value)} /></label>}
         {form.flags.includes("x_account_match") && <label>対象Xアカウント一覧（１行１アカウント、@を含む）<textarea required value={form.xText} onChange={event => change("xText", event.target.value)} /></label>}
         <h3>通常サイコロの配布（救済とは別）</h3>
+        <label>何かのPSAガチャ チケット上限（０で無効）
+          <input type="number" min={0} max={100000} required value={form.psaLimit}
+            onChange={event => change("psaLimit", event.target.value)} />
+        </label>
+        <p className={styles.small}>かけら５個で１人１枠。第４ステージ到達で失効します。枠が上限に達した後は、失効してもかけらの出現を再開しません。有効な枠だけを開催確定時にPSAガチャ権利として付与します。</p>
         <label>サイコロの使用上限<input type="number" min={1} max={99} required value={form.maxTurns}
           onChange={event => change("maxTurns",event.target.value)} /></label>
         <label>配布方式<select required value={form.distribution} onChange={event => change("distribution", event.target.value as Form["distribution"])}>

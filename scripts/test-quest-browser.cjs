@@ -5,6 +5,7 @@ const path = require("node:path");
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
 const { initialQuestState, advanceQuest, updateQuestScore, questResult, QUEST_BOARD } = require("../functions/lib/quest/engine");
 const { forecastQuest } = require("../functions/lib/quest/simulation");
+const { applyQuestPsa } = require("../functions/lib/quest/psa");
 const { rules } = require("../functions/test/quest-fixtures.cjs");
 const base = process.env.QUEST_TEST_URL || "http://127.0.0.1:3216";
 if (new URL(base).hostname !== "127.0.0.1") throw Error("Only loopback mock UI checks are allowed");
@@ -55,6 +56,7 @@ async function main() {
       let runDeleted = false;
       let questReloadDelay = 0;
       let dueDice = 0;
+      let nextDie = 6, psaReservedCount = 0;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
       function ranking(input) {
         const row = { id: player.publicId, displayName: player.displayName, tileId: player.tileId, score: player.score, used: player.used, level: player.level, rank: 1 };
@@ -90,7 +92,7 @@ async function main() {
           result = menuAccess;
         } else if (action === "getQuest") {
           await new Promise(resolve => setTimeout(resolve, questReloadDelay));
-          result = { run: input.archive ? archive : runDeleted ? null : run, player: runDeleted && !input.archive ? null : player, reason: null,
+          result = { run: input.archive ? archive : runDeleted ? null : { ...run, psaRemaining: Math.max(0, (run.rules.psaLimit ?? 0) - psaReservedCount) }, player: runDeleted && !input.archive ? null : player, reason: null,
             dueDice, serverNow: Date.now(), forecast: forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + dueDice)) };
         }
         else if (action === "listQuestProgress") result = ranking(input);
@@ -104,7 +106,15 @@ async function main() {
           else {
             assert.equal(input.version, player.version);
             player.normalGranted += dueDice; dueDice = 0;
-            player = { ...player, ...advanceQuest(player, input.action, run.rules, input.action === "roll" ? 6 : undefined, 7) };
+            const previous = player;
+            player = { ...player, ...advanceQuest(player, input.action, run.rules, input.action === "roll" ? nextDie : undefined, 7) };
+            if (run.rules.psaLimit) {
+              const prize = applyQuestPsa(previous, player, run.rules.psaLimit - psaReservedCount);
+              player.psaFragments = prize.fragments; player.psaReserved = prize.reserved;
+              if (prize.collected) player.psaCollectedTiles = [...(previous.psaCollectedTiles ?? []), player.tileId];
+              if (prize.newlyReserved) psaReservedCount++;
+              else if (previous.psaReserved && !prize.reserved && psaReservedCount < run.rules.psaLimit) psaReservedCount--;
+            }
             saves.set(input.requestId, player); result = { player, replay: false };
           }
           if (dropResponse) {
@@ -138,6 +148,7 @@ async function main() {
           assert.equal(input.draft.rules.maxTurns, 14);
           assert.equal(input.draft.rules.boardVersion, "quest-board-v3");
           assert.equal(input.draft.rules.middleMin, 52);
+          assert.equal(input.draft.rules.psaLimit, 2);
           adminRuns.splice(0, adminRuns.length, { ...input.draft, id: "draft-quest", version: 1, state: "draft", simulation: null, simulatedVersion: null });
           result = { runId: "draft-quest", version: 1 };
         } else if (action === "adminSimulateQuest") {
@@ -215,6 +226,64 @@ async function main() {
         }
         assert.ok(await page.locator('[aria-label="星務評価"]').isVisible());
       }
+      run.rules = { ...rules, psaLimit: 2 };
+      nextDie = 2;
+      player = createPlayer();
+      await page.reload();
+      const preview = page.locator('[class*="dicePreview"]');
+      const badges = page.locator('[class*="fragmentBadge"]');
+      await preview.getByText("次の出目で起きること", { exact: true }).waitFor();
+      assert.equal(await preview.locator("li").count(), 6);
+      for (const [stage, count] of [[1, 10], [2, 7], [3, 2], [4, 0]]) {
+        await page.getByRole("button", { name: new RegExp(`^${stage} (書斎|回廊|庭|塔)`) }).click();
+        assert.equal(await badges.count(), count, `${name}: PSA fragment placement in stage ${stage}`);
+      }
+      await page.getByRole("button", { name: /^1 書斎/ }).click();
+      await page.locator("button[data-kind]").filter({ has: badges }).first().click();
+      await page.getByText(/止まるとPSAのかけら＋１/).waitFor();
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.locator('[data-overlay="reward"]').getByText("PSAのかけら ＋1", { exact: true }).waitFor();
+      await page.getByText("PSAのかけら 1／5", { exact: true }).waitFor();
+      assert.equal(await badges.count(), 9);
+      await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
+      player = createPlayer({ psaFragments: 4 });
+      await page.reload();
+      await preview.locator("li").nth(1).getByText("PSAチケット枠を確保", { exact: false }).waitFor();
+      dropResponse = true;
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
+      assert.equal(await preview.count(), 0);
+      const reservedRequest = requests.at(-1);
+      await page.reload();
+      await page.getByText("PSAチケット枠を確保済み", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "前回の結果を確認", exact: true }).click();
+      await page.locator('[class*="playFeedback"]').filter({ hasText: "保存済みの結果" }).waitFor();
+      assert.deepEqual(requests.at(-1), reservedRequest);
+      assert.equal(psaReservedCount, 1);
+      assert.equal(await page.locator("[data-overlay]").count(), 0);
+      assert.equal(await badges.count(), 0);
+      player = { ...player, tileId: "s3-20" };
+      updateQuestScore(player, run.rules);
+      await page.reload();
+      await preview.locator("li").nth(1).getByText("PSAチケット枠が失効", { exact: false }).waitFor();
+      await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
+      await page.getByText("第４ステージ到達により、かけら・チケット枠は失効しました。", { exact: true }).waitFor();
+      await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
+      await page.getByRole("button", { name: /^1 書斎/ }).click();
+      assert.equal(await badges.count(), 0);
+      psaReservedCount = 2;
+      player = createPlayer({ psaFragments: 4 });
+      await page.reload();
+      await page.getByText("チケット枠が埋まり、かけらの出現は終了しました。", { exact: true }).waitFor();
+      assert.equal(await badges.count(), 0);
+      assert.ok(!(await preview.locator("li").allTextContents()).some(text => text.includes("PSA")));
+      player = createPlayer({ psaReserved: true, psaTicketIssued: true });
+      player.result = questResult(player, run.rules);
+      run.state = "archived";
+      await page.reload();
+      await page.getByRole("link", { name: "何かのPSAガチャへ", exact: true }).waitFor();
+      assert.equal(await preview.count(), 0);
+      run.rules = rules; run.state = "published"; nextDie = 6; psaReservedCount = 0;
       const die = page.locator('[class*="diceResult"] > span[aria-hidden="true"]');
       const board = page.locator('[class*="playArea"] [class*="board"]');
       for (const [width, height] of [[360, 640], [390, 740], [1280, 900]]) {
@@ -358,6 +427,7 @@ async function main() {
       assert.equal(await page.locator('img').evaluateAll(images => images.filter(image => decodeURIComponent(image.src).includes("/quest/")).length), 8);
       await page.goto(`${base}/admin/quest`);
       await page.getByRole("heading", { name: "新規開催の設定" }).waitFor();
+      assert.equal(await page.getByLabel(/何かのPSAガチャ チケット上限/).inputValue(), "0");
       await page.locator("summary").filter({ hasText: /^トップメニューの公開範囲$/ }).click();
       const menuSelect = page.getByRole("combobox", { name: "メニューのリンクを利用できる対象" });
       await menuSelect.selectOption("subscriber");
@@ -382,6 +452,7 @@ async function main() {
       await page.getByLabel("配布方式").selectOption("");
       assert.equal(await page.getByRole("button", { name: "確定した設定で開催を公開する" }).count(), 0);
       await page.getByLabel("開催名", { exact: true }).fill("ローカル検証のみ");
+      await page.getByLabel(/何かのPSAガチャ チケット上限/).fill("2");
       await page.getByLabel("開始日時（日本時間）").fill("2026-11-23T12:00");
       await page.getByLabel("終了日時（日本時間）").fill("2026-12-10T12:00");
       await page.getByLabel("配布方式").selectOption("admin");
@@ -393,11 +464,13 @@ async function main() {
       await publish.waitFor();
       await page.getByRole("button", { name: "新しい開催を作る", exact: true }).click();
       assert.equal(await page.getByLabel("開催名", { exact: true }).inputValue(), "");
+      assert.equal(await page.getByLabel(/何かのPSAガチャ チケット上限/).inputValue(), "0");
       assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "12");
       assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "68");
       assert.equal(await publish.count(), 0);
       await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
       await publish.waitFor();
+      assert.equal(await page.getByLabel(/何かのPSAガチャ チケット上限/).inputValue(), "2");
       assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "15");
       assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "64");
       assert.equal(await publish.isEnabled(), false);

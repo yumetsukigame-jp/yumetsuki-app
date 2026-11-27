@@ -8,6 +8,7 @@ import { auth } from "@/firebase";
 import { formatJstDateTime } from "@/app/lib/dateTime";
 import { questCall, questError, questFlags, questGroups, type QuestView } from "@/app/lib/quest";
 import { questBoard, questGoalDistance, questPercent, questResult, questTile } from "@/functions/src/quest/engine";
+import { previewQuestRoll, PSA_FRAGMENT_TARGET } from "@/functions/src/quest/psa";
 import type { QuestAction, QuestPlayer, QuestStep } from "@/functions/src/quest/types";
 import QuestBoard from "./QuestBoard";
 import QuestRanking from "./QuestRanking";
@@ -153,18 +154,25 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         const levelScore = (result.player.level - player.level) * run.rules.levelScore;
         const signed = (value: number) => value > 0 ? "+" + value : String(value);
         setScoreChange([moveScore && `到達 ${signed(moveScore)}点`, levelScore && `レベル ${signed(levelScore)}点`].filter(Boolean).join(" ／ "));
+        const fragmentDelta = (result.player.psaFragments ?? 0) - (player.psaFragments ?? 0);
+        const psaMessage = result.player.psaReserved && !player.psaReserved ? "PSAチケット枠を確保！" :
+          player.psaReserved && !result.player.psaReserved ? "第４ステージ到達 · PSAチケット枠が失効" :
+          fragmentDelta > 0 ? "PSAのかけら ＋1" : fragmentDelta < 0 ? "PSAのかけらが消滅しました" : "";
         const rewardText = [...sums].map(([label, points]) => `${label} ＋${points}`).join(" ／ ");
-        if (earned > 0) setOverlay({ title: `星ポイント ＋${earned}`, kind: "reward", detail: rewardText });
+        if (earned > 0 || psaMessage) setOverlay({
+          title: psaMessage || `星ポイント ＋${earned}`, kind: "reward",
+          detail: psaMessage && earned > 0 ? `星ポイント ＋${earned} · ${rewardText}` : rewardText,
+        });
         const beforeGroup = questResult(player, run.rules).group;
         const afterGroup = questResult(result.player, run.rules).group;
         const promoted = rankOrder.indexOf(afterGroup) > rankOrder.indexOf(beforeGroup);
         setFrames([]);
         setView(previous => previous?.run?.id === run.id ? { ...previous, player: result.player, dueDice: 0, forecast: null } : previous);
         clearRequest(request, actor);
-        setStatus([`出目 ${result.player.lastDie ?? "—"}`, earned > 0 && `星ポイント ＋${earned} ${rewardText}`, result.player.level > player.level && `Lv.${player.level} → ${result.player.level}`].filter(Boolean).join(" · "));
+        setStatus([`出目 ${result.player.lastDie ?? "—"}`, earned > 0 && `星ポイント ＋${earned} ${rewardText}`, psaMessage, result.player.level > player.level && `Lv.${player.level} → ${result.player.level}`].filter(Boolean).join(" · "));
         await reload();
-        if (current() && (earned > 0 || promoted)) {
-          if (earned > 0) await wait(reduced ? 400 : 1100);
+        if (current() && (earned > 0 || psaMessage || promoted)) {
+          if (earned > 0 || psaMessage) await wait(reduced ? 400 : 1100);
           if (current() && promoted) {
             setOverlay({ kind: "stage", title: `${questGroups[afterGroup]}にランクアップ！`, detail: "現在の星務評価" });
             await wait(reduced ? 400 : 1150);
@@ -199,6 +207,9 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   const forecast = journeyOpen && !busy && !pending ? view?.forecast : null;
   const counts = forecast?.groups;
   const likely = counts ? rankOrder.reduce((best, group) => counts[group] > counts[best] ? group : best) : null;
+  const dicePreview = canRoll && !busy && !pending && player && run
+    ? Array.from({ length: 6 }, (_, index) => previewQuestRoll(player, run.rules, index + 1, run.psaRemaining ?? 0))
+    : null;
   const canRescue = open && player && run.rules.rescue.enabled && !player.rescueUsed && player.rescueCredits > 0 &&
     player.used >= run.rules.rescue.fromTurn && player.score < run.rules.rescue.belowScore;
   return <main className={styles.page}>
@@ -284,10 +295,24 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
             </div>}
           </div>
         <div ref={playArea} className={styles.playArea}>
-          <QuestBoard key={`${run.id}:${boardFocus}`} player={player} version={run.rules.boardVersion} frames={frames} overlay={overlay}>
+          <QuestBoard key={`${run.id}:${boardFocus}`} player={player} version={run.rules.boardVersion} frames={frames} overlay={overlay} psaAvailable={open && (run.psaRemaining ?? 0) > 0 && !player.psaReserved && !player.reachedStages.includes(4)}>
             {error && <p role="alert" className={styles.error}>{error}</p>}
             <p role="status" aria-live="polite" className={styles.playFeedback}>{status}</p>
             {!archiveId && <>
+              {dicePreview && <div className={styles.dicePreview}>
+                <h3>次の出目で起きること</h3>
+                <ol>
+                  {dicePreview.map(({ events, starPoints }, index) =>
+                    <li key={index} data-special={events.length > 0}>
+                      <b>{index + 1}</b>
+                      <span>{events.length ? events.join(" ／ ") : "道を進む"}
+                        <small>{starPoints > 0 ? `星ポイント 合計＋${starPoints}` : "星ポイントなし"}</small>
+                      </span>
+                    </li>)}
+                </ol>
+                <small>出目ごとの目安です。分岐後の結果は選択時に決まります。
+                  {!!run.rules.psaLimit && "PSAの残り枠は他の参加者の操作で変わります。"}</small>
+              </div>}
               <div className={styles.diceControls}>
                 <div className={styles.diceResult} aria-live="polite">
                   <span className={`${styles.dice} ${busy && pending?.action === "roll" && confirmedDie === null ? styles.rolling : ""}`} aria-hidden="true">
@@ -311,6 +336,21 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         </div>
         <section className={styles.panel}>
           <h2>{player.result ? "星務報告書" : "あなたの星務"}</h2>
+          {!!run.rules.psaLimit && <div className={styles.psaPanel}>
+            <Image src="/quest/psa-fragment.png" alt="" width={42} height={42} />
+            <strong>{player.psaTicketIssued ? "何かのPSAガチャ チケット獲得" : player.psaReserved
+              ? "PSAチケット枠を確保済み" : `PSAのかけら ${player.psaFragments ?? 0}／${PSA_FRAGMENT_TARGET}`}</strong>
+            {!player.psaTicketIssued && <div className={styles.fragmentCollection} aria-hidden="true">
+              {Array.from({ length: PSA_FRAGMENT_TARGET }, (_, index) =>
+                <Image key={index} src="/quest/psa-fragment.png" alt="" width={24} height={24}
+                  data-filled={player.psaReserved || index < (player.psaFragments ?? 0)} />)}
+            </div>}
+            {player.psaTicketIssued ? <Link href="/nanika-gacha">何かのPSAガチャへ</Link>
+              : player.psaReserved ? <small>第４ステージに到達せずに開催を終えると、チケットが付与されます。</small>
+              : !player.result && <small>{player.reachedStages.includes(4) ? "第４ステージ到達により、かけら・チケット枠は失効しました。"
+                : !(run.psaRemaining ?? 0) ? "チケット枠が埋まり、かけらの出現は終了しました。"
+                : `チケット残り ${run.psaRemaining}枠 · 第４ステージでかけら・チケット枠は失効`}</small>}
+          </div>}
           <dl className={styles.stats}>
             <div><dt>星務達成率（{player.result ? "確定実績" : "実績"}）</dt><dd>{questPercent(player.score, run.rules)}%</dd></div>
             <div><dt>星ポイント・レベル</dt><dd>Lv.{player.level}</dd><small>{player.starPoints} 星ポイント</small></div>
