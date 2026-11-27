@@ -489,16 +489,15 @@ export const adminSimulateQuest = callable(async (raw, context) => {
 export const adminPublishQuest = callable(async (raw, context) => {
   const actor = await administrator(context), d = questObject(raw, ["runId", "version", "confirmed", "reviewNote"]);
   if (d.confirmed !== true) fail("未確定項目の確認が必要です");
-  const note = questText(d.reviewNote, "配布・救済・境界の確定内容", 2000);
-  if (note.length < 20) fail("配布・救済・評価境界を確定した記録を20文字以上で入力してください");
+  const note = d.reviewNote === undefined ? "" : questText(d.reviewNote, "確認メモ", 2000, true);
   const ref = runs.doc(id(d.runId));
   return db.runTransaction(async tx => {
     const [snapshot, pointer] = await Promise.all([tx.get(ref), tx.get(current)]);
     const run = getRun(snapshot);
     const previous = pointer.get("runId") ? await tx.get(runs.doc(pointer.get("runId"))) : null;
     if (previous?.exists && previous.get("state") !== "archived") fail("現在の開催を確定・アーカイブしてから公開してください");
-    if (run.state !== "draft" || d.version !== run.version || run.simulatedVersion !== run.version ||
-        run.endsAt <= Date.now()) fail("開催設定・期間・最新版の試算を確認してください");
+    if (run.state !== "draft" || d.version !== run.version ||
+        run.endsAt <= Date.now()) fail("開催設定・期間を確認してください");
     tx.update(ref, { state: "published", version: run.version + 1, confirmations: note, publishedBy: actor, publishedAt: Date.now() });
     tx.set(current, { runId: ref.id });
     return { runId: ref.id };

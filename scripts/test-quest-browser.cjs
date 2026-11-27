@@ -158,7 +158,9 @@ async function main() {
           })));
           adminRuns[0].simulatedVersion = 1; result = { reports: adminRuns[0].simulation };
         } else if (action === "adminPublishQuest") {
-          assert.equal(input.confirmed, true); assert.ok(input.reviewNote.length >= 20);
+          assert.equal(input.confirmed, true);
+          assert.deepEqual(Object.keys(input).sort(), ["confirmed", "runId", "version"]);
+          assert.equal(adminRuns[0].simulation, null);
           adminRuns[0].state = "published"; adminRuns[0].version = 2; result = { runId: "draft-quest" };
         } else if (action === "adminReleaseQuestDice") {
           bulkRequests.push(input);
@@ -458,8 +460,15 @@ async function main() {
       await page.getByLabel("配布方式").selectOption("admin");
       await page.getByLabel("上位の下限評価点", { exact: true }).fill("64");
       await page.getByLabel("１レベル上がる星ポイント", { exact: true }).fill("15");
-      await page.getByLabel("この開催での救済").selectOption("no");
+      await page.getByLabel("この開催での救済").selectOption("yes");
+      await page.getByLabel("管理者による救済付与を許可", { exact: true }).check();
+      await page.getByLabel("小径を使える使用回数（開催の使用上限まで）", { exact: true }).fill("14");
+      await page.getByLabel("対象評価点の上限（この値未満、中間下限以下）", { exact: true }).fill("52");
+      await page.getByLabel("１人の救済付与上限（開催の使用上限まで）", { exact: true }).fill("1");
+      assert.equal(await page.getByLabel("試算時の救済保有率（０〜100%）", { exact: true }).getAttribute("required"), null);
       await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+      assert.equal(adminRuns[0].rules.rescue.simulationRate, 0);
+      assert.equal(adminRuns[0].rules.rescue.simulationTurn, 14);
       const publish = page.getByRole("button", { name: "確定した設定で開催を公開する", exact: true });
       await publish.waitFor();
       await page.getByRole("button", { name: "新しい開催を作る", exact: true }).click();
@@ -474,18 +483,12 @@ async function main() {
       assert.equal(await page.getByLabel("１レベル上がる星ポイント", { exact: true }).inputValue(), "15");
       assert.equal(await page.getByLabel("上位の下限評価点", { exact: true }).inputValue(), "64");
       assert.equal(await publish.isEnabled(), false);
-      await page.getByText("最新版の設定で分布試算を行ってください。", { exact: true }).waitFor();
-      await page.getByRole("button", { name: "保存した設定で分布を試算する" }).click();
-      await page.getByText("各２万件、６条件の試算を保存しました。", { exact: false }).waitFor();
-      assert.equal(await publish.isEnabled(), false);
       assert.equal(await page.getByText("最新版の設定で分布試算を行ってください。", { exact: true }).count(), 0);
-      await page.getByText("配布・救済・評価境界の検討記録を20文字以上入力してください。", { exact: true }).waitFor();
-      await page.getByLabel("確定した配布・救済・評価境界と分布の検討記録（20文字以上）").fill("ローカルモックでの操作検証のみ。本番の開催設定ではありません。");
-      assert.equal(await page.getByText("配布・救済・評価境界の検討記録を20文字以上入力してください。", { exact: true }).count(), 0);
-      assert.equal(await publish.isEnabled(), false);
-      await page.getByText('下の「本番条件として確定しました」にチェックしてください。', { exact: true }).waitFor();
-      await page.getByLabel("運用条件と目標分布を確認し、配布・救済・評価境界をこの開催の本番条件として確定しました", { exact: true }).check();
+      assert.equal(await page.getByLabel(/検討記録/).count(), 0);
+      await page.getByText("下の設定確認にチェックしてください。", { exact: true }).waitFor();
+      await page.getByLabel("参加対象・配布・救済・評価境界を確認しました", { exact: true }).check();
       assert.equal(await publish.isEnabled(), true);
+      assert.equal(calls.filter(call => call.action === "adminSimulateQuest").length, 0);
       assert.equal(await page.getByText("公開ボタンが無効になっている理由", { exact: true }).count(), 0);
       await publish.click();
       await page.getByRole("heading", { name: "通常サイコロの全体配布" }).waitFor();

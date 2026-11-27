@@ -90,8 +90,8 @@ function toDraft(form: Form, boardVersion: QuestRules["boardVersion"]): QuestDra
       maxGrants: 1, simulationRate: 0, simulationTurn: maxTurns }
     : { enabled: true, adminEnabled: form.adminRescue, eventSources: form.eventSources,
       fromTurn: numberValue(form.rescueFrom, "救済を使える使用回数"), belowScore: numberValue(form.rescueBelow, "救済対象の評価点上限"),
-      maxGrants: numberValue(form.rescueMax, "救済付与上限"), simulationRate: numberValue(form.rescueRate, "試算時の救済保有率") / 100,
-      simulationTurn: numberValue(form.rescueTurn, "試算時の救済使用回") };
+      maxGrants: numberValue(form.rescueMax, "救済付与上限"), simulationRate: form.rescueRate.trim() ? numberValue(form.rescueRate, "試算時の救済保有率") / 100 : 0,
+      simulationTurn: Math.min(maxTurns, form.rescueTurn.trim() ? numberValue(form.rescueTurn, "試算時の救済使用回") : maxTurns) };
   return { title: form.title, description: form.description, thumbnail: form.thumbnail,
     startsAt: parseJstDateTime(form.startsAt).getTime(), endsAt: parseJstDateTime(form.endsAt).getTime(),
     publicFlags: form.flags, xAccountList: form.xText.split(/\r?\n/).map(line => line.trim()).filter(Boolean), accessCode: form.accessCode,
@@ -104,7 +104,7 @@ export default function QuestAdminPage() {
   const [images, setImages] = useState<string[]>(["/quest/menu-thumbnail-v2.jpg"]);
   const [busy, setBusy] = useState(false), lock = useRef(false);
   const [error, setError] = useState(""), [status, setStatus] = useState("");
-  const [confirmed, setConfirmed] = useState(false), [review, setReview] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [grant, setGrant] = useState({ uid: "", grantId: "", kind: "normal", count: "", reason: "" });
   const [bulk, setBulk] = useState({ count: "1", reason: "通常サイコロの全体配布" });
@@ -117,9 +117,7 @@ export default function QuestAdminPage() {
   const currentBulk = pendingBulk?.runId === selected?.id ? pendingBulk : null;
   const publishBlockers = [
     dirty ? "変更した開催設定を下書き保存してください。" : null,
-    selected && selected.simulatedVersion !== selected.version ? "最新版の設定で分布試算を行ってください。" : null,
-    review.trim().length < 20 ? "配布・救済・評価境界の検討記録を20文字以上入力してください。" : null,
-    !confirmed ? "下の「本番条件として確定しました」にチェックしてください。" : null,
+    !confirmed ? "下の設定確認にチェックしてください。" : null,
   ].filter((message): message is string => message !== null);
   function change<K extends keyof Form>(key: K, value: Form[K]) {
     setForm(previous => ({ ...previous, [key]: value })); setDirty(true); setConfirmed(false);
@@ -146,7 +144,7 @@ export default function QuestAdminPage() {
     finally { lock.current = false; setBusy(false); }
   }
   function pick(run: AdminRun) {
-    setSelected(run); setForm(fromRun(run)); setConfirmed(false); setReview(""); setDirty(false); setError(""); setStatus("");
+    setSelected(run); setForm(fromRun(run)); setConfirmed(false); setDirty(false); setError(""); setStatus("");
     setDeleteTitle("");
     const pending = savedBulkRequest(run.id);
     setPendingBulk(pending);
@@ -183,7 +181,7 @@ export default function QuestAdminPage() {
       }
       if (auth.currentUser?.uid !== actor) return;
       clearDeleteRequest(request.runId); clearBulkRequest(request.runId);
-      if (selected?.id === request.runId) { setSelected(null); setForm(newForm()); setDirty(false); setConfirmed(false); setReview(""); }
+      if (selected?.id === request.runId) { setSelected(null); setForm(newForm()); setDirty(false); setConfirmed(false); }
       setDeleteTitle("");
       await load();
       setStatus(`「${request.title}」を完全削除しました。`);
@@ -235,13 +233,13 @@ export default function QuestAdminPage() {
     <nav className={styles.nav}><Link href="/admin">管理者トップ</Link><Link href="/quest">利用者画面</Link><Link href="/quest/guide">遊び方</Link></nav>
     <h1>ゆめつきクエスト 開催管理</h1>
     <nav className={styles.nav}><a href="#quest-runs">開催一覧</a><a href="#quest-settings">開催設定</a><a href="#quest-menu">メニュー公開範囲</a></nav>
-    <p className={styles.small}>下書き保存 → 試算 → 確認 → 公開。公開後の設定は変更できません。</p>
+    <p className={styles.small}>下書き保存 → 設定確認 → 公開。試算は任意です。公開後の設定は変更できません。</p>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <p role="status">{status}</p>
     {pendingDelete && <div className={styles.notice}><p>「{pendingDelete.title}」の削除結果を確認できていません。</p>
       <button disabled={busy} onClick={() => void deleteRun(pendingDelete)}>削除を再開・確認</button></div>}
     <section id="quest-runs" className={styles.panel}><h2>開催一覧</h2>
-      <button disabled={busy} onClick={() => { setSelected(null); setForm(newForm()); setDirty(false); setConfirmed(false); setReview(""); }}>新しい開催を作る</button>
+      <button disabled={busy} onClick={() => { setSelected(null); setForm(newForm()); setDirty(false); setConfirmed(false); }}>新しい開催を作る</button>
       <ul className={styles.ranking}>{listing?.items.map(run => <li key={run.id} className={selected?.id === run.id ? styles.ownRow : undefined}>
         <strong>{run.title} ／ {runStates[run.state]}</strong>
         <small>終了 {formatJstDateTime(new Date(run.endsAt))}</small>
@@ -267,7 +265,7 @@ export default function QuestAdminPage() {
         const result = await questCall<{ runId: string; version: number }>("adminSaveQuest", {
           ...(selected ? { runId: selected.id, version: selected.version } : {}), draft: toDraft(form, selected?.rules.boardVersion ?? "quest-board-v3"),
         });
-        await refreshSelected(result.runId); setConfirmed(false); setStatus("下書きを保存しました。設定を変えた場合は、再度試算が必要です。");
+        await refreshSelected(result.runId); setConfirmed(false); setStatus("下書きを保存しました。設定を確認して公開できます。");
       });
     }}>
       <h2>{selected ? `${selected.title} の設定` : "新規開催の設定"}</h2>
@@ -307,7 +305,7 @@ export default function QuestAdminPage() {
           <input type="datetime-local" required value={value} onChange={event => change("releaseAt", form.releaseAt.map((at, i) => i === index ? event.target.value : at))} /></label>)}</div>}
         <h3>星ポイント・評価境界</h3>
         <p className={styles.small}>評価点＝到達点＋レベル加点×（Lv.−１）。最上位には塔の到達点とレベルの両方が必要です。</p>
-        {!selected && <p className={styles.small}>初期値は試算用です。分布を確認してから公開してください。</p>}
+        {!selected && <p className={styles.small}>初期値は変更できます。公開前に開催の設定を確認してください。</p>}
         <div className={styles.fields}>{Object.entries(numericFields).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "stepStarPoints" || key === "levelScore" || key === "percentDecimals" ? 0 : 1}
           step={1} value={form.numbers[key as Numeric]} onChange={event => change("numbers", { ...form.numbers, [key]: event.target.value })} /></label>)}</div>
         <h3>イベント勝利・管理者付与による救済</h3>
@@ -322,17 +320,26 @@ export default function QuestAdminPage() {
           <details><summary>対象結果の条件</summary><p className={styles.small}>開催期間内に確定した本人の勝利が対象です。ニブイチは的中記録の集計時刻、狙い撃ちは結果公開時刻で判定します。</p></details>
           <div className={styles.fields}>{([
             ["rescueFrom", "小径を使える使用回数（開催の使用上限まで）"], ["rescueBelow", "対象評価点の上限（この値未満、中間下限以下）"],
-            ["rescueMax", "１人の救済付与上限（開催の使用上限まで）"], ["rescueRate", "試算時の救済保有率（０〜100%）"], ["rescueTurn", "試算時に小径を使い始める使用回（開催の使用上限まで）"],
-          ] as const).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "rescueRate" ? 0 : 1} step={key === "rescueRate" ? "any" : 1}
+            ["rescueMax", "１人の救済付与上限（開催の使用上限まで）"],
+          ] as const).map(([key, label]) => <label key={key}>{label}<input type="number" required min={1} step={1}
             value={form[key]} onChange={event => change(key, event.target.value)} /></label>)}</div>
+          <details><summary>分布試算の設定（任意）</summary>
+            <p className={styles.small}>未入力の場合は救済保有率０%、使用回は開催の使用上限です。使用回が上限を超える場合は上限までに調整します。</p>
+            <label>試算時の救済保有率（０〜100%）<input type="number" min={0} max={100} step="any"
+              value={form.rescueRate} onChange={event => change("rescueRate", event.target.value)} /></label>
+            <label>試算時に小径を使い始める使用回（１〜99）<input type="number" min={1} max={99} step={1}
+              value={form.rescueTurn} onChange={event => change("rescueTurn", event.target.value)} /></label>
+          </details>
         </>}
         {editable && <button className={styles.primary} disabled={busy}>下書きを保存</button>}
       </fieldset>
     </form>
     </details>
     {selected?.state === "draft" && <section className={`${styles.panel} ${styles.form}`}>
-      <h2>分布試算と公開</h2>
-      {dirty && <p className={styles.notice}>未保存の変更があります。保存してから再試算してください。</p>}
+      <h2>開催の公開</h2>
+      {dirty && <p className={styles.notice}>未保存の変更があります。公開前に保存してください。</p>}
+      <details><summary>分布試算（任意）</summary>
+      <p className={styles.small}>試算を実行しなくても公開できます。</p>
       <button disabled={busy || dirty} onClick={() => void work(async () => {
         await questCall("adminSimulateQuest", { runId: selected.id, version: selected.version }); await refreshSelected(selected.id);
         setConfirmed(false); setStatus("各２万件、６条件の試算を保存しました。");
@@ -344,16 +351,15 @@ export default function QuestAdminPage() {
           <td>{(result.stage3 / result.trials * 100).toFixed(2)}%</td><td>{(result.stage4 / result.trials * 100).toFixed(2)}%</td><td>{(result.rescued / result.trials * 100).toFixed(2)}%</td>
         </tr>)}</tbody></table></div>}
       {selected.simulation?.some(result => result.groups.top / result.trials > .02) && <p className={styles.notice}>最上位２%を超える方針があります。境界と救済条件を再確認してください。</p>}
-      <label>確定した配布・救済・評価境界と分布の検討記録（20文字以上）<textarea value={review} onChange={event => { setReview(event.target.value); setConfirmed(false); }} minLength={20} maxLength={2000} /></label>
-      <p className={styles.small}>検討記録：{review.trim().length}／20文字以上</p>
-      <label className={styles.check}><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />運用条件と目標分布を確認し、配布・救済・評価境界をこの開催の本番条件として確定しました</label>
+      </details>
+      <label className={styles.check}><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />参加対象・配布・救済・評価境界を確認しました</label>
       {publishBlockers.length > 0 && <div className={styles.notice} aria-live="polite">
         <strong>公開ボタンが無効になっている理由</strong>
         <ul>{publishBlockers.map(message => <li key={message}>{message}</li>)}</ul>
       </div>}
       <button className={styles.primary} disabled={busy || publishBlockers.length > 0}
         onClick={() => void work(async () => {
-          await questCall("adminPublishQuest", { runId: selected.id, version: selected.version, confirmed, reviewNote: review });
+          await questCall("adminPublishQuest", { runId: selected.id, version: selected.version, confirmed });
           await refreshSelected(selected.id); setConfirmed(false); setStatus("開催を公開しました。参加対象・配布・評価設定は固定されています。");
         })}>確定した設定で開催を公開する</button>
       <p className={styles.small}>同時開催は１回です。前の開催を終了・集計してから公開してください。</p>

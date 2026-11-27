@@ -485,7 +485,7 @@ test("admin deletion stops writes, resumes failed cleanup automatically, and can
   await call("adminFinalizeQuest", { runId: ref.id, confirmed: true });
   assert.equal((await ref.get()).exists, false);
 });
-test("publishing requires the latest saved simulation and explicit configuration confirmation", async () => {
+test("publishing needs no simulation or review but preserves confirmation, version, period and admin checks", async () => {
   const old = await run();
   await call("adminFinalizeQuest", { runId: old.id, confirmed: true });
   const draft = {
@@ -494,17 +494,24 @@ test("publishing requires the latest saved simulation and explicit configuration
     xAccountList: [], accessCode: "", rules,
   };
   const saved = await call("adminSaveQuest", { draft });
-  const publish = { runId: saved.runId, version: saved.version, confirmed: true, reviewNote: "Synthetic emulator confirmation. Not a real event." };
+  const publish = { runId: saved.runId, version: saved.version, confirmed: true };
+  await assert.rejects(call("adminPublishQuest", { ...publish, confirmed: false }));
+  await assert.rejects(call("adminPublishQuest", publish, randomUUID()), { code: "permission-denied" });
+  await db.doc(`questRuns/${saved.runId}`).update({ endsAt: Date.now() - 1 });
   await assert.rejects(call("adminPublishQuest", publish));
-  const simulated = await call("adminSimulateQuest", { runId: saved.runId, version: saved.version });
-  assert.equal(simulated.reports.length, 6);
   const updated = await call("adminSaveQuest", { runId: saved.runId, version: saved.version, draft });
   await assert.rejects(call("adminPublishQuest", publish));
-  await assert.rejects(call("adminPublishQuest", { ...publish, version: updated.version }));
-  await call("adminSimulateQuest", updated);
   await assert.rejects(call("adminPublishQuest", { ...publish, version: updated.version, confirmed: false }));
   await call("adminPublishQuest", { ...publish, version: updated.version });
+  const published = await db.doc(`questRuns/${saved.runId}`).get();
+  assert.equal(published.get("state"), "published");
+  assert.equal(published.get("simulation"), undefined);
+  assert.equal(published.get("confirmations"), "");
   await assert.rejects(call("adminSaveQuest", { runId: saved.runId, version: updated.version + 1, draft }));
+  const another = await call("adminSaveQuest", { draft });
+  await assert.rejects(call("adminPublishQuest", { ...another, confirmed: true }));
+  await call("adminFinalizeQuest", { runId: saved.runId, confirmed: true });
+  await call("adminPublishQuest", { ...another, confirmed: true, reviewNote: "" });
 });
 test("client Rules deny all Quest data to participants and admins, including nested/private paths", async () => {
   const app = initializeApp({ projectId: "demo-yumetsuki", apiKey: "fake-api-key" }, `quest-${randomUUID()}`);
