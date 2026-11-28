@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "@/firebase";
@@ -26,7 +27,10 @@ function savedRequest(uid: string, runId: string): Request | null {
       ["roll", "bridge", "flower", "shortcut-use", "shortcut-skip", "rescue", "sync"].includes(value.action) ? value : null;
   } catch { return null; }
 }
-export default function QuestExperience({ archiveId, rankingOnly = false }: { archiveId?: string; rankingOnly?: boolean }) {
+export default function QuestExperience({ archiveId, rankingOnly = false, selectedRunId }: { archiveId?: string; rankingOnly?: boolean; selectedRunId?: string }) {
+  const router = useRouter();
+  const gameMode = !!selectedRunId && !archiveId && !rankingOnly;
+  const selecting = !selectedRunId && !archiveId && !rankingOnly;
   const [uid, setUid] = useState<string | null | undefined>(undefined);
   const [view, setView] = useState<QuestView | null>(null);
   const [error, setError] = useState("");
@@ -49,14 +53,14 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   const reload = useCallback(async () => {
     const ticket = generation.current;
     const actor = auth.currentUser?.uid;
-    const value = await questCall<QuestView>("getQuest", archiveId ? { runId: archiveId, archive: true } : {});
+    const value = await questCall<QuestView>("getQuest", archiveId ? { runId: archiveId, archive: true } : selectedRunId ? { runId: selectedRunId } : {});
     if (ticket !== generation.current) return;
     offset.current = value.serverNow - Date.now(); setClock(value.serverNow); setView(value);
     if (actor && value.run && !archiveId) {
       const request = savedRequest(actor, value.run.id);
       setPending(previous => request ?? (previous?.runId === value.run!.id ? previous : null));
     }
-  }, [archiveId]);
+  }, [archiveId, selectedRunId]);
   useEffect(() => {
     let ticket = generation.current;
     const unsubscribe = onAuthStateChanged(auth, user => {
@@ -218,17 +222,55 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
     : null;
   const canRescue = open && player && run.rules.rescue.enabled && !player.rescueUsed && player.rescueCredits > 0 &&
     player.used >= run.rules.rescue.fromTurn && player.score < run.rules.rescue.belowScore;
-  return <main className={styles.page}>
-    <nav className={styles.nav}><Link href="/" prefetch={false}>トップ</Link><Link href="/quest" prefetch={false}>現在のクエスト</Link><Link href="/quest/guide" prefetch={false}>遊び方</Link><Link href="/quest/ranking" prefetch={false}>ランキング</Link><Link href="/quest/archive" prefetch={false}>アーカイブ</Link></nav>
-    <h1>{archiveId ? "過去の星務報告書" : rankingOnly ? "星務進捗ランキング" : "ゆめつきクエスト"}</h1>
-    <p>白い魔女の補佐役になって、星空に浮かぶ４つの舞台へ。星のサイコロを振って、旅の行方を見届けよう。</p>
-    {(!player || rankingOnly) && <>
+  const distributionNotice = run && <p className={styles.notice} aria-live="polite">
+    {run.state !== "published" || clock >= run.endsAt ? "この開催のサイコロ配布は終了しました。"
+      : run.rules.distribution.mode === "admin" ? (run.adminReleased ?? 0) >= run.rules.maxTurns
+        ? "この開催のサイコロはすべて配布済みです。" : "次のサイコロは開催者の指定で配布されます。"
+      : nextRelease ? `次のサイコロ付与：${formatJstDateTime(new Date(nextRelease.at))}（${nextRelease.count}個・日本時間）`
+      : "予定されていたサイコロの配布はすべて完了しました。"}
+  </p>;
+  const runInformation = run && <section className={styles.panel}>
+    {!gameMode && <h2>{run.title}</h2>}
+    <details open={!gameMode}>
+      <summary>開催情報・参加条件</summary>
+      {!rankingOnly && <Image src={run.thumbnail} alt="" width={900} height={600} unoptimized style={{ width: "100%", height: "auto", maxHeight: 280, objectFit: "contain" }} />}
+      <p style={{ whiteSpace: "pre-wrap" }}>{run.description}</p>
+      <p className={styles.small}>{formatJstDateTime(new Date(run.startsAt))} 〜 {formatJstDateTime(new Date(run.endsAt))}</p>
+      <p>公開・参加条件：{run.publicFlags.map(flag => questFlags[flag]).join(" ／ ")}</p>
+      <p className={styles.small}>参加条件は参加時に確認し、この開催回の資格として保存します。参加無料。星ポイントはクエスト内の経験値で、通常ポイントや発送物には交換されません。</p>
+      <details><summary>この回の配布・評価ルール</summary>
+        <p>通常サイコロ：{run.rules.distribution.mode === "admin" ? `管理者が全体・個別に付与します。全体配布済みは累計${run.adminReleased ?? 0}個。途中参加でも未受取分を受け取れ、個別分との合計は${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "daily"
+          ? `開始日分を含め、日本時間${run.rules.distribution.dailyStartHourJst}時の切り替えごとに１個。通算${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "interval"
+          ? `開始時に${run.rules.distribution.intervalCount ?? 1}個、以後${run.rules.distribution.intervalHours ?? 24}時間ごとに${run.rules.distribution.intervalCount ?? 1}個追加します。通算${run.rules.maxTurns}個までです。` : `以下の日時に１個ずつ、合計${run.rules.maxTurns}個を配布します。`}</p>
+        {run.rules.distribution.mode === "schedule" && <ol>{run.rules.distribution.releaseAt.map((at, index) => <li key={index}>{formatJstDateTime(new Date(at))}</li>)}</ol>}
+        <p>１歩の星ポイント {run.rules.stepStarPoints} ／ {run.rules.levelPoints}ポイントごとにLv.＋１。評価点は現在地の進捗点＋{run.rules.levelScore}×（Lv.−１）。{run.rules.percentMax}点を100%として小数{run.rules.percentDecimals}桁で表示します。</p>
+        <p>最上位：塔の進捗点{run.rules.topMinProgress}以上かつLv.{run.rules.topMinLevel}以上。次に上位：評価点{run.rules.upperMin}以上、中間：{run.rules.middleMin}以上、それ以外は下位の順に判定します。</p>
+      </details>
+    </details>
+    {!archiveId && !rankingOnly && (!gameMode || !player) && distributionNotice}
+    {!open && !archiveId && <p className={styles.notice}>{clock < run.startsAt ? "開催開始前です。" : run.state === "settling" ? "星務報告書を集計しています。" : "この開催の進行受付は終了しました。結果は集計後にアーカイブへ残ります。"}</p>}
+    {!uid && <Link href="/login">ログインして参加条件を確認する</Link>}
+    {uid && !player && archiveId && <p>この開催回へのあなたの参加記録はありません。</p>}
+    {selecting && player && <Link href={`/quest/play/${encodeURIComponent(run.id)}`} prefetch={false} className={styles.playLink}>この開催でゲームを開く</Link>}
+    {uid && !player && !archiveId && <><p>{view?.reason ?? "参加条件を満たしています。"}</p>
+      <button type="button" className={styles.primary} disabled={busy || !open || !!view?.reason} onClick={() => void operation(async () => {
+        await questCall("joinQuest", { runId: run.id });
+        if (selecting) router.push(`/quest/play/${encodeURIComponent(run.id)}`);
+        else { await reload(); setStatus("参加を保存しました。この開催回の続きから遊べます。"); }
+      })}>参加条件を確認して、この回に参加する</button></>}
+    <button type="button" disabled={busy} onClick={() => void operation(reload)}>保存済みの進行を再取得</button>
+  </section>;
+  return <main className={`${styles.page} ${gameMode ? styles.gamePage : ""}`}>
+    <nav className={styles.nav}>{!gameMode && <Link href="/" prefetch={false}>トップ</Link>}<Link href="/quest" prefetch={false}>開催回を選ぶ</Link><Link href="/quest/guide" prefetch={false}>遊び方</Link><Link href="/quest/ranking" prefetch={false}>ランキング</Link>{!gameMode && <Link href="/quest/archive" prefetch={false}>アーカイブ</Link>}</nav>
+    <h1>{archiveId ? "過去の星務報告書" : rankingOnly ? "星務進捗ランキング" : gameMode ? run?.title ?? "ゆめつきクエスト" : "開催回を選ぶ"}</h1>
+    {!gameMode && <p>白い魔女の補佐役になって、星空に浮かぶ４つの舞台へ。開催内容を確認し、参加する回を選んでゲームを開こう。</p>}
+    {(!player || rankingOnly || selecting) && <>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <p role="status" aria-live="polite">{status}</p>
     </>}
     {loading && <p role="status">開催と保存済みの進行を読み込んでいます…</p>}
-    {!loading && !run && <p className={styles.notice}>現在表示できる開催はありません。限定公開の専用コードを受け取った方は、下の欄で解放してください。</p>}
-    {!archiveId && !loading && uid && (!run || (!player && run.publicFlags.includes("limited"))) &&
+    {!loading && !run && <p className={styles.notice}>現在表示できる開催はありません。{gameMode ? "開催回を確認して選び直してください。" : "限定公開の専用コードを受け取った方は、下の欄で解放してください。"}</p>}
+    {selecting && !loading && uid && (!run || (!player && run.publicFlags.includes("limited"))) &&
       <form className={`${styles.panel} ${styles.form}`} onSubmit={event => {
         event.preventDefault();
         void operation(async () => { await questCall("unlockQuest", { code }); setCode(""); await reload(); });
@@ -238,38 +280,9 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         <p className={styles.small}>コードを入力しても、サブスク・的中・Xアカウントなどの参加条件は別途確認されます。</p>
       </form>}
     {run && <>
-      <section className={styles.panel}>
-        <h2>{run.title}</h2>
-        {!rankingOnly && <Image src={run.thumbnail} alt="" width={900} height={600} unoptimized style={{ width: "100%", height: "auto", maxHeight: 280, objectFit: "contain" }} />}
-        <p style={{ whiteSpace: "pre-wrap" }}>{run.description}</p>
-        <p className={styles.small}>{formatJstDateTime(new Date(run.startsAt))} 〜 {formatJstDateTime(new Date(run.endsAt))}</p>
-        {!archiveId && !rankingOnly && <p className={styles.notice} aria-live="polite">
-          {run.state !== "published" || clock >= run.endsAt ? "この開催のサイコロ配布は終了しました。"
-            : run.rules.distribution.mode === "admin" ? (run.adminReleased ?? 0) >= run.rules.maxTurns
-              ? "この開催のサイコロはすべて配布済みです。" : "次のサイコロは開催者の指定で配布されます。"
-            : nextRelease ? `次のサイコロ付与：${formatJstDateTime(new Date(nextRelease.at))}（${nextRelease.count}個・日本時間）`
-            : "予定されていたサイコロの配布はすべて完了しました。"}
-        </p>}
-        <p>公開・参加条件：{run.publicFlags.map(flag => questFlags[flag]).join(" ／ ")}</p>
-        <p className={styles.small}>参加条件は参加時に確認し、この開催回の資格として保存します。参加無料。星ポイントはクエスト内の経験値で、通常ポイントや発送物には交換されません。</p>
-        <details><summary>この回の配布・評価ルール</summary>
-          <p>通常サイコロ：{run.rules.distribution.mode === "admin" ? `管理者が全体・個別に付与します。全体配布済みは累計${run.adminReleased ?? 0}個。途中参加でも未受取分を受け取れ、個別分との合計は${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "daily"
-            ? `開始日分を含め、日本時間${run.rules.distribution.dailyStartHourJst}時の切り替えごとに１個。通算${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "interval"
-            ? `開始時に${run.rules.distribution.intervalCount ?? 1}個、以後${run.rules.distribution.intervalHours ?? 24}時間ごとに${run.rules.distribution.intervalCount ?? 1}個追加します。通算${run.rules.maxTurns}個までです。` : `以下の日時に１個ずつ、合計${run.rules.maxTurns}個を配布します。`}</p>
-          {run.rules.distribution.mode === "schedule" && <ol>{run.rules.distribution.releaseAt.map((at, index) => <li key={index}>{formatJstDateTime(new Date(at))}</li>)}</ol>}
-          <p>１歩の星ポイント {run.rules.stepStarPoints} ／ {run.rules.levelPoints}ポイントごとにLv.＋１。評価点は現在地の進捗点＋{run.rules.levelScore}×（Lv.−１）。{run.rules.percentMax}点を100%として小数{run.rules.percentDecimals}桁で表示します。</p>
-          <p>最上位：塔の進捗点{run.rules.topMinProgress}以上かつLv.{run.rules.topMinLevel}以上。次に上位：評価点{run.rules.upperMin}以上、中間：{run.rules.middleMin}以上、それ以外は下位の順に判定します。</p>
-        </details>
-        {!open && !archiveId && <p className={styles.notice}>{clock < run.startsAt ? "開催開始前です。" : run.state === "settling" ? "星務報告書を集計しています。" : "この開催の進行受付は終了しました。結果は集計後にアーカイブへ残ります。"}</p>}
-        {!uid && <Link href="/login">ログインして参加条件を確認する</Link>}
-        {uid && !player && archiveId && <p>この開催回へのあなたの参加記録はありません。</p>}
-        {uid && !player && !archiveId && <><p>{view.reason ?? "参加条件を満たしています。"}</p>
-          <button type="button" className={styles.primary} disabled={busy || !open || !!view.reason} onClick={() => void operation(async () => {
-            await questCall("joinQuest", { runId: run.id }); await reload(); setStatus("参加を保存しました。この開催回の続きから遊べます。");
-          })}>参加条件を確認して、この回に参加する</button></>}
-        <button type="button" disabled={busy} onClick={() => void operation(reload)}>保存済みの進行を再取得</button>
-      </section>
-      {player && !rankingOnly && <>
+      {!gameMode && runInformation}
+      {player && !rankingOnly && !selecting && <>
+        <div className={gameMode ? styles.gameLayout : undefined}>
           <div className={styles.gradeCard} aria-live="polite" aria-label="星務評価">
             <p>{player.result ? "最終グループ" : "現在の星務評価"}</p>
             <strong className={styles.gradeTitle}>{grade && questGroups[grade]}</strong>
@@ -354,20 +367,6 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
             {error && <p role="alert" className={styles.error}>{error}</p>}
             <p role="status" aria-live="polite" className={styles.playFeedback}>{status}</p>
             {!archiveId && <>
-              {dicePreview && <div className={styles.dicePreview}>
-                <h3>次の出目で起きること</h3>
-                <ol>
-                  {dicePreview.map(({ events, starPoints }, index) =>
-                    <li key={index} data-special={events.length > 0}>
-                      <b>{index + 1}</b>
-                      <span>{events.length ? events.join(" ／ ") : "道を進む"}
-                        <small>{starPoints > 0 ? `星ポイント 合計＋${starPoints}` : "星ポイントなし"}</small>
-                      </span>
-                    </li>)}
-                </ol>
-                <small>出目ごとの目安です。分岐後の結果は選択時に決まります。
-                  {!!run.rules.psaLimit && "PSAの残り枠は他の参加者の操作で変わります。"}</small>
-              </div>}
               <div className={styles.diceControls}>
                 <div className={styles.diceResult} aria-live="polite">
                   <span className={`${styles.dice} ${busy && pending?.action === "roll" && confirmedDie === null ? styles.rolling : ""}`} aria-hidden="true">
@@ -379,6 +378,21 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
               </div>
             </>}
           </QuestBoard>
+          {dicePreview && <details className={styles.dicePreview}>
+            <summary>次の出目で起きること</summary>
+            <ol>
+              {dicePreview.map(({ events, starPoints }, index) =>
+                <li key={index} data-special={events.length > 0}>
+                  <b>{index + 1}</b>
+                  <span>{events.length ? events.join(" ／ ") : "道を進む"}
+                    <small>{starPoints > 0 ? `星ポイント 合計＋${starPoints}` : "星ポイントなし"}</small>
+                  </span>
+                </li>)}
+            </ol>
+            <small>出目ごとの目安です。分岐後の結果は選択時に決まります。
+              {!!run.rules.psaLimit && "PSAの残り枠は他の参加者の操作で変わります。"}</small>
+          </details>}
+          {gameMode && distributionNotice}
           {!archiveId && !!dueDice && <button disabled={busy || !!pending || !open} onClick={() => void act("sync")}>配布済みの{dueDice}個を受け取る</button>}
           {pending && !busy && !archiveId && <div className={styles.notice}><p>前の操作の結果を確認できませんでした。</p>
             <button type="button" disabled={busy} onClick={() => void act(pending.action, pending)}>前回の結果を確認</button></div>}
@@ -389,7 +403,8 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
             <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-use")}>抜け道を使って庭へ進む</button>
             <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-skip")}>今回は見送る</button></div>}
         </div>
-          <section className={styles.panel}><h2>月明かりの小径</h2>
+        </div>
+          <details className={styles.panel} open={!gameMode}><summary>月明かりの小径</summary>
             <p>条件を満たすと、最終評価を中間まで補えます。</p>
             {run.rules.rescue.enabled ? <>
               <p>この回の利用条件：{run.rules.rescue.fromTurn}回使用後、評価点{run.rules.rescue.belowScore}未満。救済権利を持つ方が１開催に１回使えます。</p>
@@ -412,10 +427,11 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
                 <p className={styles.small}>この開催期間内に確定した本人の勝利だけを照合します。ニブイチは的中記録の集計時刻、狙い撃ちは結果公開時刻が基準です。通常ポイントの受け取りとは別です。</p>
               </form>}
             </> : <p>この開催ではイベント勝利・管理者付与の救済はありません。花壇の救済出口と星渡りの抜け道は盤面のルールとして利用できます。</p>}
-          </section>
+          </details>
       </>}
-      {!player && !rankingOnly && <QuestBoard player={null} version={run?.rules.boardVersion ?? "quest-board-v3"} />}
-      {uid && <QuestRanking key={`${run.id}:${player?.version ?? 0}`} run={run} archive={!!archiveId} />}
+      {gameMode && runInformation}
+      {!player && !rankingOnly && !selecting && !gameMode && <QuestBoard player={null} version={run?.rules.boardVersion ?? "quest-board-v3"} />}
+      {uid && !selecting && <QuestRanking key={`${run.id}:${player?.version ?? 0}`} run={run} archive={!!archiveId} />}
       {run.summary && <section className={styles.panel}><h2>開催全体の星務報告</h2>
         <p>全参加者 {run.summary.total}人 ／ {run.rules.maxTurns}回使用 {run.summary.completed}人</p>
         <div className={styles.report}><table><thead><tr><th>グループ</th><th>全参加者</th><th>{run.rules.maxTurns}回使用者のみ</th></tr></thead><tbody>

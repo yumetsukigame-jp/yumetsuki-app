@@ -128,9 +128,25 @@
 .gradeCard .scoreChange { color:#bfe7ff; }
 .gradeCard .notice { color:#242d4b; }
 .gradeCard .psaPanel small { color:#4b5c78; }
+.playLink { display:inline-block; padding:12px 18px; border-radius:12px; background:#354e86; font-weight:750; margin:12px 0; }
+.page .playLink { color:white; text-decoration:none; }
+.gamePage { padding-top:12px; }
+.gamePage > h1 { font-size:clamp(1.3rem,4vw,1.8rem); margin:6px 0 14px; }
+.gamePage > .nav { margin:6px 0; font-size:.9rem; }
+.gamePage summary { cursor:pointer; font-weight:700; }
+.gameLayout { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); grid-template-areas:"board grade"; gap:16px; align-items:start; }
+.gameLayout > .playArea { grid-area:board; min-width:0; }
+.gameLayout > .gradeCard { grid-area:grade; min-width:0; }
+.gameLayout .playArea > .panel { margin-top:0; border-color:#a6854d; }
+.gameLayout .tabs { gap:4px; }
+.gameLayout .tabs button { flex:1; min-width:0; margin:0; padding:8px 2px; font-size:.85rem; white-space:nowrap; }
+.gameLayout .playFeedback { min-height:0; }
+.gameLayout .playFeedback:empty { display:none; }
+@media (max-width:760px) { .gameLayout { grid-template-columns:minmax(0,1fr); grid-template-areas:"board" "grade"; } }
 
 .dicePreview { padding:10px 12px; margin:8px 0; border:1px solid #a6854d; border-radius:12px; background:#162847; color:#fff3d5; }
 .dicePreview h3 { margin:0 0 6px; font-size:.96rem; }
+.dicePreview summary { font-size:.96rem; padding:4px 0; }
 .dicePreview ol { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; list-style:none; margin:0; padding:0; }
 .dicePreview li { display:flex; gap:6px; align-items:start; background:#22395b; border-radius:7px; padding:5px; line-height:1.35; font-size:.82rem; }
 .dicePreview li[data-special="true"] { background:#3d3952; color:#ffe5a5; }

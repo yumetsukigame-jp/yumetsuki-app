@@ -58,7 +58,7 @@ async function main() {
       let dueDice = 0;
       let nextDie = 6, psaReservedCount = 0;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
-      const pendingDice = () => run.rules.distribution.mode === "admin" ? dueDice
+      const pendingDice = () => !player ? 0 : run.rules.distribution.mode === "admin" ? dueDice
         : Math.max(0, releasedQuestDice(run.rules, run.startsAt, run.endsAt, Date.now()) - player.normalGranted);
       function ranking(input) {
         const row = { id: player.publicId, displayName: player.displayName, tileId: player.tileId, score: player.score, used: player.used, level: player.level, rank: 1 };
@@ -93,10 +93,20 @@ async function main() {
           menuAccess = { mode: input.mode, version: menuAccess.version + 1, allowed: true };
           result = menuAccess;
         } else if (action === "getQuest") {
+          if (input.runId && !input.archive && input.runId !== run.id) return route.fulfill({
+            status: 409, headers: cors, contentType: "application/json",
+            body: JSON.stringify({ error: { status: "ABORTED", message: "現在の開催回が変更されました" } }),
+          });
           await new Promise(resolve => setTimeout(resolve, questReloadDelay));
           const available = pendingDice();
           result = { run: input.archive ? archive : runDeleted ? null : { ...run, psaRemaining: Math.max(0, (run.rules.psaLimit ?? 0) - psaReservedCount) }, player: runDeleted && !input.archive ? null : player, reason: null,
-            dueDice: available, serverNow: Date.now(), forecast: forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + available)) };
+            dueDice: available, serverNow: Date.now(), forecast: player ? forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + available)) : null };
+        }
+        else if (action === "joinQuest") {
+          assert.equal(input.runId, run.id);
+          assert.equal(player, null);
+          player = createPlayer({ normalGranted: 0 });
+          result = { joined: true };
         }
         else if (action === "listQuestProgress") result = ranking(input);
         else if (action === "listQuestArchives") result = { items: [archive], nextCursor: null };
@@ -201,7 +211,34 @@ async function main() {
       const page = await context.newPage();
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${base}/quest`);
+      await page.getByRole("heading", { name: "開催回を選ぶ", exact: true }).waitFor();
+      await page.getByRole("link", { name: "この開催でゲームを開く", exact: true }).waitFor();
+      assert.equal(await page.getByRole("region", { name: "クエストの盤面", exact: true }).count(), 0);
+      assert.equal(await page.locator('[aria-label="星務評価"]').count(), 0);
+      await page.getByRole("link", { name: "この開催でゲームを開く", exact: true }).click();
+      await page.waitForURL(`${base}/quest/play/${run.id}`);
+      await page.locator('[aria-label="星務評価"]').waitFor();
+      await page.goto(`${base}/quest/play/not-current-quest`);
+      await page.getByRole("alert").filter({ hasText: "現在の開催回が変更されました" }).waitFor();
+      assert.equal(await page.getByRole("region", { name: "クエストの盤面", exact: true }).count(), 0);
+      assert.equal(await page.locator('[aria-label="星務評価"]').count(), 0);
+      const initialPlayer = structuredClone(player);
+      player = null;
+      await page.getByRole("link", { name: "開催回を選ぶ", exact: true }).click();
+      await page.getByRole("button", { name: "参加条件を確認して、この回に参加する", exact: true }).click();
+      await page.waitForURL(`${base}/quest/play/${run.id}`);
+      await page.locator('[aria-label="星務評価"]').waitFor();
+      assert.equal(player.normalGranted, 0);
+      assert.equal(player.used, 0);
+      assert.equal(requests.length, 0);
+      player = initialPlayer;
+      await page.reload();
       await page.getByRole("heading", { name: "庭で道を選ぼう" }).waitFor();
+      assert.equal(await page.getByText(run.description, { exact: true }).isVisible(), false);
+      const initialBoard = await page.locator('[class*="playArea"] [class*="board"]').boundingBox();
+      assert.ok(initialBoard.y < 450, `${name}: game board must be near the top on entry`);
+      const information = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^開催情報・参加条件$/ }) });
+      assert.equal(await information.evaluate(element => element.open), false);
       await page.getByText("次のサイコロは開催者の指定で配布されます。", { exact: true }).waitFor();
       const gradeCard = page.locator('[aria-label="星務評価"]');
       await gradeCard.getByText("現在の星務評価", { exact: true }).waitFor();
@@ -241,6 +278,12 @@ async function main() {
           assert.equal(await page.locator("button[data-kind][title]").count(), stage.tiles.length);
         }
         assert.ok(await page.locator('[aria-label="星務評価"]').isVisible());
+        if (width === 1280) {
+          const gradeBounds = await gradeCard.boundingBox();
+          const playBounds = await page.locator('[class*="playArea"]').boundingBox();
+          assert.ok(gradeBounds.x > playBounds.x && Math.abs(gradeBounds.y - playBounds.y) < 2,
+            "Desktop game and grade must be side by side at the top");
+        }
       }
       run.rules = { ...rules, psaLimit: 2 };
       nextDie = 2;
@@ -249,6 +292,8 @@ async function main() {
       const preview = page.locator('[class*="dicePreview"]');
       const badges = page.locator('[class*="fragmentBadge"]');
       await preview.getByText("次の出目で起きること", { exact: true }).waitFor();
+      assert.equal(await preview.evaluate(element => element.open), false);
+      await preview.locator("summary").click();
       assert.equal(await preview.locator("li").count(), 6);
       for (const [stage, count] of [[1, 6], [2, 5], [3, 2], [4, 0]]) {
         await page.getByRole("button", { name: new RegExp(`^${stage} (書斎|回廊|庭|塔)`) }).click();
@@ -279,6 +324,7 @@ async function main() {
       await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
       player = createPlayer({ psaFragments: 4 });
       await page.reload();
+      await preview.locator("summary").click();
       await preview.locator("li").nth(1).getByText("PSAチケット枠を確保", { exact: false }).waitFor();
       dropResponse = true;
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
@@ -296,6 +342,7 @@ async function main() {
       player = { ...player, tileId: "s3-20" };
       updateQuestScore(player, run.rules);
       await page.reload();
+      await preview.locator("summary").click();
       await preview.locator("li").nth(1).getByText("PSAチケット枠が失効", { exact: false }).waitFor();
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
       await page.getByText("第４ステージ到達により、かけら・チケット枠は失効しました。", { exact: true }).waitFor();
@@ -697,8 +744,10 @@ async function main() {
       await page.getByRole("button", { name: "クエストの公開範囲を再確認" }).click();
       await page.locator('a[href="/quest"]').waitFor();
       assert.deepEqual(errors, [], `${name} page errors`);
-      assert.ok(calls.filter(call => call.action === "getQuest" && !call.input.archive).every(call => !("runId" in call.input)));
-      console.log(`${name}: timed dice/date notices, interval settings, mobile/desktop board, retry/reload, shortcut choices, double-click, ranking/archive isolation, admin draft/simulate/publish/grant/finalize passed (mock services only)`);
+      assert.ok(calls.some(call => call.action === "getQuest" && call.input.runId === run.id && !call.input.archive));
+      assert.ok(calls.filter(call => call.action === "getQuest" && !call.input.archive)
+        .every(call => !call.input.runId || [run.id, "not-current-quest"].includes(call.input.runId)));
+      console.log(`${name}: event selection/pinned game, top-of-page game/grade, collapsed descriptions, timed dice/date notices, interval settings, retry/reload, ranking/archive isolation and admin flow passed (mock services only)`);
       await context.close();
     } finally { await browser.close(); }
   }
