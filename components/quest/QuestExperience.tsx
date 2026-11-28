@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { auth } from "@/firebase";
 import { formatJstDateTime } from "@/app/lib/dateTime";
 import { questCall, questError, questFlags, questGroups, type QuestView } from "@/app/lib/quest";
-import { questBoard, questGoalDistance, questPercent, questResult, questTile } from "@/functions/src/quest/engine";
+import { questBoard, questGoalDistance, questNextDiceRelease, questPercent, questResult, questTile, releasedQuestDice } from "@/functions/src/quest/engine";
 import { previewQuestRoll, PSA_FRAGMENT_TARGET } from "@/functions/src/quest/psa";
 import type { QuestAction, QuestPlayer, QuestStep } from "@/functions/src/quest/types";
 import QuestBoard from "./QuestBoard";
@@ -193,8 +193,12 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   }
   const run = view?.run, player = view?.player;
   const open = !!run && !archiveId && run.state === "published" && clock >= run.startsAt && clock < run.endsAt;
+  const dueDice = run && player && open && run.rules.distribution.mode !== "admin"
+    ? Math.max(0, releasedQuestDice(run.rules, run.startsAt, run.endsAt, clock) - player.normalGranted)
+    : view?.dueDice ?? 0;
+  const nextRelease = run ? questNextDiceRelease(run.rules, run.startsAt, run.endsAt, clock) : null;
   const canRoll = open && !!player && !player.pending && player.used < run.rules.maxTurns && questTile(player.tileId).kind !== "finish" &&
-    player.used < player.normalGranted + (view?.dueDice ?? 0);
+    player.used < player.normalGranted + dueDice;
   const evaluation = player && run ? player.result ?? questResult(player, run.rules) : null;
   const grade = evaluation?.group ?? null;
   const gradeIndex = grade ? rankOrder.indexOf(grade) : -1;
@@ -237,11 +241,19 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
         {!rankingOnly && <Image src={run.thumbnail} alt="" width={900} height={600} unoptimized style={{ width: "100%", height: "auto", maxHeight: 280, objectFit: "contain" }} />}
         <p style={{ whiteSpace: "pre-wrap" }}>{run.description}</p>
         <p className={styles.small}>{formatJstDateTime(new Date(run.startsAt))} 〜 {formatJstDateTime(new Date(run.endsAt))}</p>
+        {!archiveId && !rankingOnly && <p className={styles.notice} aria-live="polite">
+          {run.state !== "published" || clock >= run.endsAt ? "この開催のサイコロ配布は終了しました。"
+            : run.rules.distribution.mode === "admin" ? (run.adminReleased ?? 0) >= run.rules.maxTurns
+              ? "この開催のサイコロはすべて配布済みです。" : "次のサイコロは開催者の指定で配布されます。"
+            : nextRelease ? `次のサイコロ付与：${formatJstDateTime(new Date(nextRelease.at))}（${nextRelease.count}個・日本時間）`
+            : "予定されていたサイコロの配布はすべて完了しました。"}
+        </p>}
         <p>公開・参加条件：{run.publicFlags.map(flag => questFlags[flag]).join(" ／ ")}</p>
         <p className={styles.small}>参加条件は参加時に確認し、この開催回の資格として保存します。参加無料。星ポイントはクエスト内の経験値で、通常ポイントや発送物には交換されません。</p>
         <details><summary>この回の配布・評価ルール</summary>
           <p>通常サイコロ：{run.rules.distribution.mode === "admin" ? `管理者が全体・個別に付与します。全体配布済みは累計${run.adminReleased ?? 0}個。途中参加でも未受取分を受け取れ、個別分との合計は${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "daily"
-            ? `開始日分を含め、日本時間${run.rules.distribution.dailyStartHourJst}時の切り替えごとに１個。通算${run.rules.maxTurns}個までです。` : `以下の日時に１個ずつ、合計${run.rules.maxTurns}個を配布します。`}</p>
+            ? `開始日分を含め、日本時間${run.rules.distribution.dailyStartHourJst}時の切り替えごとに１個。通算${run.rules.maxTurns}個までです。` : run.rules.distribution.mode === "interval"
+            ? `開始時に${run.rules.distribution.intervalCount ?? 1}個、以後${run.rules.distribution.intervalHours ?? 24}時間ごとに${run.rules.distribution.intervalCount ?? 1}個追加します。通算${run.rules.maxTurns}個までです。` : `以下の日時に１個ずつ、合計${run.rules.maxTurns}個を配布します。`}</p>
           {run.rules.distribution.mode === "schedule" && <ol>{run.rules.distribution.releaseAt.map((at, index) => <li key={index}>{formatJstDateTime(new Date(at))}</li>)}</ol>}
           <p>１歩の星ポイント {run.rules.stepStarPoints} ／ {run.rules.levelPoints}ポイントごとにLv.＋１。評価点は現在地の進捗点＋{run.rules.levelScore}×（Lv.−１）。{run.rules.percentMax}点を100%として小数{run.rules.percentDecimals}桁で表示します。</p>
           <p>最上位：塔の進捗点{run.rules.topMinProgress}以上かつLv.{run.rules.topMinLevel}以上。次に上位：評価点{run.rules.upperMin}以上、中間：{run.rules.middleMin}以上、それ以外は下位の順に判定します。</p>
@@ -324,7 +336,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
               </div>
             </>}
           </QuestBoard>
-          {!archiveId && !!view.dueDice && <button disabled={busy || !!pending || !open} onClick={() => void act("sync")}>配布済みの{view.dueDice}個を受け取る</button>}
+          {!archiveId && !!dueDice && <button disabled={busy || !!pending || !open} onClick={() => void act("sync")}>配布済みの{dueDice}個を受け取る</button>}
           {pending && !busy && !archiveId && <div className={styles.notice}><p>前の操作の結果を確認できませんでした。</p>
             <button type="button" disabled={busy} onClick={() => void act(pending.action, pending)}>前回の結果を確認</button></div>}
           {player.pending?.kind === "branch" && <div className={styles.notice}><h3>庭で道を選ぼう</h3><p>出目{player.lastDie}の残り{player.pending.steps}歩。選んだあとは同じターンを再開します。</p>
@@ -368,7 +380,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
             {forecast && <p>終了見込みの達成率：中央値 {questPercent(forecast.median, run.rules)}% ／ 10〜90%の範囲 {questPercent(forecast.low, run.rules)}〜{questPercent(forecast.high, run.rules)}%（実績とは別の試算です）</p>}
           </details>
           {scoreChange && <p className={styles.scoreChange}>{scoreChange}</p>}
-          <p>受け取り済み {player.normalGranted}個 ／ 配布待ちの受け取り分 {view.dueDice ?? 0}個 ／ 今振れる分 {canRoll ? Math.max(0, player.normalGranted + (view.dueDice ?? 0) - player.used) : 0}個</p>
+          <p>受け取り済み {player.normalGranted}個 ／ 配布待ちの受け取り分 {dueDice}個 ／ 今振れる分 {canRoll ? Math.max(0, player.normalGranted + dueDice - player.used) : 0}個</p>
           {player.result && <div className={styles.notice}>
             <p>到達マス {player.result.tileId} ／ Lv.{player.result.level} ／ 使用{player.result.used}回</p>
             {player.result.rescueUsed && <p>月明かりの小径を使用。補填は中間の下限までで、実績の評価点は変わりません。</p>}

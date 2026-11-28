@@ -605,3 +605,28 @@ test("PSA disabled and legacy runs neither collect fragments nor issue tickets",
     }
   } finally { random.mock.restore(); }
 });
+
+test("interval batches carry over to late joiners and concurrent claims grant each slot once", async () => {
+  const hour = 3600000;
+  const ref = await run({ startsAt: Date.now() - 7 * hour, endsAt: Date.now() + 24 * hour,
+    rules: { ...rules, distribution: { ...rules.distribution, mode: "interval", intervalHours: 2, intervalCount: 3 } } });
+  const uid = await join(ref);
+  assert.equal((await call("getQuest", {}, uid)).dueDice, 12);
+  const request = randomUUID();
+  const rolls = await Promise.all(Array.from({ length: 4 }, () => action(ref, uid, 0, "roll", request)));
+  assert.ok(rolls.every(result => result.player.normalGranted === 12 && result.player.used === 1));
+  assert.equal((await ref.collection("grants").get()).size, 12);
+  await ref.update({ startsAt: Date.now() - 9 * hour });
+  const syncId = randomUUID();
+  const synced = await Promise.all(Array.from({ length: 3 }, () => action(ref, uid, 1, "sync", syncId)));
+  assert.ok(synced.every(result => result.player.normalGranted === 14 && result.player.used === 1));
+  assert.equal((await ref.collection("grants").get()).size, 14);
+  assert.equal((await call("getQuest", {}, uid)).dueDice, 0);
+  const late = await join(ref);
+  assert.equal((await call("getQuest", {}, late)).dueDice, 14);
+  const received = await action(ref, late, 0, "sync");
+  assert.equal(received.player.normalGranted, 14);
+  assert.equal((await ref.collection("grants").get()).size, 28);
+  await assert.rejects(call("adminReleaseQuestDice", { runId: ref.id, grantId: randomUUID(), count: 1,
+    reason: "Emulator only", expectedTotal: 0 }));
+});

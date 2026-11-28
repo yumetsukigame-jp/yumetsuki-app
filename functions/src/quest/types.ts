@@ -14,9 +14,11 @@ export type QuestRules = {
   topMinProgress: number;
   topMinLevel: number;
   distribution: {
-    mode: "schedule" | "daily" | "admin";
+    mode: "schedule" | "daily" | "interval" | "admin";
     releaseAt: number[];
     dailyStartHourJst: number;
+    intervalHours?: number;
+    intervalCount?: number;
   };
   rescue: {
     enabled: boolean;

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
-const { initialQuestState, advanceQuest, updateQuestScore, questResult, QUEST_BOARD } = require("../functions/lib/quest/engine");
+const { initialQuestState, advanceQuest, updateQuestScore, questResult, releasedQuestDice, QUEST_BOARD } = require("../functions/lib/quest/engine");
 const { forecastQuest } = require("../functions/lib/quest/simulation");
 const { applyQuestPsa } = require("../functions/lib/quest/psa");
 const { rules } = require("../functions/test/quest-fixtures.cjs");
@@ -58,6 +58,8 @@ async function main() {
       let dueDice = 0;
       let nextDie = 6, psaReservedCount = 0;
       let menuAccess = { mode: "admin", version: 0, allowed: true }, menuFails = false;
+      const pendingDice = () => run.rules.distribution.mode === "admin" ? dueDice
+        : Math.max(0, releasedQuestDice(run.rules, run.startsAt, run.endsAt, Date.now()) - player.normalGranted);
       function ranking(input) {
         const row = { id: player.publicId, displayName: player.displayName, tileId: player.tileId, score: player.score, used: player.used, level: player.level, rank: 1 };
         return { items: input.cursor ? [{ ...row, id: "page-two", displayName: "続きの補佐役" }] : [row], own: row,
@@ -92,8 +94,9 @@ async function main() {
           result = menuAccess;
         } else if (action === "getQuest") {
           await new Promise(resolve => setTimeout(resolve, questReloadDelay));
+          const available = pendingDice();
           result = { run: input.archive ? archive : runDeleted ? null : { ...run, psaRemaining: Math.max(0, (run.rules.psaLimit ?? 0) - psaReservedCount) }, player: runDeleted && !input.archive ? null : player, reason: null,
-            dueDice, serverNow: Date.now(), forecast: forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + dueDice)) };
+            dueDice: available, serverNow: Date.now(), forecast: forecastQuest(player, run.rules, Math.min(run.rules.maxTurns, player.normalGranted + available)) };
         }
         else if (action === "listQuestProgress") result = ranking(input);
         else if (action === "listQuestArchives") result = { items: [archive], nextCursor: null };
@@ -105,9 +108,10 @@ async function main() {
           if (saves.has(input.requestId)) result = { player: saves.get(input.requestId), replay: true };
           else {
             assert.equal(input.version, player.version);
-            player.normalGranted += dueDice; dueDice = 0;
+            player.normalGranted += pendingDice(); dueDice = 0;
             const previous = player;
-            player = { ...player, ...advanceQuest(player, input.action, run.rules, input.action === "roll" ? nextDie : undefined, 7) };
+            player = input.action === "sync" ? { ...player, version: player.version + 1, trace: undefined }
+              : { ...player, ...advanceQuest(player, input.action, run.rules, input.action === "roll" ? nextDie : undefined, 7) };
             if (run.rules.psaLimit) {
               const prize = applyQuestPsa(previous, player, run.rules.psaLimit - psaReservedCount);
               player.psaFragments = prize.fragments; player.psaReserved = prize.reserved;
@@ -146,9 +150,13 @@ async function main() {
         }
         else if (action === "adminSaveQuest") {
           assert.equal(input.draft.rules.maxTurns, 14);
-          assert.equal(input.draft.rules.boardVersion, "quest-board-v3");
+          assert.equal(input.draft.rules.boardVersion, adminRuns.find(run => run.id === input.runId)?.rules.boardVersion ?? "quest-board-v3");
           assert.equal(input.draft.rules.middleMin, 52);
           assert.equal(input.draft.rules.psaLimit, 2);
+          if (input.draft.rules.distribution.mode !== "interval") {
+            assert.ok(!("intervalHours" in input.draft.rules.distribution));
+            assert.ok(!("intervalCount" in input.draft.rules.distribution));
+          }
           adminRuns.splice(0, adminRuns.length, { ...input.draft, id: "draft-quest", version: 1, state: "draft", simulation: null, simulatedVersion: null });
           result = { runId: "draft-quest", version: 1 };
         } else if (action === "adminSimulateQuest") {
@@ -194,6 +202,7 @@ async function main() {
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(`${base}/quest`);
       await page.getByRole("heading", { name: "庭で道を選ぼう" }).waitFor();
+      await page.getByText("次のサイコロは開催者の指定で配布されます。", { exact: true }).waitFor();
       const gradeCard = page.locator('[aria-label="星務評価"]');
       await gradeCard.getByText("現在の星務評価", { exact: true }).waitFor();
       assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "下位");
@@ -287,6 +296,35 @@ async function main() {
       await page.getByRole("link", { name: "何かのPSAガチャへ", exact: true }).waitFor();
       assert.equal(await preview.count(), 0);
       run.rules = rules; run.state = "published"; nextDie = 6; psaReservedCount = 0;
+      const originalTimes = { startsAt: run.startsAt, endsAt: run.endsAt }, hour = 3600000;
+      run.rules = { ...rules, distribution: { ...rules.distribution, mode: "interval", intervalHours: 1, intervalCount: 2 } };
+      run.startsAt = Date.now() - hour + 5000; run.endsAt = Date.now() + 3 * hour;
+      player = createPlayer({ used: 2, normalGranted: 2, version: 2 });
+      await page.reload();
+      await page.getByText(/次のサイコロ付与：.*（2個・日本時間）/).waitFor();
+      assert.equal(await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).isEnabled(), false);
+      const reloadCount = calls.filter(call => call.action === "getQuest").length;
+      await page.getByRole("button", { name: "配布済みの2個を受け取る", exact: true }).waitFor();
+      assert.equal(calls.filter(call => call.action === "getQuest").length, reloadCount, "Timed releases must appear without a reload");
+      assert.equal(await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).isEnabled(), true);
+      await page.getByRole("button", { name: "配布済みの2個を受け取る", exact: true }).click();
+      await page.getByRole("button", { name: "配布済みの2個を受け取る", exact: true }).waitFor({ state: "detached" });
+      assert.equal(player.normalGranted, 4);
+      assert.equal(player.used, 2);
+      run.startsAt = originalTimes.startsAt; run.endsAt = Date.now() + 48 * hour;
+      run.rules = { ...rules, distribution: { ...rules.distribution, mode: "daily", dailyStartHourJst: 6 } };
+      player = createPlayer({ used: 1, normalGranted: 1 });
+      await page.reload();
+      await page.getByText(/次のサイコロ付与：.*（1個・日本時間）/).waitFor();
+      const scheduledAt = Date.now() + hour;
+      run.rules = { ...rules, distribution: { ...rules.distribution, mode: "schedule",
+        releaseAt: [run.startsAt, scheduledAt, scheduledAt, ...Array(11).fill(scheduledAt + hour)] } };
+      await page.reload();
+      await page.getByText(/次のサイコロ付与：.*（2個・日本時間）/).waitFor();
+      run.endsAt = Date.now() - 1;
+      await page.reload();
+      await page.getByText("この開催のサイコロ配布は終了しました。", { exact: true }).waitFor();
+      run.rules = rules; Object.assign(run, originalTimes);
       const die = page.locator('[class*="diceResult"] > span[aria-hidden="true"]');
       const board = page.locator('[class*="playArea"] [class*="board"]');
       for (const [width, height] of [[360, 640], [390, 740], [1280, 900]]) {
@@ -446,6 +484,9 @@ async function main() {
         await page.getByLabel(fields[index], { exact: true }).inputValue(), String([1, 12, 2, 80, 1, 52, 68, 66, 6][index]));
       assert.equal(await page.getByLabel("配布方式").inputValue(), "");
       assert.equal(await page.getByLabel("この開催での救済").inputValue(), "");
+      await page.getByLabel("配布方式").selectOption("interval");
+      assert.equal(await page.getByLabel("追加間隔（時間）", { exact: true }).inputValue(), "24");
+      assert.equal(await page.getByLabel("１回の追加個数", { exact: true }).inputValue(), "1");
       await page.getByLabel("サイコロの使用上限", { exact: true }).fill("99");
       await page.getByLabel("配布方式").selectOption("schedule");
       assert.equal(await page.getByLabel(/個目の配布日時（日本時間）/).count(), 99);
@@ -566,6 +607,25 @@ async function main() {
       await page.getByText("各２万件、６条件の試算を保存しました。", { exact: false }).waitFor();
       await page.getByRole("columnheader", { name: "PSA５個達成（下位・中間）", exact: true }).waitFor();
       assert.equal(await page.getByRole("cell", { name: "20.00%", exact: true }).count(), 6);
+      await page.getByLabel("配布方式").selectOption("interval");
+      await page.getByLabel("追加間隔（時間）", { exact: true }).fill("3");
+      await page.getByLabel("１回の追加個数", { exact: true }).fill("4");
+      await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "下書きを保存しました。" }).waitFor();
+      assert.equal(adminRuns[0].rules.distribution.intervalHours, 3);
+      assert.equal(adminRuns[0].rules.distribution.intervalCount, 4);
+      await page.getByRole("button", { name: "新しい開催を作る", exact: true }).click();
+      await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
+      assert.equal(await page.getByLabel("配布方式").inputValue(), "interval");
+      assert.equal(await page.getByLabel("追加間隔（時間）", { exact: true }).inputValue(), "3");
+      assert.equal(await page.getByLabel("１回の追加個数", { exact: true }).inputValue(), "4");
+      await page.getByLabel("配布方式").selectOption("admin");
+      await Promise.all([
+        page.waitForResponse(response => response.url().endsWith("/adminSaveQuest")),
+        page.getByRole("button", { name: "下書きを保存", exact: true }).click(),
+      ]);
+      await page.getByRole("status").filter({ hasText: "下書きを保存しました。" }).waitFor();
+      assert.equal(adminRuns[0].rules.distribution.mode, "admin");
       await page.setViewportSize({ width: 390, height: 950 });
       await page.goto(`${base}/`);
       const menu = page.getByRole("link", { name: /^ゆめつきクエスト/ });
@@ -613,7 +673,7 @@ async function main() {
       await page.locator('a[href="/quest"]').waitFor();
       assert.deepEqual(errors, [], `${name} page errors`);
       assert.ok(calls.filter(call => call.action === "getQuest" && !call.input.archive).every(call => !("runId" in call.input)));
-      console.log(`${name}: mobile/desktop board, retry/reload, shortcut choices, double-click, ranking/archive isolation, admin draft/simulate/publish/grant/finalize passed (mock services only)`);
+      console.log(`${name}: timed dice/date notices, interval settings, mobile/desktop board, retry/reload, shortcut choices, double-click, ranking/archive isolation, admin draft/simulate/publish/grant/finalize passed (mock services only)`);
       await context.close();
     } finally { await browser.close(); }
   }

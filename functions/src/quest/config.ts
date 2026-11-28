@@ -39,12 +39,19 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
     "percentDecimals", "middleMin", "upperMin", "topMinProgress", "topMinLevel", "distribution", "rescue", "psaLimit"]);
   if (r.boardVersion !== "quest-board-v2" && r.boardVersion !== "quest-board-v3") throw new QuestInputError("盤面を指定してください");
   const maxTurns = questInteger(r.maxTurns, "サイコロの使用上限", 1, 99);
-  const distribution = questObject(r.distribution, ["mode", "releaseAt", "dailyStartHourJst"]);
-  if (!["schedule", "daily", "admin"].includes(distribution.mode as string)) throw new QuestInputError("配布方式を選んでください");
+  const distribution = questObject(r.distribution, ["mode", "releaseAt", "dailyStartHourJst", "intervalHours", "intervalCount"]);
+  if (!["schedule", "daily", "interval", "admin"].includes(distribution.mode as string)) throw new QuestInputError("配布方式を選んでください");
   if (!Array.isArray(distribution.releaseAt) || distribution.releaseAt.length > maxTurns) throw new QuestInputError("配布日時は使用上限以内で指定してください");
   const releaseAt = distribution.releaseAt.map(at => questInteger(at, "配布日時", startsAt, endsAt - 1)).sort((a, b) => a - b);
   if (distribution.mode === "schedule" && releaseAt.length !== maxTurns) throw new QuestInputError("日時指定方式は使用上限と同じ数の配布日時を指定してください（同時配布可）");
   if (distribution.mode !== "schedule" && releaseAt.length) throw new QuestInputError("日時指定以外では配布日時を空にしてください");
+  if (distribution.mode !== "interval" && (distribution.intervalHours !== undefined || distribution.intervalCount !== undefined)) {
+    throw new QuestInputError("追加間隔と個数は時間間隔方式だけで指定してください");
+  }
+  const interval = distribution.mode === "interval" ? {
+    intervalHours: questInteger(distribution.intervalHours, "追加間隔（時間）", 1, 8784),
+    intervalCount: questInteger(distribution.intervalCount, "１回の追加個数", 1, 99),
+  } : {};
   const rescue = questObject(r.rescue, ["enabled", "adminEnabled", "eventSources", "fromTurn", "belowScore", "maxGrants", "simulationRate", "simulationTurn"]);
   if (typeof rescue.enabled !== "boolean" || typeof rescue.adminEnabled !== "boolean" ||
       !Array.isArray(rescue.eventSources) || rescue.eventSources.some(source => !["neraiuchi", "nibuichi"].includes(source)) ||
@@ -64,7 +71,7 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
     topMinProgress: questInteger(r.topMinProgress, "最上位の塔到達点", 59, 66),
     topMinLevel: questInteger(r.topMinLevel, "最上位のレベル", 1, 1000),
     distribution: { mode: distribution.mode as QuestRules["distribution"]["mode"], releaseAt,
-      dailyStartHourJst: questInteger(distribution.dailyStartHourJst, "日次切替時刻（日本時間）", 0, 23) },
+      dailyStartHourJst: questInteger(distribution.dailyStartHourJst, "日次切替時刻（日本時間）", 0, 23), ...interval },
     rescue: {
       enabled: rescue.enabled, adminEnabled: rescue.adminEnabled,
       eventSources: rescue.eventSources as QuestRules["rescue"]["eventSources"],

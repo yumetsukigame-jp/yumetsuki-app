@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const { rules } = require("./quest-fixtures.cjs");
 const { QUEST_BOARD, QUEST_TILES, initialQuestState, advanceQuest, questResult, updateQuestScore,
-  releasedQuestDice, questReleaseKeys, questPercent, questGoalDistance } = require("../lib/quest/engine");
+  releasedQuestDice, questReleaseKeys, questNextDiceRelease, questPercent, questGoalDistance } = require("../lib/quest/engine");
 const { simulateQuest, forecastQuest } = require("../lib/quest/simulation");
 const { validateQuestDraft } = require("../lib/quest/config");
 const state = (overrides = {}) => ({ ...initialQuestState(), ...overrides });
@@ -126,6 +126,39 @@ test("JST daily releases carry over with unique date keys, schedule dates are en
   const schedule = { ...rules, distribution: { ...rules.distribution, mode: "schedule", releaseAt: [startsAt, startsAt, endsAt] } };
   assert.equal(releasedQuestDice(schedule, startsAt, endsAt, endsAt), 2);
 });
+test("interval releases start with a batch, carry over, stop at the cap and exclude the end", () => {
+  const startsAt = Date.parse("2026-11-28T12:00:00+09:00"), hour = 3600000;
+  const interval = { ...rules, distribution: { ...rules.distribution, mode: "interval", intervalHours: 2, intervalCount: 3 } };
+  const endsAt = startsAt + 10 * hour;
+  for (const [offset, count] of [[-1, 0], [0, 3], [2 * hour - 1, 3], [2 * hour, 6], [8 * hour, 14], [20 * hour, 14]]) {
+    assert.equal(releasedQuestDice(interval, startsAt, endsAt, startsAt + offset), count);
+  }
+  const keys = questReleaseKeys(interval, startsAt, endsAt, endsAt);
+  assert.equal(new Set(keys).size, 14);
+  assert.deepEqual(keys.slice(0, 4), ["interval-0-0", "interval-0-1", "interval-0-2", "interval-1-0"]);
+  assert.equal(keys.at(-1), "interval-4-1");
+  assert.equal(releasedQuestDice(interval, startsAt, startsAt + 2 * hour, startsAt + 3 * hour), 3);
+  assert.equal(releasedQuestDice({ ...interval, maxTurns: 1 }, startsAt, endsAt, endsAt), 1);
+  assert.equal(releasedQuestDice({ ...interval, maxTurns: 99 }, startsAt, startsAt + 100 * hour, startsAt + 100 * hour), 99);
+});
+test("next release dates match daily, scheduled and interval allocation with no dates after completion", () => {
+  const start = Date.parse("2026-11-28T12:00:00+09:00"), hour = 3600000, end = start + 30 * 24 * hour;
+  const interval = { ...rules, maxTurns: 5, distribution: { ...rules.distribution, mode: "interval", intervalHours: 2, intervalCount: 3 } };
+  assert.deepEqual(questNextDiceRelease(interval, start, end, start - 1), { at: start, count: 3 });
+  assert.deepEqual(questNextDiceRelease(interval, start, end, start), { at: start + 2 * hour, count: 2 });
+  assert.equal(questNextDiceRelease(interval, start, end, start + 2 * hour), null);
+  assert.equal(questNextDiceRelease(interval, start, start + 2 * hour, start), null);
+  const daily = { ...rules, distribution: { ...rules.distribution, mode: "daily", dailyStartHourJst: 6 } };
+  assert.deepEqual(questNextDiceRelease(daily, start, end, start - 1), { at: start, count: 1 });
+  const nextDay = Date.parse("2026-11-29T06:00:00+09:00");
+  assert.deepEqual(questNextDiceRelease(daily, start, end, start), { at: nextDay, count: 1 });
+  assert.deepEqual(questNextDiceRelease(daily, start, end, nextDay), { at: nextDay + 24 * hour, count: 1 });
+  const scheduled = { ...rules, distribution: { ...rules.distribution, mode: "schedule", releaseAt: [start, start + hour, start + hour, end] } };
+  assert.deepEqual(questNextDiceRelease(scheduled, start, end, start), { at: start + hour, count: 2 });
+  assert.equal(questNextDiceRelease(scheduled, start, end, start + hour), null);
+  assert.equal(questNextDiceRelease(daily, start, end, end), null);
+  assert.equal(questNextDiceRelease(rules, start, end, start), null);
+});
 test("invalid draft configuration and sample omissions cannot become a live run", () => {
   assert.throws(() => validateQuestDraft({}));
   const draft = { title: "Test", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg",
@@ -133,6 +166,14 @@ test("invalid draft configuration and sample omissions cannot become a live run"
   assert.equal(validateQuestDraft(draft).rules.maxTurns, 14);
   assert.equal(validateQuestDraft(draft).rules.psaLimit, 0);
   assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, psaLimit: 2 } }).rules.psaLimit, 2);
+  const interval = { ...rules.distribution, mode: "interval", intervalHours: 3, intervalCount: 4 };
+  assert.deepEqual(validateQuestDraft({ ...draft, rules: { ...rules, distribution: interval } }).rules.distribution, interval);
+  for (const changes of [{ intervalHours: 0 }, { intervalHours: 0.5 }, { intervalHours: 8785 },
+    { intervalCount: 0 }, { intervalCount: 100 }, { intervalCount: undefined }, { intervalHours: undefined }]) {
+    assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, distribution: { ...interval, ...changes } } }));
+  }
+  assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, distribution: { ...interval, mode: "admin" } } }));
+  assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, distribution: { ...interval, releaseAt: [1000] } } }));
   for (const psaLimit of [-1, 0.5, 100001]) {
     assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, psaLimit } }));
   }

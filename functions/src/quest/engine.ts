@@ -222,8 +222,35 @@ export function questReleaseKeys(rules: QuestRules, startsAt: number, endsAt: nu
       .filter(({ at }) => at <= now && at >= startsAt && at < endsAt).slice(0, rules.maxTurns)
       .map(({ index }) => `schedule-${index}`);
   }
+  if (rules.distribution.mode === "interval") {
+    const { intervalHours = 24, intervalCount = 1 } = rules.distribution;
+    const periods = Math.max(0, 1 + Math.floor((Math.min(now, endsAt - 1) - startsAt) / (intervalHours * 3600000)));
+    return Array.from({ length: Math.min(rules.maxTurns, periods * intervalCount) },
+      (_, index) => `interval-${Math.floor(index / intervalCount)}-${index % intervalCount}`);
+  }
   const day = (at: number) => Math.floor((at + (9 - rules.distribution.dailyStartHourJst) * 3600000) / 86400000);
   const first = day(startsAt);
   return Array.from({ length: Math.min(rules.maxTurns, Math.max(0, day(Math.min(now, endsAt - 1)) - first + 1)) },
     (_, index) => `day-${first + index}`);
+}
+export function questNextDiceRelease(rules: QuestRules, startsAt: number, endsAt: number, now: number): { at: number; count: number } | null {
+  if (rules.distribution.mode === "admin" || now >= endsAt) return null;
+  if (rules.distribution.mode === "schedule") {
+    const future = rules.distribution.releaseAt.filter(at => at >= startsAt && at < endsAt).slice(0, rules.maxTurns).filter(at => at > now);
+    if (!future.length) return null;
+    const at = Math.min(...future);
+    return { at, count: future.filter(value => value === at).length };
+  }
+  const released = releasedQuestDice(rules, startsAt, endsAt, now);
+  if (released >= rules.maxTurns) return null;
+  let at = startsAt, count = 1;
+  if (rules.distribution.mode === "interval") {
+    const { intervalHours = 24, intervalCount = 1 } = rules.distribution;
+    at += Math.floor(released / intervalCount) * intervalHours * 3600000;
+    count = Math.min(intervalCount, rules.maxTurns - released);
+  } else if (released > 0) {
+    const shift = (9 - rules.distribution.dailyStartHourJst) * 3600000;
+    at = (Math.floor((startsAt + shift) / 86400000) + released) * 86400000 - shift;
+  }
+  return at < endsAt ? { at, count } : null;
 }

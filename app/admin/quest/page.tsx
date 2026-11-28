@@ -58,7 +58,7 @@ function newForm() {
   return { maxTurns: "14", psaLimit: "0", title: "", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg", startsAt: "", endsAt: "",
     flags: ["public"] as QuestFlag[], xText: "", accessCode: "",
     numbers: Object.fromEntries(Object.entries(recommendedNumbers).map(([key, value]) => [key, String(value)])) as Record<Numeric, string>,
-    distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(99).fill(""), dailyHour: "",
+    distribution: "" as "" | QuestRules["distribution"]["mode"], releaseAt: Array<string>(99).fill(""), dailyHour: "", intervalHours: "24", intervalCount: "1",
     rescue: "" as "" | "yes" | "no", adminRescue: false, eventSources: [] as QuestRules["rescue"]["eventSources"],
     rescueFrom: "", rescueBelow: "", rescueMax: "", rescueRate: "", rescueTurn: "" };
 }
@@ -71,7 +71,8 @@ function fromRun(run: AdminRun): Form {
     numbers: Object.fromEntries(Object.keys(numericFields).map(key => [key, String(r[key as Numeric])])) as Record<Numeric, string>,
     distribution: r.distribution.mode, releaseAt: Array.from({ length: 99 }, (_, index) =>
       r.distribution.releaseAt[index] === undefined ? "" : localJst(r.distribution.releaseAt[index])),
-    dailyHour: String(r.distribution.dailyStartHourJst), rescue: r.rescue.enabled ? "yes" : "no",
+    dailyHour: String(r.distribution.dailyStartHourJst), intervalHours: String(r.distribution.intervalHours ?? 24),
+    intervalCount: String(r.distribution.intervalCount ?? 1), rescue: r.rescue.enabled ? "yes" : "no",
     adminRescue: r.rescue.adminEnabled, eventSources: r.rescue.eventSources, rescueFrom: String(r.rescue.fromTurn),
     rescueBelow: String(r.rescue.belowScore), rescueMax: String(r.rescue.maxGrants),
     rescueRate: String(r.rescue.simulationRate * 100), rescueTurn: String(r.rescue.simulationTurn) };
@@ -84,6 +85,8 @@ function toDraft(form: Form, boardVersion: QuestRules["boardVersion"]): QuestDra
   const distribution: QuestRules["distribution"] = {
     mode: form.distribution, releaseAt: form.distribution === "schedule" ? form.releaseAt.slice(0,maxTurns).map(value => parseJstDateTime(value).getTime()) : [],
     dailyStartHourJst: form.distribution === "daily" ? numberValue(form.dailyHour, "日次切替時刻") : 0,
+    ...(form.distribution === "interval" ? { intervalHours: numberValue(form.intervalHours, "追加間隔（時間）"),
+      intervalCount: numberValue(form.intervalCount, "１回の追加個数") } : {}),
   };
   const rescue: QuestRules["rescue"] = form.rescue === "no"
     ? { enabled: false, adminEnabled: false, eventSources: [], fromTurn: maxTurns, belowScore: numbers.middleMin,
@@ -297,10 +300,17 @@ export default function QuestAdminPage() {
         <label>サイコロの使用上限<input type="number" min={1} max={99} required value={form.maxTurns}
           onChange={event => change("maxTurns",event.target.value)} /></label>
         <label>配布方式<select required value={form.distribution} onChange={event => change("distribution", event.target.value as Form["distribution"])}>
-          <option value="">選択してください</option><option value="admin">管理者が全体・個別に付与</option><option value="daily">開催日から日次で１個</option><option value="schedule">回数分の配布日時を指定</option>
+          <option value="">選択してください</option><option value="admin">管理者が全体・個別に付与</option><option value="daily">開催日から日次で１個</option><option value="interval">指定した時間ごとに指定個数を追加</option><option value="schedule">回数分の配布日時を指定</option>
         </select></label>
         <p className={styles.small}>配布済み分は、途中参加者にも開催期間中に繰り越します。</p>
         {form.distribution === "daily" && <label>日次切替時刻（日本時間の時、０〜23）<input type="number" min={0} max={23} required value={form.dailyHour} onChange={event => change("dailyHour", event.target.value)} /></label>}
+        {form.distribution === "interval" && <>
+          <div className={styles.fields}>
+            <label>追加間隔（時間）<input type="number" min={1} max={8784} step={1} required value={form.intervalHours} onChange={event => change("intervalHours", event.target.value)} /></label>
+            <label>１回の追加個数<input type="number" min={1} max={99} step={1} required value={form.intervalCount} onChange={event => change("intervalCount", event.target.value)} /></label>
+          </div>
+          <p className={styles.small}>開催開始時に最初の分を配布し、以後この間隔で追加します。通算の配布数はサイコロの使用上限までです。</p>
+        </>}
         {form.distribution === "schedule" && <div className={styles.fields}>{form.releaseAt.slice(0, Math.min(99, Number(form.maxTurns) || 0)).map((value, index) => <label key={index}>{index + 1}個目の配布日時（日本時間）
           <input type="datetime-local" required value={value} onChange={event => change("releaseAt", form.releaseAt.map((at, i) => i === index ? event.target.value : at))} /></label>)}</div>}
         <h3>星ポイント・評価境界</h3>
@@ -382,7 +392,7 @@ export default function QuestAdminPage() {
           </button>
           <button type="button" disabled={busy} onClick={() => void work(async () => { await refreshSelected(selected.id); })}>全体の配布数を再取得</button>
         </form>
-      </> : <p>日次・日時指定の開催は、設定された日時の配布分を利用者が受け取る方式です。全体への手動配布は管理者配布方式で利用できます。</p>}
+      </> : <p>日次・時間間隔・日時指定の開催は、設定された日時の配布分を利用者が受け取る方式です。全体への手動配布は管理者配布方式で利用できます。</p>}
       {selected.state === "published" && <details>
       <summary>個別付与</summary>
       <h2>通常サイコロ・救済の個別付与</h2>
