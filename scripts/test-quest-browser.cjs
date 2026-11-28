@@ -205,9 +205,13 @@ async function main() {
       await page.getByText("次のサイコロは開催者の指定で配布されます。", { exact: true }).waitFor();
       const gradeCard = page.locator('[aria-label="星務評価"]');
       await gradeCard.getByText("現在の星務評価", { exact: true }).waitFor();
+      await gradeCard.getByText("Lv.3／上限Lv.15", { exact: true }).waitFor();
+      await gradeCard.getByText(/星ポイント 35／168/).waitFor();
+      assert.equal(await page.getByRole("heading", { name: "あなたの星務", exact: true }).count(), 0);
+      assert.equal(await gradeCard.getByRole("meter", { name: "実績の星務達成率" }).isVisible(), true);
       assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "下位");
       await gradeCard.getByText("6点", { exact: true }).waitFor();
-      await gradeCard.getByText(/終了見込み/).waitFor();
+      await gradeCard.getByText(/^終了見込み /).waitFor();
       await gradeCard.locator("summary").filter({ hasText: "見込みの試算条件" }).click();
       await gradeCard.getByText(/未付与分は含みません/).waitFor();
       await page.locator("summary").filter({ hasText: "評価点の内訳" }).click();
@@ -217,7 +221,7 @@ async function main() {
       dropResponse = true;
       await page.getByRole("button", { name: "巡る花壇へ（星を集める）", exact: true }).click();
       await page.getByRole("alert").filter({ hasText: "応答を受け取れませんでした" }).waitFor();
-      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0, "Unconfirmed operations must hide stale forecasts");
+      assert.equal(await gradeCard.getByText(/^終了見込み /).count(), 0, "Unconfirmed operations must hide stale forecasts");
       run.endsAt = Date.now() - 1;
       await page.reload();
       await page.getByRole("button", { name: "前回の結果を確認" }).click();
@@ -256,6 +260,21 @@ async function main() {
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
       await page.locator('[data-overlay="reward"]').getByText("PSAのかけら ＋1", { exact: true }).waitFor();
       await page.getByText("PSAのかけら 1／5", { exact: true }).waitFor();
+      assert.equal(await gradeCard.locator('[class*="fragmentCollection"] img').count(), 5);
+      assert.equal(await gradeCard.locator('[class*="fragmentCollection"] img[data-filled="true"]').count(), 1);
+      const fragmentContrast = await gradeCard.locator('[class*="psaPanel"]').evaluate(panel => {
+        const luminance = color => {
+          const values = color.match(/[\d.]+/g).slice(0, 3).map(value => Number(value) / 255)
+            .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+          return values[0] * .2126 + values[1] * .7152 + values[2] * .0722;
+        };
+        const background = luminance(getComputedStyle(panel).backgroundColor);
+        return [...panel.querySelectorAll("strong, small")].map(node => {
+          const foreground = luminance(getComputedStyle(node).color);
+          return (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05);
+        });
+      });
+      assert.ok(fragmentContrast.every(contrast => contrast >= 4.5), "Fragment text must remain readable inside the dark grade card");
       assert.equal(await badges.count(), 5);
       await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
       player = createPlayer({ psaFragments: 4 });
@@ -296,6 +315,11 @@ async function main() {
       await page.getByRole("link", { name: "何かのPSAガチャへ", exact: true }).waitFor();
       assert.equal(await preview.count(), 0);
       run.rules = rules; run.state = "published"; nextDie = 6; psaReservedCount = 0;
+      player = createPlayer({ starPoints: 170 });
+      await page.reload();
+      await gradeCard.getByText("Lv.15／上限Lv.15", { exact: true }).waitFor();
+      await gradeCard.getByText(/星ポイント 170／168.*上限到達/).waitFor();
+      assert.equal(await gradeCard.getByText(/レベルでも１つ上がる/).count(), 0);
       const originalTimes = { startsAt: run.startsAt, endsAt: run.endsAt }, hour = 3600000;
       run.rules = { ...rules, distribution: { ...rules.distribution, mode: "interval", intervalHours: 1, intervalCount: 2 } };
       run.startsAt = Date.now() - hour + 5000; run.endsAt = Date.now() + 3 * hour;
@@ -429,7 +453,7 @@ async function main() {
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
       await page.locator('[data-overlay="stage"]').getByText("最上位にランクアップ！", { exact: true }).waitFor();
       assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "最上位");
-      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0);
+      assert.equal(await gradeCard.getByText(/^終了見込み /).count(), 0);
       await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
       player.result = questResult(player, run.rules);
       await page.reload();
@@ -443,7 +467,7 @@ async function main() {
       assert.equal(await gradeCard.locator('[aria-current="step"]').textContent(), "中間");
       await page.getByText("0%", { exact: true }).waitFor();
       await gradeCard.getByText("最終グループは開催終了後に確定します。", { exact: true }).waitFor();
-      assert.equal(await gradeCard.getByText(/終了見込み/).count(), 0);
+      assert.equal(await gradeCard.getByText(/^終了見込み /).count(), 0);
       player = createPlayer({ tileId: "s3-20", used: 1, normalGranted: 3 });
       await page.reload();
       await page.waitForFunction(() => ![...document.querySelectorAll("button")].find(button => button.textContent === "星のサイコロを振る").disabled);
@@ -482,6 +506,7 @@ async function main() {
         "達成率の小数桁（０〜２）", "中間の下限評価点", "上位の下限評価点", "最上位の塔進捗点（59〜66）", "最上位の必要レベル"];
       for (let index = 0; index < fields.length; index++) assert.equal(
         await page.getByLabel(fields[index], { exact: true }).inputValue(), String([1, 12, 2, 80, 1, 52, 68, 66, 6][index]));
+      assert.equal(await page.getByLabel("最上位の必要レベル", { exact: true }).getAttribute("max"), "15");
       assert.equal(await page.getByLabel("配布方式").inputValue(), "");
       assert.equal(await page.getByLabel("この開催での救済").inputValue(), "");
       await page.getByLabel("配布方式").selectOption("interval");

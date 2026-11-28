@@ -12,6 +12,7 @@ import { questCall, questError, questFlags, questGroups } from "@/app/lib/quest"
 import { GACHA_EVENT_FOLDER, GACHA_REGULAR_FOLDER, LEGACY_GACHA_FOLDER } from "@/app/lib/imageFolders";
 import type { QuestDraft, QuestFlag, QuestPublicRun, QuestRules, QuestSimulation } from "@/functions/src/quest/types";
 import { QUEST_MENU_LABELS, type QuestMenuAccess, type QuestMenuMode } from "@/functions/src/quest/menu";
+import { QUEST_LEVEL_LIMIT } from "@/functions/src/quest/level";
 import styles from "@/components/quest/quest.module.css";
 
 const numericFields = {
@@ -315,9 +316,10 @@ export default function QuestAdminPage() {
           <input type="datetime-local" required value={value} onChange={event => change("releaseAt", form.releaseAt.map((at, i) => i === index ? event.target.value : at))} /></label>)}</div>}
         <h3>星ポイント・評価境界</h3>
         <p className={styles.small}>評価点＝到達点＋レベル加点×（Lv.−１）。最上位には塔の到達点とレベルの両方が必要です。</p>
+        <p className={styles.small}>レベル上限はLv.{QUEST_LEVEL_LIMIT}です。旧仕様で到達済みのレベルと公開済みの必要レベルは保持します。</p>
         {!selected && <p className={styles.small}>初期値は変更できます。公開前に開催の設定を確認してください。</p>}
         <div className={styles.fields}>{Object.entries(numericFields).map(([key, label]) => <label key={key}>{label}<input type="number" required min={key === "stepStarPoints" || key === "levelScore" || key === "percentDecimals" ? 0 : 1}
-          step={1} value={form.numbers[key as Numeric]} onChange={event => change("numbers", { ...form.numbers, [key]: event.target.value })} /></label>)}</div>
+          max={key === "topMinLevel" ? QUEST_LEVEL_LIMIT : undefined} step={1} value={form.numbers[key as Numeric]} onChange={event => change("numbers", { ...form.numbers, [key]: event.target.value })} /></label>)}</div>
         <h3>イベント勝利・管理者付与による救済</h3>
         <label>この開催での救済<select required value={form.rescue} onChange={event => change("rescue", event.target.value as Form["rescue"])}>
           <option value="">明示的に選択してください</option><option value="no">付与による救済を使わない</option><option value="yes">条件を設定して使う</option>

@@ -1,4 +1,5 @@
 import definition from "./board-v2.json";
+import { questLevelLimit } from "./level";
 import type { QuestAction, QuestGroup, QuestResult, QuestRules, QuestState, QuestStep } from "./types";
 
 type Tile = {
@@ -62,7 +63,7 @@ export function questGoalDistance(state: Pick<QuestState, "tileId" | "branch" | 
   return null;
 }
 export function updateQuestScore(state: QuestState, rules: QuestRules) {
-  state.level = 1 + Math.floor(state.starPoints / rules.levelPoints);
+  state.level = Math.min(questLevelLimit(rules, state.level), 1 + Math.floor(state.starPoints / rules.levelPoints));
   state.score = questTile(state.tileId).progress + rules.levelScore * (state.level - 1);
 }
 export function questPercent(score: number, rules: QuestRules) {

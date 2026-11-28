@@ -123,6 +123,11 @@
 .gradeCard small { display:block; color:#d9e5f5; }
 .gradeGoal ul { padding-left:0; margin:4px 0; list-style:none; }
 .gradeCard summary { cursor:pointer; padding:8px 0; }
+.gradeCard .gradeLevel { font-size:.9rem; margin:10px 0; }
+.gradeProgress > p { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 12px; font-size:.85rem; }
+.gradeCard .scoreChange { color:#bfe7ff; }
+.gradeCard .notice { color:#242d4b; }
+.gradeCard .psaPanel small { color:#4b5c78; }
 
 .dicePreview { padding:10px 12px; margin:8px 0; border:1px solid #a6854d; border-radius:12px; background:#162847; color:#fff3d5; }
 .dicePreview h3 { margin:0 0 6px; font-size:.96rem; }
@@ -131,7 +136,7 @@
 .dicePreview li[data-special="true"] { background:#3d3952; color:#ffe5a5; }
 .dicePreview b { display:grid; place-items:center; background:#e0f2fb; color:#173350; min-width:1.25rem; border-radius:4px; }
 .dicePreview small,.psaPanel small { display:block; }
-.psaPanel { display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:3px 8px; padding:9px 12px; border:1px solid #ad8848; border-radius:10px; background:#fff6df; margin-bottom:10px; }
+.psaPanel { display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:3px 8px; padding:9px 12px; border:1px solid #ad8848; border-radius:10px; background:#fff6df; color:#242d4b; margin:12px 0; }
 .psaPanel img { grid-row:span 2; }
 .psaPanel small,.psaPanel a { grid-column:2; }
 .tile .fragmentBadge { position:absolute; width:48%; height:auto; right:-9%; top:-16%; filter:drop-shadow(0 0 4px #97ecff); pointer-events:none; }

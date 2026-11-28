@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { QUEST_LEVEL_LIMIT } from "@/functions/src/quest/level";
 import styles from "@/components/quest/quest.module.css";
 
 export default function QuestGuidePage() {
@@ -15,6 +16,7 @@ export default function QuestGuidePage() {
       <p>出た目の数だけ進みます。扉に届いたら残りの歩数は使わず、そのターンを終えて次の舞台へ。最後の１回で扉に届いた場合も、次の舞台への到達として残ります。</p>
       <h3>２．星ポイントを集める</h3>
       <p>移動と特別なマスで、クエスト内の星ポイントが貯まり、レベルが上がります。通常のアプリ内ポイントとは別の経験値です。参加時のポイント消費や、星ポイントによる発送物の交換はありません。</p>
+      <p>レベル上限はLv.{QUEST_LEVEL_LIMIT}です。上限に達しても星ポイントは貯まりますが、レベルとレベル加点は増えません。旧仕様で到達済みのレベルと公開済みの必要レベルは保持します。現在のレベル・星ポイント、星務達成率、PSAのかけらは「現在の星務評価」で確認できます。</p>
       <h3>３．星務報告書を受け取る</h3>
       <p>開催が終わると、到達マスとレベルから最上位・上位・中間・下位の４グループを判定します。途中で止めた旅も、そのときの実績で報告書に残ります。境界や配点は開催ごとに確定します。</p>
       <div className={styles.fields}>{[

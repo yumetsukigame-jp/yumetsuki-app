@@ -7,6 +7,7 @@ const { QUEST_BOARD, QUEST_TILES, initialQuestState, advanceQuest, questResult, 
   releasedQuestDice, questReleaseKeys, questNextDiceRelease, questPercent, questGoalDistance } = require("../lib/quest/engine");
 const { simulateQuest, forecastQuest } = require("../lib/quest/simulation");
 const { validateQuestDraft } = require("../lib/quest/config");
+const { QUEST_LEVEL_LIMIT, questLevelLimit } = require("../lib/quest/level");
 const state = (overrides = {}) => ({ ...initialQuestState(), ...overrides });
 const roll = (s, die) => advanceQuest(s, "roll", rules, die);
 
@@ -25,6 +26,29 @@ test("the complete authoritative 76-tile board is preserved, connected and versi
     todo.push(...tile.next, ...(tile.exitTo ? [tile.exitTo] : []));
   }
   assert.equal(visited.size, 76);
+});
+test("level growth caps without losing star points, existing levels or published goals", () => {
+  const target = (QUEST_LEVEL_LIMIT - 1) * rules.levelPoints;
+  for (const [points, level] of [[target - 1, QUEST_LEVEL_LIMIT - 1], [target, QUEST_LEVEL_LIMIT], [target + 100, QUEST_LEVEL_LIMIT]]) {
+    const player = state({ starPoints: points });
+    updateQuestScore(player, rules);
+    assert.equal(player.level, level);
+    assert.equal(player.starPoints, points);
+    assert.equal(player.score, (level - 1) * rules.levelScore);
+  }
+  const capped = state({ starPoints: target + 100, level: QUEST_LEVEL_LIMIT });
+  const next = roll(capped, 6);
+  assert.equal(next.level, QUEST_LEVEL_LIMIT);
+  assert.equal(next.starPoints, capped.starPoints + 6);
+  assert.equal(forecastQuest(capped, rules, 1).high, 6 + (QUEST_LEVEL_LIMIT - 1) * rules.levelScore);
+  const legacy = state({ starPoints: 300, level: 20 });
+  updateQuestScore(legacy, rules);
+  assert.equal(legacy.level, 20);
+  assert.equal(questLevelLimit(rules, legacy.level), 20);
+  const oldRules = { ...rules, topMinLevel: 20 };
+  const oldGoal = state({ starPoints: 228, tileId: "s4-03" });
+  updateQuestScore(oldGoal, oldRules);
+  assert.equal(questResult(oldGoal, oldRules).group, "top");
 });
 test("gates stop unused movement, including turn 14, without free movement XP", () => {
   for (const [from, to, stage] of [["s1-15", "s2-00", 2], ["s2-20", "s3-00", 3], ["s3-20", "s4-00", 4]]) {
@@ -164,6 +188,8 @@ test("invalid draft configuration and sample omissions cannot become a live run"
   const draft = { title: "Test", description: "", thumbnail: "/quest/menu-thumbnail-v2.jpg",
     startsAt: 1000, endsAt: 2000, publicFlags: ["public"], xAccountList: [], accessCode: "", rules };
   assert.equal(validateQuestDraft(draft).rules.maxTurns, 14);
+  assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, topMinLevel: QUEST_LEVEL_LIMIT } }).rules.topMinLevel, QUEST_LEVEL_LIMIT);
+  assert.throws(() => validateQuestDraft({ ...draft, rules: { ...rules, topMinLevel: QUEST_LEVEL_LIMIT + 1 } }));
   assert.equal(validateQuestDraft(draft).rules.psaLimit, 0);
   assert.equal(validateQuestDraft({ ...draft, rules: { ...rules, psaLimit: 2 } }).rules.psaLimit, 2);
   const interval = { ...rules.distribution, mode: "interval", intervalHours: 3, intervalCount: 4 };

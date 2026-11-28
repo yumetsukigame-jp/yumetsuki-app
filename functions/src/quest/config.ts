@@ -1,4 +1,5 @@
 import type { QuestDraft, QuestFlag, QuestRules } from "./types";
+import { QUEST_LEVEL_LIMIT } from "./level";
 
 export class QuestInputError extends Error {}
 
@@ -69,7 +70,7 @@ export function validateQuestDraft(raw: unknown): QuestDraft {
     middleMin: questInteger(r.middleMin, "中間の下限", 1, 10000),
     upperMin: questInteger(r.upperMin, "上位の下限", 2, 10000),
     topMinProgress: questInteger(r.topMinProgress, "最上位の塔到達点", 59, 66),
-    topMinLevel: questInteger(r.topMinLevel, "最上位のレベル", 1, 1000),
+    topMinLevel: questInteger(r.topMinLevel, "最上位のレベル", 1, QUEST_LEVEL_LIMIT),
     distribution: { mode: distribution.mode as QuestRules["distribution"]["mode"], releaseAt,
       dailyStartHourJst: questInteger(distribution.dailyStartHourJst, "日次切替時刻（日本時間）", 0, 23), ...interval },
     rescue: {

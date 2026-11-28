@@ -9,6 +9,7 @@ import { formatJstDateTime } from "@/app/lib/dateTime";
 import { questCall, questError, questFlags, questGroups, type QuestView } from "@/app/lib/quest";
 import { questBoard, questGoalDistance, questNextDiceRelease, questPercent, questResult, questTile, releasedQuestDice } from "@/functions/src/quest/engine";
 import { previewQuestRoll, PSA_FRAGMENT_TARGET } from "@/functions/src/quest/psa";
+import { QUEST_LEVEL_LIMIT, questLevelLimit } from "@/functions/src/quest/level";
 import type { QuestAction, QuestPlayer, QuestStep } from "@/functions/src/quest/types";
 import QuestBoard from "./QuestBoard";
 import QuestRanking from "./QuestRanking";
@@ -206,6 +207,7 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
   const nextScore = run && nextGrade && nextGrade !== "top" ? (nextGrade === "middle" ? run.rules.middleMin : run.rules.upperMin) - (player?.score ?? 0) : null;
   const goalDistance = player && run && !player.result ? questGoalDistance(player, run.rules.boardVersion) : null;
   const remaining = player && run ? run.rules.maxTurns - player.used : 0;
+  const levelLimit = run && player ? questLevelLimit(run.rules, player.level) : QUEST_LEVEL_LIMIT;
   const routePending = player?.pending?.kind === "branch" && (player.pending.steps > 0 || run?.rules.boardVersion === "quest-board-v3") || player?.pending?.kind === "shortcut";
   const journeyOpen = open && !!player && (remaining > 0 || routePending) && questTile(player.tileId).kind !== "finish";
   const forecast = journeyOpen && !busy && !pending ? view?.forecast : null;
@@ -277,9 +279,33 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
               {rankOrder.map((group, index) => <li key={group} data-grade={group} data-cleared={index < gradeIndex}
                 aria-current={group === grade ? "step" : undefined}>{questGroups[group]}</li>)}
             </ol>
+            <p className={styles.gradeLevel}>レベル <strong>Lv.{player.level}／上限Lv.{levelLimit}</strong>（星ポイント {player.starPoints}／{(levelLimit - 1) * run.rules.levelPoints}）{player.level >= levelLimit && " 上限到達"}</p>
+            <div className={styles.gradeProgress}>
+              <p>星務達成率（{player.result ? "確定実績" : "実績"}） <strong>{questPercent(player.score, run.rules)}%</strong>
+                <span>使用 <strong>{player.used}／{run.rules.maxTurns}回</strong></span></p>
+              <div className={styles.meter} role="meter" aria-label="実績の星務達成率" aria-valuenow={questPercent(player.score, run.rules)} aria-valuemin={0} aria-valuemax={100}>
+                <span className={styles.progressFill} style={{ width: `${questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
+                <span className={styles.levelFill} style={{ width: `${questPercent(player.score, run.rules) - questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
+              </div>
+            </div>
+            {!!run.rules.psaLimit && <div className={styles.psaPanel}>
+              <Image src="/quest/psa-fragment.png" alt="" width={42} height={42} />
+              <strong>{player.psaTicketIssued ? "何かのPSAガチャ チケット獲得" : player.psaReserved
+                ? "PSAチケット枠を確保済み" : `PSAのかけら ${player.psaFragments ?? 0}／${PSA_FRAGMENT_TARGET}`}</strong>
+              {!player.psaTicketIssued && <div className={styles.fragmentCollection} aria-hidden="true">
+                {Array.from({ length: PSA_FRAGMENT_TARGET }, (_, index) =>
+                  <Image key={index} src="/quest/psa-fragment.png" alt="" width={24} height={24}
+                    data-filled={player.psaReserved || index < (player.psaFragments ?? 0)} />)}
+              </div>}
+              {player.psaTicketIssued ? <Link href="/nanika-gacha">何かのPSAガチャへ</Link>
+                : player.psaReserved ? <small>第４ステージに到達せずに開催を終えると、チケットが付与されます。</small>
+                : !player.result && <small>{player.reachedStages.includes(4) ? "第４ステージ到達により、かけら・チケット枠は失効しました。"
+                  : !(run.psaRemaining ?? 0) ? "チケット枠が埋まり、かけらの出現は終了しました。"
+                  : `チケット残り ${run.psaRemaining}枠 · 第４ステージでかけら・チケット枠は失効`}</small>}
+            </div>}
             {journeyOpen && nextGrade && nextGrade !== "top" && <p className={styles.gradeGoal}>
               次は <strong>{questGroups[nextGrade]}</strong> まであと <strong>{nextScore}点</strong>
-              <small>到達点を伸ばそう。{run.rules.levelScore > 0 && nextScore !== null && <>レベルでも１つ上がるごとに＋{run.rules.levelScore}点。</>}</small>
+              <small>到達点を伸ばそう。{player.level < levelLimit && run.rules.levelScore > 0 && nextScore !== null && <>レベルでも１つ上がるごとに＋{run.rules.levelScore}点。</>}</small>
             </p>}
             {journeyOpen && nextGrade === "top" && <div className={styles.gradeGoal}>
               <p>次は <strong>最上位</strong></p>
@@ -305,6 +331,23 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
                 <p>{forecast.policy}</p>
               </details>
             </div>}
+            {scoreChange && <p className={styles.scoreChange}>{scoreChange}</p>}
+            <details>
+              <summary>評価点の内訳</summary>
+              <p>実績の評価点：{player.score}点</p>
+              <p className={styles.meterKey}><span>到達 {questTile(player.tileId).progress}点</span><span>レベル {(player.level-1)*run.rules.levelScore}点</span></p>
+              <p>{player.level >= levelLimit ? "レベル上限に到達しました。星ポイントは引き続き記録されます。"
+                : `次のレベルまで星ポイント ${run.rules.levelPoints - player.starPoints % run.rules.levelPoints}`}</p>
+              {forecast && <p>終了見込みの達成率：中央値 {questPercent(forecast.median, run.rules)}% ／ 10〜90%の範囲 {questPercent(forecast.low, run.rules)}〜{questPercent(forecast.high, run.rules)}%（実績とは別の試算です）</p>}
+              <p>受け取り済み {player.normalGranted}個 ／ 配布待ちの受け取り分 {dueDice}個 ／ 今振れる分 {canRoll ? Math.max(0, player.normalGranted + dueDice - player.used) : 0}個</p>
+              {player.result && <div className={styles.notice}>
+                <p>到達マス {player.result.tileId} ／ Lv.{player.result.level} ／ 使用{player.result.used}回</p>
+                {player.result.rescueUsed && <p>月明かりの小径を使用。補填は中間の下限までで、実績の評価点は変わりません。</p>}
+                <p>旅の記念：{player.souvenirs.map(value => value === "starflower" ? "星咲きの花" : `第${value.slice(-1)}舞台への到達`).join("、") || "書斎で受けた星務"}</p>
+              </div>}
+              <p>星渡りの抜け道：{player.shortcut === "tracking" ? `１・２が５回続くと開放（${player.originalRolls.length}／５回）`
+                : player.shortcut === "missed" ? "今回は条件に届きませんでした" : player.shortcut === "used" ? "使用済み" : player.shortcut === "declined" ? "今回は見送りました" : "扉が開いています"}</p>
+            </details>
           </div>
         <div ref={playArea} className={styles.playArea}>
           <QuestBoard key={`${run.id}:${boardFocus}`} player={player} version={run.rules.boardVersion} frames={frames} overlay={overlay} psaAvailable={open && (run.psaRemaining ?? 0) > 0 && !player.psaReserved && !player.reachedStages.includes(4)}>
@@ -346,50 +389,6 @@ export default function QuestExperience({ archiveId, rankingOnly = false }: { ar
             <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-use")}>抜け道を使って庭へ進む</button>
             <button disabled={busy || !!pending || !open} onClick={() => void act("shortcut-skip")}>今回は見送る</button></div>}
         </div>
-        <section className={styles.panel}>
-          <h2>{player.result ? "星務報告書" : "あなたの星務"}</h2>
-          {!!run.rules.psaLimit && <div className={styles.psaPanel}>
-            <Image src="/quest/psa-fragment.png" alt="" width={42} height={42} />
-            <strong>{player.psaTicketIssued ? "何かのPSAガチャ チケット獲得" : player.psaReserved
-              ? "PSAチケット枠を確保済み" : `PSAのかけら ${player.psaFragments ?? 0}／${PSA_FRAGMENT_TARGET}`}</strong>
-            {!player.psaTicketIssued && <div className={styles.fragmentCollection} aria-hidden="true">
-              {Array.from({ length: PSA_FRAGMENT_TARGET }, (_, index) =>
-                <Image key={index} src="/quest/psa-fragment.png" alt="" width={24} height={24}
-                  data-filled={player.psaReserved || index < (player.psaFragments ?? 0)} />)}
-            </div>}
-            {player.psaTicketIssued ? <Link href="/nanika-gacha">何かのPSAガチャへ</Link>
-              : player.psaReserved ? <small>第４ステージに到達せずに開催を終えると、チケットが付与されます。</small>
-              : !player.result && <small>{player.reachedStages.includes(4) ? "第４ステージ到達により、かけら・チケット枠は失効しました。"
-                : !(run.psaRemaining ?? 0) ? "チケット枠が埋まり、かけらの出現は終了しました。"
-                : `チケット残り ${run.psaRemaining}枠 · 第４ステージでかけら・チケット枠は失効`}</small>}
-          </div>}
-          <dl className={styles.stats}>
-            <div><dt>星務達成率（{player.result ? "確定実績" : "実績"}）</dt><dd>{questPercent(player.score, run.rules)}%</dd></div>
-            <div><dt>星ポイント・レベル</dt><dd>Lv.{player.level}</dd><small>{player.starPoints} 星ポイント</small></div>
-            <div><dt>サイコロ使用回数</dt><dd>{player.used}／{run.rules.maxTurns}回</dd></div>
-          </dl>
-          <details>
-            <summary>評価点の内訳</summary>
-            <p>実績の評価点：{player.score}点</p>
-            <div className={styles.meter} role="meter" aria-label="実績の星務達成率" aria-valuenow={questPercent(player.score, run.rules)} aria-valuemin={0} aria-valuemax={100}>
-              <span className={styles.progressFill} style={{ width: `${questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
-              <span className={styles.levelFill} style={{ width: `${questPercent(player.score, run.rules) - questPercent(questTile(player.tileId).progress, run.rules)}%` }} />
-            </div>
-            <p className={styles.meterKey}><span>到達 {questTile(player.tileId).progress}点</span><span>レベル {(player.level-1)*run.rules.levelScore}点</span></p>
-            <p>次のレベルまで星ポイント {run.rules.levelPoints - player.starPoints % run.rules.levelPoints}</p>
-            {forecast && <p>終了見込みの達成率：中央値 {questPercent(forecast.median, run.rules)}% ／ 10〜90%の範囲 {questPercent(forecast.low, run.rules)}〜{questPercent(forecast.high, run.rules)}%（実績とは別の試算です）</p>}
-          </details>
-          {scoreChange && <p className={styles.scoreChange}>{scoreChange}</p>}
-          <p>受け取り済み {player.normalGranted}個 ／ 配布待ちの受け取り分 {dueDice}個 ／ 今振れる分 {canRoll ? Math.max(0, player.normalGranted + dueDice - player.used) : 0}個</p>
-          {player.result && <div className={styles.notice}>
-            <p>到達マス {player.result.tileId} ／ Lv.{player.result.level} ／ 使用{player.result.used}回</p>
-            {player.result.rescueUsed && <p>月明かりの小径を使用。補填は中間の下限までで、実績の評価点は変わりません。</p>}
-            <p>旅の記念：{player.souvenirs.map(value => value === "starflower" ? "星咲きの花" : `第${value.slice(-1)}舞台への到達`).join("、") || "書斎で受けた星務"}</p>
-          </div>}
-          <p className={styles.small}>星渡りの抜け道：{player.shortcut === "tracking" ? `１・２が５回続くと開放（${player.originalRolls.length}／５回）`
-            : player.shortcut === "missed" ? "今回は条件に届きませんでした" : player.shortcut === "used" ? "使用済み" : player.shortcut === "declined" ? "今回は見送りました" : "扉が開いています"}</p>
-
-        </section>
           <section className={styles.panel}><h2>月明かりの小径</h2>
             <p>条件を満たすと、最終評価を中間まで補えます。</p>
             {run.rules.rescue.enabled ? <>
