@@ -3,8 +3,8 @@ import type { QuestRules, QuestState } from "./types";
 
 export const PSA_FRAGMENT_TARGET = 5;
 const fragmentTiles = new Set([
-  "s1-02", "s1-03", "s1-05", "s1-06", "s1-08", "s1-09", "s1-11", "s1-12", "s1-14", "s1-15",
-  "s2-02", "s2-03", "s2-05", "s2-08", "s2-11", "s2-14", "s2-17",
+  "s1-02", "s1-05", "s1-08", "s1-11", "s1-14", "s1-15",
+  "s2-02", "s2-05", "s2-08", "s2-11", "s2-17",
   "s3-03", "s3-15",
 ]);
 

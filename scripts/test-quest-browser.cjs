@@ -155,6 +155,7 @@ async function main() {
           adminRuns[0].simulation = ["bridge", "flower", "mixed"].flatMap(policy => [true, false].map(shortcutUse => ({
             trials: 20000, policy, shortcutUse, groups: { top: 30, upper: 1600, middle: 10000, lower: 8370 },
             stage3: 19000, stage4: 400, shortcutOffered: 82, rescued: 800,
+            psaTickets: { top: 0, upper: 100, middle: 2000, lower: 1674 },
           })));
           adminRuns[0].simulatedVersion = 1; result = { reports: adminRuns[0].simulation };
         } else if (action === "adminPublishQuest") {
@@ -236,7 +237,7 @@ async function main() {
       const badges = page.locator('[class*="fragmentBadge"]');
       await preview.getByText("次の出目で起きること", { exact: true }).waitFor();
       assert.equal(await preview.locator("li").count(), 6);
-      for (const [stage, count] of [[1, 10], [2, 7], [3, 2], [4, 0]]) {
+      for (const [stage, count] of [[1, 6], [2, 5], [3, 2], [4, 0]]) {
         await page.getByRole("button", { name: new RegExp(`^${stage} (書斎|回廊|庭|塔)`) }).click();
         assert.equal(await badges.count(), count, `${name}: PSA fragment placement in stage ${stage}`);
       }
@@ -246,7 +247,7 @@ async function main() {
       await page.getByRole("button", { name: "星のサイコロを振る", exact: true }).click();
       await page.locator('[data-overlay="reward"]').getByText("PSAのかけら ＋1", { exact: true }).waitFor();
       await page.getByText("PSAのかけら 1／5", { exact: true }).waitFor();
-      assert.equal(await badges.count(), 9);
+      assert.equal(await badges.count(), 5);
       await page.waitForFunction(() => !document.querySelector('[data-overlay]'));
       player = createPlayer({ psaFragments: 4 });
       await page.reload();
@@ -556,6 +557,15 @@ async function main() {
       await page.getByRole("status").filter({ hasText: "「削除用下書き」を完全削除しました" }).waitFor();
       assert.equal(adminRuns.length, 0);
       assert.equal(deleteSaves.size, 2);
+      adminRuns.push({ ...run, id: "psa-rate-draft", title: "PSA試算の表示確認", state: "draft",
+        rules: { ...run.rules, psaLimit: 2 }, xAccountList: [], simulation: null, simulatedVersion: null });
+      await page.getByRole("button", { name: "一覧を更新", exact: true }).click();
+      await page.getByRole("button", { name: "この開催を選択", exact: true }).click();
+      await page.locator("summary").filter({ hasText: /^分布試算（任意）$/ }).click();
+      await page.getByRole("button", { name: "保存した設定で分布を試算する", exact: true }).click();
+      await page.getByText("各２万件、６条件の試算を保存しました。", { exact: false }).waitFor();
+      await page.getByRole("columnheader", { name: "PSA５個達成（下位・中間）", exact: true }).waitFor();
+      assert.equal(await page.getByRole("cell", { name: "20.00%", exact: true }).count(), 6);
       await page.setViewportSize({ width: 390, height: 950 });
       await page.goto(`${base}/`);
       const menu = page.getByRole("link", { name: /^ゆめつきクエスト/ });

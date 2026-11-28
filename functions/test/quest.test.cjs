@@ -269,3 +269,30 @@ test("PSA roll previews match one-time rewards and tower loss without modifying 
   const next = advanceQuest(returned, "roll", psaRules, 2);
   assert.equal(applyQuestPsa(returned, next, 2).collected, false);
 });
+
+test("the reduced PSA layout keeps existing fragments and reservations from removed tiles", () => {
+  const { applyQuestPsa } = require("../lib/quest/psa");
+  const existing = state({ psaFragments: 2, psaCollectedTiles: ["s1-03", "s1-06"] });
+  const next = advanceQuest(existing, "roll", rules, 3);
+  const prize = applyQuestPsa(existing, next, 2);
+  assert.equal(prize.collected, false);
+  assert.equal(prize.fragments, 2);
+  assert.deepEqual(existing.psaCollectedTiles, ["s1-03", "s1-06"]);
+  assert.equal(applyQuestPsa({ ...existing, psaReserved: true }, next, 0).reserved, true);
+});
+
+test("14-turn PSA collection targets one fifth of lower/middle players without changing grading", () => {
+  const liveRules = { ...rules, boardVersion: "quest-board-v3", psaLimit: 2, upperMin: 68, topMinProgress: 66,
+    rescue: { ...rules.rescue, enabled: false, simulationRate: 0 } };
+  for (const seed of [20261123, 20261128]) {
+    const report = simulateQuest(liveRules, 20000, "mixed", true, seed);
+    const rate = (report.psaTickets.lower + report.psaTickets.middle) / (report.groups.lower + report.groups.middle);
+    assert.ok(rate > 0.18 && rate < 0.22, `PSA rate ${rate} for seed ${seed}`);
+    assert.equal(report.psaTickets.top, 0);
+    for (const group of ["top", "upper", "middle", "lower"]) assert.ok(report.psaTickets[group] <= report.groups[group]);
+  }
+  const tracked = simulateQuest(liveRules, 2000);
+  const plain = simulateQuest({ ...liveRules, psaLimit: 0 }, 2000);
+  delete tracked.psaTickets;
+  assert.deepEqual(tracked, plain);
+});

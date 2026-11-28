@@ -89,4 +89,5 @@ export type QuestSimulation = {
   trials: number; policy: "bridge" | "flower" | "mixed"; shortcutUse: boolean;
   groups: Record<QuestGroup, number>; stage3: number; stage4: number; shortcutOffered: number;
   rescued: number;
+  psaTickets?: Record<QuestGroup, number>;
 };

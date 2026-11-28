@@ -345,10 +345,13 @@ export default function QuestAdminPage() {
         setConfirmed(false); setStatus("各２万件、６条件の試算を保存しました。");
       })}>保存した設定で分布を試算する</button>
       <p className={styles.small}>目標：最上位２%以下／上位約８%／中間約50%／下位約40%。</p>
-      {selected.simulation && <div className={styles.report}><table><thead><tr><th>分岐／抜け道</th>{Object.values(questGroups).map(label => <th key={label}>{label}</th>)}<th>庭到達</th><th>塔到達</th><th>救済使用</th></tr></thead><tbody>
+      {!!selected.rules.psaLimit && <p className={styles.small}>PSA５個達成率は、下位・中間の参加者のうち塔へ到達せず枠を確保して終える割合です。全員が14回使用する標準設定で約20%が目安です。開催全体の上限による先着締切は含みません。</p>}
+      {selected.simulation && <div className={styles.report}><table><thead><tr><th>分岐／抜け道</th>{Object.values(questGroups).map(label => <th key={label}>{label}</th>)}<th>庭到達</th><th>塔到達</th><th>救済使用</th>{!!selected.rules.psaLimit && <th>PSA５個達成（下位・中間）</th>}</tr></thead><tbody>
         {selected.simulation.map(result => <tr key={`${result.policy}-${result.shortcutUse}`}><th>{{ bridge: "橋", flower: "花壇", mixed: "各50%" }[result.policy]}／{result.shortcutUse ? "使用" : "見送り"}</th>
           {(["top", "upper", "middle", "lower"] as const).map(group => <td key={group}>{(result.groups[group] / result.trials * 100).toFixed(2)}%</td>)}
           <td>{(result.stage3 / result.trials * 100).toFixed(2)}%</td><td>{(result.stage4 / result.trials * 100).toFixed(2)}%</td><td>{(result.rescued / result.trials * 100).toFixed(2)}%</td>
+          {!!selected.rules.psaLimit && <td>{result.psaTickets && result.groups.lower + result.groups.middle > 0
+            ? ((result.psaTickets.lower + result.psaTickets.middle) / (result.groups.lower + result.groups.middle) * 100).toFixed(2) + "%" : "—"}</td>}
         </tr>)}</tbody></table></div>}
       {selected.simulation?.some(result => result.groups.top / result.trials > .02) && <p className={styles.notice}>最上位２%を超える方針があります。境界と救済条件を再確認してください。</p>}
       </details>
